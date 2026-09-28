@@ -1,6 +1,6 @@
 // ============================================================
 // OKEKARAOKE — POST /api/queue/reserve
-// Atomically adds a song to an instance's queue
+// Atomically adds a song (by code or YouTube ID) to an instance queue
 // ============================================================
 
 import { NextRequest } from 'next/server';
@@ -10,7 +10,7 @@ import { apiSuccess, apiError, validateRoomCode, validateSessionId } from '@/lib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { room_code, song_code, guest_session_id, guest_name } = body;
+    const { room_code, song_code, youtube_video_id, title, artist, thumbnail_url, guest_session_id, guest_name } = body;
 
     if (!room_code) {
       return apiError('MISSING_ROOM_CODE', 'Room code is required.', 400);
@@ -19,10 +19,6 @@ export async function POST(request: NextRequest) {
     const normalizedCode = validateRoomCode(room_code);
     if (!normalizedCode) {
       return apiError('INVALID_ROOM_CODE', 'Invalid room code format.', 400);
-    }
-
-    if (!song_code || typeof song_code !== 'string') {
-      return apiError('MISSING_SONG_CODE', 'Song code is required.', 400);
     }
 
     if (!guest_session_id || !validateSessionId(guest_session_id)) {
@@ -52,7 +48,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!device) {
-      // Auto-register as remote if not found (graceful join)
       await supabase.from('devices').upsert({
         instance_id: instance.id,
         device_type: 'remote',
@@ -63,16 +58,60 @@ export async function POST(request: NextRequest) {
       }, { onConflict: 'instance_id,session_id' });
     }
 
-    // Find song by code
-    const { data: song } = await supabase
-      .from('songs')
-      .select('id, title, artist')
-      .eq('code', song_code.trim())
-      .eq('is_active', true)
-      .single();
+    let song: { id: string; title: string; artist: string; code: string } | null = null;
+
+    // 1. Check by song_code if provided and not 'YT'
+    if (song_code && song_code !== 'YT') {
+      const { data: existingSong } = await supabase
+        .from('songs')
+        .select('id, title, artist, code')
+        .eq('code', song_code.trim())
+        .eq('is_active', true)
+        .single();
+      song = existingSong;
+    }
+
+    // 2. Check by youtube_video_id or create new song if it's a YouTube search result
+    if (!song && youtube_video_id) {
+      const { data: existingYtSong } = await supabase
+        .from('songs')
+        .select('id, title, artist, code')
+        .eq('youtube_video_id', youtube_video_id.trim())
+        .single();
+
+      if (existingYtSong) {
+        song = existingYtSong;
+      } else {
+        // Generate a random 5-digit song code for the new YouTube song
+        const newCode = String(Math.floor(10000 + Math.random() * 90000));
+        const { data: newSong, error: createError } = await supabase
+          .from('songs')
+          .insert({
+            code: newCode,
+            title: title ?? 'YouTube Karaoke Track',
+            artist: artist ?? 'YouTube',
+            youtube_video_id: youtube_video_id.trim(),
+            thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${youtube_video_id}/mqdefault.jpg`,
+            category: 'YouTube',
+            language: 'Tagalog/English',
+            song_type: 'Karaoke',
+            duration_seconds: 240,
+            is_active: true,
+          })
+          .select('id, title, artist, code')
+          .single();
+
+        if (createError) {
+          console.error('Error creating YouTube song record:', createError);
+          return apiError('SONG_CREATE_FAILED', 'Failed to prepare song for queue.', 500);
+        }
+
+        song = newSong;
+      }
+    }
 
     if (!song) {
-      return apiError('SONG_NOT_FOUND', 'Song not found. Please check the song code.', 404);
+      return apiError('SONG_NOT_FOUND', 'Song not found. Please check the song code or search again.', 404);
     }
 
     // Call atomic reservation function
@@ -118,7 +157,7 @@ export async function POST(request: NextRequest) {
     return apiSuccess({
       queue_item_id: resultRow.queue_item_id,
       position: resultRow.position,
-      song: { title: song.title, artist: song.artist },
+      song: { title: song.title, artist: song.artist, code: song.code },
     }, 201);
   } catch (error) {
     console.error('Unexpected error in /api/queue/reserve:', error);
