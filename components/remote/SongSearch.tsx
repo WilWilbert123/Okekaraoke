@@ -77,6 +77,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
         body: JSON.stringify({
           room_code: roomCode,
           song_code: song.code,
+          youtube_video_id: song.youtube_video_id,
+          title: song.title,
+          artist: song.artist,
+          thumbnail_url: song.thumbnail_url,
           guest_session_id: sessionId,
           guest_name: guestName || null,
         }),

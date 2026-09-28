@@ -1,6 +1,6 @@
 // ============================================================
 // OKEKARAOKE — GET /api/songs/search
-// Searches the song catalog by title, artist, code, or keywords
+// Searches both database catalog and live YouTube for karaoke tracks
 // ============================================================
 
 import { NextRequest } from 'next/server';
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient();
 
+    // 1. Search local Supabase database table
     let dbQuery = supabase
       .from('songs')
       .select('id, code, title, artist, youtube_video_id, thumbnail_url, category, language, song_type, duration_seconds', { count: 'exact' })
@@ -31,13 +32,10 @@ export async function GET(request: NextRequest) {
       .order('title', { ascending: true })
       .range(offset, offset + limit - 1);
 
-    // Search by text
     if (query) {
-      // Search by code first (exact match)
       if (/^\d+$/.test(query)) {
         dbQuery = dbQuery.ilike('code', `%${query}%`);
       } else {
-        // Full-text search on title and artist
         dbQuery = dbQuery.or(`title.ilike.%${query}%,artist.ilike.%${query}%`);
       }
     }
@@ -46,19 +44,53 @@ export async function GET(request: NextRequest) {
     if (language) dbQuery = dbQuery.eq('language', language);
     if (song_type) dbQuery = dbQuery.eq('song_type', song_type);
 
-    const { data: songs, error, count } = await dbQuery;
+    const { data: dbSongs } = await dbQuery;
+    const localSongs = dbSongs ?? [];
 
-    if (error) {
-      console.error('Song search error:', error);
-      return apiError('SEARCH_FAILED', 'Song search failed. Please try again.', 500);
+    // 2. If query exists and it's not a numeric code search, fetch YouTube results
+    let youtubeResults: any[] = [];
+    if (query && !/^\d+$/.test(query)) {
+      try {
+        const origin = request.headers.get('origin') || request.nextUrl.origin;
+        const ytRes = await fetch(`${origin}/api/youtube/search?q=${encodeURIComponent(query)}`, {
+          cache: 'no-store',
+        });
+        if (ytRes.ok) {
+          const ytJson = await ytRes.json();
+          if (ytJson.success && Array.isArray(ytJson.data?.results)) {
+            // Filter out video IDs already in local database
+            const existingVideoIds = new Set(localSongs.map((s) => s.youtube_video_id));
+
+            youtubeResults = ytJson.data.results
+              .filter((y: any) => !existingVideoIds.has(y.video_id))
+              .map((y: any) => ({
+                id: `yt_${y.video_id}`,
+                code: 'YT',
+                title: y.title,
+                artist: y.channel_title ?? 'YouTube Karaoke',
+                youtube_video_id: y.video_id,
+                thumbnail_url: y.thumbnail_url,
+                category: 'YouTube',
+                language: 'Tagalog/English',
+                song_type: 'Karaoke',
+                duration_seconds: 240,
+                is_youtube_result: true,
+              }));
+          }
+        }
+      } catch (err) {
+        console.error('YouTube search fallback error:', err);
+      }
     }
 
+    const combinedSongs = [...localSongs, ...youtubeResults];
+
     return apiSuccess({
-      songs: songs ?? [],
-      total: count ?? 0,
+      songs: combinedSongs,
+      total: combinedSongs.length,
       page,
       limit,
-      total_pages: Math.ceil((count ?? 0) / limit),
+      total_pages: 1,
     });
   } catch (error) {
     console.error('Unexpected error in /api/songs/search:', error);
