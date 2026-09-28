@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .ilike('room_code', normalizedCode)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     if (!instance) {
       return apiError('ROOM_NOT_FOUND', 'This OKEKARAOKE room does not exist or is no longer active.', 404);
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('instance_id', instance.id)
       .eq('session_id', guest_session_id)
-      .single();
+      .maybeSingle();
 
     if (!device) {
       await supabase.from('devices').upsert({
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
         .select('id, title, artist, code')
         .eq('code', song_code.trim())
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
       song = existingSong;
     }
 
@@ -77,13 +77,13 @@ export async function POST(request: NextRequest) {
         .from('songs')
         .select('id, title, artist, code')
         .eq('youtube_video_id', youtube_video_id.trim())
-        .single();
+        .maybeSingle();
 
       if (existingYtSong) {
         song = existingYtSong;
       } else {
-        // Generate a random 5-digit song code for the new YouTube song
-        const newCode = String(Math.floor(10000 + Math.random() * 90000));
+        // Generate a unique 5-digit song code for the new YouTube song
+        const newCode = 'YT' + String(Math.floor(1000 + Math.random() * 9000));
         const { data: newSong, error: createError } = await supabase
           .from('songs')
           .insert({
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
             is_active: true,
           })
           .select('id, title, artist, code')
-          .single();
+          .maybeSingle();
 
         if (createError) {
           console.error('Error creating YouTube song record:', createError);
