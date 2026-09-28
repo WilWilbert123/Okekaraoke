@@ -1,0 +1,107 @@
+'use client';
+
+// ============================================================
+// OKEKARAOKE — useRealtime Hook
+// Subscribes to instance-scoped Supabase Realtime channel
+// ============================================================
+
+import { useEffect, useRef, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import type { RealtimeEventType } from '@/lib/types';
+
+type RealtimeHandler = (payload: Record<string, unknown>) => void;
+
+interface UseRealtimeOptions {
+  roomCode: string | null;
+  handlers: Partial<Record<RealtimeEventType, RealtimeHandler>>;
+  enabled?: boolean;
+}
+
+export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeOptions) {
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
+  const handlersRef = useRef(handlers);
+
+  // Keep handlers ref current without re-subscribing
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
+
+  const subscribe = useCallback(() => {
+    if (!roomCode || !enabled) return;
+
+    const supabase = createClient();
+    const channelName = `okekaraoke:instance:${roomCode.toUpperCase()}`;
+
+    // Clean up existing subscription first
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const channel = supabase.channel(channelName);
+
+    // Subscribe to all broadcast events on this channel
+    const eventTypes: RealtimeEventType[] = [
+      'queue_added',
+      'queue_removed',
+      'queue_updated',
+      'song_started',
+      'song_finished',
+      'song_skipped',
+      'instance_updated',
+      'tv_online',
+      'tv_offline',
+      'remote_joined',
+      'remote_left',
+    ];
+
+    eventTypes.forEach((eventType) => {
+      channel.on('broadcast', { event: eventType }, (payload: { payload: Record<string, unknown> }) => {
+        const handler = handlersRef.current[eventType];
+        if (handler) {
+          handler(payload.payload as Record<string, unknown>);
+        }
+      });
+    });
+
+    // Also listen to postgres changes for queue_items table
+    channel.on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'queue_items',
+      },
+      (payload: Record<string, unknown>) => {
+        // Queue changes will come via broadcast events from the API
+        // This is a fallback for direct DB changes
+        const handler = handlersRef.current['queue_updated'];
+        if (handler) {
+          handler({ source: 'postgres_changes', ...payload });
+        }
+      }
+    );
+
+    channel.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`[Realtime] Subscribed to ${channelName}`);
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error(`[Realtime] Error on channel ${channelName}`);
+      }
+    });
+
+    channelRef.current = channel;
+  }, [roomCode, enabled]);
+
+  useEffect(() => {
+    subscribe();
+
+    return () => {
+      const supabase = createClient();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [subscribe]);
+}
