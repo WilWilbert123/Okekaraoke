@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Find active instance
+    // 1. Find active instance
     const { data: instance } = await supabase
       .from('instances')
       .select('id')
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       return apiError('ROOM_NOT_FOUND', 'This OKEKARAOKE room does not exist or is no longer active.', 404);
     }
 
-    // Verify device is associated with this instance
+    // 2. Verify or auto-register device
     const { data: device } = await supabase
       .from('devices')
       .select('id')
@@ -60,38 +60,39 @@ export async function POST(request: NextRequest) {
 
     let song: { id: string; title: string; artist: string; code: string } | null = null;
 
-    // 1. Check by song_code if provided and not 'YT'
+    // 3. Find song by song_code (if valid numeric code)
     if (song_code && song_code !== 'YT') {
       const { data: existingSong } = await supabase
         .from('songs')
         .select('id, title, artist, code')
-        .eq('code', song_code.trim())
+        .eq('code', String(song_code).trim())
         .eq('is_active', true)
         .maybeSingle();
       song = existingSong;
     }
 
-    // 2. Check by youtube_video_id or create new song if it's a YouTube search result
+    // 4. Find or auto-create song by youtube_video_id
     if (!song && youtube_video_id) {
+      const cleanYtId = String(youtube_video_id).trim();
       const { data: existingYtSong } = await supabase
         .from('songs')
         .select('id, title, artist, code')
-        .eq('youtube_video_id', youtube_video_id.trim())
+        .eq('youtube_video_id', cleanYtId)
         .maybeSingle();
 
       if (existingYtSong) {
         song = existingYtSong;
       } else {
-        // Generate a unique 5-digit song code for the new YouTube song
-        const newCode = 'YT' + String(Math.floor(1000 + Math.random() * 9000));
+        // Generate a random unique song code
+        const newCode = String(Math.floor(10000 + Math.random() * 90000));
         const { data: newSong, error: createError } = await supabase
           .from('songs')
           .insert({
             code: newCode,
-            title: title ?? 'YouTube Karaoke Track',
-            artist: artist ?? 'YouTube',
-            youtube_video_id: youtube_video_id.trim(),
-            thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${youtube_video_id}/mqdefault.jpg`,
+            title: title ? String(title).slice(0, 200) : 'YouTube Karaoke Track',
+            artist: artist ? String(artist).slice(0, 200) : 'YouTube',
+            youtube_video_id: cleanYtId,
+            thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${cleanYtId}/mqdefault.jpg`,
             category: 'YouTube',
             language: 'Tagalog/English',
             song_type: 'Karaoke',
@@ -103,18 +104,27 @@ export async function POST(request: NextRequest) {
 
         if (createError) {
           console.error('Error creating YouTube song record:', createError);
-          return apiError('SONG_CREATE_FAILED', 'Failed to prepare song for queue.', 500);
+          // Retry lookup in case of race condition insert
+          const { data: retryYt } = await supabase
+            .from('songs')
+            .select('id, title, artist, code')
+            .eq('youtube_video_id', cleanYtId)
+            .maybeSingle();
+          song = retryYt;
+        } else {
+          song = newSong;
         }
-
-        song = newSong;
       }
     }
 
     if (!song) {
-      return apiError('SONG_NOT_FOUND', 'Song not found. Please check the song code or search again.', 404);
+      return apiError('SONG_NOT_FOUND', 'Song not found. Please try searching again.', 404);
     }
 
-    // Call atomic reservation function
+    let queueItemId: string | null = null;
+    let finalPosition = 1;
+
+    // 5. Attempt RPC reservation first
     const { data: result, error: rpcError } = await supabase.rpc('reserve_song_atomic', {
       p_instance_id: instance.id,
       p_song_id: song.id,
@@ -122,22 +132,61 @@ export async function POST(request: NextRequest) {
       p_guest_name: guest_name ?? null,
     });
 
-    if (rpcError) {
-      console.error('reserve_song_atomic RPC error:', rpcError);
-      return apiError('RESERVATION_FAILED', 'Failed to reserve song. Please try again.', 500);
-    }
-
     const resultRow = Array.isArray(result) ? result[0] : result;
 
-    if (!resultRow?.success) {
-      return apiError(
-        resultRow?.error_code ?? 'RESERVATION_FAILED',
-        resultRow?.error_message ?? 'Failed to reserve song.',
-        400
-      );
+    if (!rpcError && resultRow?.success) {
+      queueItemId = resultRow.queue_item_id;
+      finalPosition = resultRow.position;
+    } else {
+      // 6. Direct table insert fallback (if RPC function not installed or returned error)
+      const { data: maxPosData } = await supabase
+        .from('queue_items')
+        .select('position')
+        .eq('instance_id', instance.id)
+        .in('status', ['queued', 'playing'])
+        .order('position', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      finalPosition = (maxPosData?.position ?? 0) + 1;
+
+      const { data: queueItem, error: queueError } = await supabase
+        .from('queue_items')
+        .insert({
+          instance_id: instance.id,
+          song_id: song.id,
+          guest_session_id: guest_session_id,
+          guest_name: guest_name ?? 'Guest',
+          position: finalPosition,
+          status: 'queued',
+          reserved_at: new Date().toISOString(),
+        })
+        .select('id, position')
+        .single();
+
+      if (queueError) {
+        console.error('Direct queue insert error:', queueError);
+        return apiError('RESERVATION_FAILED', 'Failed to add song to queue. Please try again.', 500);
+      }
+
+      queueItemId = queueItem.id;
+
+      // Log reservation
+      await supabase.from('reservation_logs').insert({
+        instance_id: instance.id,
+        queue_item_id: queueItemId,
+        guest_session_id: guest_session_id,
+        action: 'reserved',
+        metadata: {
+          song_id: song.id,
+          song_title: song.title,
+          song_artist: song.artist,
+          position: finalPosition,
+        },
+      });
     }
 
-    // Broadcast realtime event
+    // 7. Broadcast Realtime event to TV
     await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
       type: 'broadcast',
       event: 'queue_added',
@@ -145,8 +194,8 @@ export async function POST(request: NextRequest) {
         type: 'queue_added',
         instance_id: instance.id,
         room_code: normalizedCode,
-        queue_item_id: resultRow.queue_item_id,
-        position: resultRow.position,
+        queue_item_id: queueItemId,
+        position: finalPosition,
         song_title: song.title,
         song_artist: song.artist,
         guest_name: guest_name ?? null,
@@ -155,8 +204,8 @@ export async function POST(request: NextRequest) {
     });
 
     return apiSuccess({
-      queue_item_id: resultRow.queue_item_id,
-      position: resultRow.position,
+      queue_item_id: queueItemId,
+      position: finalPosition,
       song: { title: song.title, artist: song.artist, code: song.code },
     }, 201);
   } catch (error) {
