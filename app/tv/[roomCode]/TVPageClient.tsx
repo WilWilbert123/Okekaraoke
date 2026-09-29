@@ -170,35 +170,30 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   }, [roomCode]);
 
   // Realtime subscriptions
+  const realtimeHandlers = useRef({
+    queue_added: () => {
+      fetchState();
+      if (!currentSongRef.current) {
+        setTimeout(() => autoStartQueue(), 300);
+      }
+    },
+    queue_removed: fetchState,
+    queue_updated: fetchState,
+    song_started: () => {
+      fetchState();
+      setConnectionStatus('connected');
+    },
+    song_finished: () => {
+      setCurrentSong(null);
+      currentSongRef.current = null;
+      fetchState();
+    },
+    song_skipped: fetchState,
+  }).current;
+
   useRealtime({
     roomCode: connectionStatus !== 'offline' ? roomCode : null,
-    handlers: {
-      queue_added: () => {
-        fetchState();
-        // If nothing is playing, kick off the first song automatically
-        if (!currentSongRef.current) {
-          setTimeout(() => autoStartQueue(), 300); // small delay for DB to settle
-        }
-      },
-      queue_removed: () => {
-        fetchState();
-      },
-      queue_updated: () => {
-        fetchState();
-      },
-      song_started: () => {
-        fetchState();
-        setConnectionStatus('connected');
-      },
-      song_finished: () => {
-        setCurrentSong(null);
-        currentSongRef.current = null;
-        fetchState();
-      },
-      song_skipped: () => {
-        fetchState();
-      },
-    },
+    handlers: realtimeHandlers,
     enabled: true,
   });
 
