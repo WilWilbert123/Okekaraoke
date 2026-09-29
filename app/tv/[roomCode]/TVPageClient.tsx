@@ -25,6 +25,18 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [currentSong, setCurrentSong] = useState<EnrichedQueueItem | null>(null);
   const [queue, setQueue] = useState<EnrichedQueueItem[]>([]);
   const [playerState, setPlayerState] = useState<PlayerState>({ status: 'idle', video_id: null, queue_item_id: null });
+  const handlePlayerStateChange = useCallback((newState: PlayerState) => {
+    setPlayerState((prev) => {
+      if (
+        prev.status === newState.status &&
+        prev.video_id === newState.video_id &&
+        prev.queue_item_id === newState.queue_item_id
+      ) {
+        return prev;
+      }
+      return newState;
+    });
+  }, []);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -300,7 +312,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           videoId={currentVideoId}
           queueItemId={currentQueueItemId}
           onEnded={handleSongEnded}
-          onStateChange={setPlayerState}
+          onStateChange={handlePlayerStateChange}
           autoplay={autoplayUnlocked && (instanceState?.settings.autoplay ?? true)}
           className="absolute inset-0"
         />
