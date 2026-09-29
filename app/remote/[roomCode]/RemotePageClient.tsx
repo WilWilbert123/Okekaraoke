@@ -6,16 +6,16 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, Hash, ListMusic, Star } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, Users, ListMusic, Star } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
-import { SongCodePad } from '@/components/remote/SongCodePad';
+import { ArtistBrowser } from '@/components/remote/ArtistBrowser';
 import { MyReservations } from '@/components/remote/MyReservations';
 import { RemoteQueue } from '@/components/remote/RemoteQueue';
 import { useRealtime } from '@/hooks/useRealtime';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
 import type { EnrichedQueueItem, InstanceState, ConnectionStatus } from '@/lib/types';
 
-type RemoteTab = 'search' | 'code' | 'my-songs' | 'queue';
+type RemoteTab = 'search' | 'artists' | 'my-songs' | 'queue';
 
 interface RemotePageClientProps {
   roomCode: string;
@@ -243,7 +243,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       >
         {[
           { id: 'search' as const, icon: Search, label: 'Search' },
-          { id: 'code' as const, icon: Hash, label: 'Code' },
+          { id: 'artists' as const, icon: Users, label: 'Artists' },
           { id: 'my-songs' as const, icon: Star, label: `Mine${myReservations.length > 0 ? ` (${myReservations.length})` : ''}` },
           { id: 'queue' as const, icon: ListMusic, label: `Queue (${queue.length})` },
         ].map(({ id, icon: Icon, label }) => (
@@ -275,12 +275,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             onReserved={() => fetchState()}
           />
         )}
-        {tab === 'code' && (
-          <SongCodePad
+        {tab === 'artists' && (
+          <ArtistBrowser
             roomCode={roomCode}
             sessionId={sessionId}
             guestName={guestName}
-            onReserved={() => { fetchState(); setTab('my-songs'); }}
+            onReserved={() => { fetchState(); }}
           />
         )}
         {tab === 'my-songs' && (

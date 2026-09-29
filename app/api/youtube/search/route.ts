@@ -106,10 +106,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return apiSuccess({ results });
+    // Filter out videos that have embedding disabled using YouTube's free oEmbed API.
+    // oEmbed returns 401 for embed-disabled videos — no API key required.
+    const embeddableResults = await filterEmbeddable(results);
+
+    return apiSuccess({ results: embeddableResults });
   } catch (error) {
     console.error('Unexpected error in /api/youtube/search:', error);
     return apiError('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
   }
+}
+
+// ─── Embeddability filter ────────────────────────────────────────────────────
+// YouTube's oEmbed endpoint returns 401 when a video has embedding disabled.
+// We check all results in parallel and drop any that are blocked.
+async function filterEmbeddable(
+  results: Array<{ video_id: string; title: string; channel_title: string; thumbnail_url: string; duration?: string }>
+) {
+  if (results.length === 0) return results;
+
+  const checks = await Promise.allSettled(
+    results.map(async (result) => {
+      const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${result.video_id}&format=json`;
+      const res = await fetch(oembedUrl, {
+        // Short timeout — we don't want slow checks to delay search results
+        signal: AbortSignal.timeout(4000),
+        next: { revalidate: 3600 }, // Cache embeddability for 1 hour
+      });
+      // 200 = embeddable, 401 = embedding disabled, 404 = video doesn't exist
+      return { result, embeddable: res.ok };
+    })
+  );
+
+  return checks
+    .filter((outcome) => outcome.status === 'fulfilled' && outcome.value.embeddable)
+    .map((outcome) => (outcome as PromiseFulfilledResult<{ result: typeof results[0]; embeddable: boolean }>).value.result);
 }
 

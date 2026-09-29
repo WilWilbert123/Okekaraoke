@@ -127,12 +127,6 @@ export default function LandingPage() {
             <span className="text-white">KARAOKE</span>
           </h1>
 
-          <p className="text-xl font-semibold text-slate-300 mb-1" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Your Party. Your Songs.
-          </p>
-          <p className="text-xl font-semibold text-indigo-400" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Your Screen.
-          </p>
         </div>
 
         {/* How it works */}
@@ -243,7 +237,7 @@ export default function LandingPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-600 mt-8">
-          Powered by YouTube · Built for karaoke nights
+          © {new Date().getFullYear()} <span className="text-slate-500 font-medium">Wilbert Gamis</span> · All Rights Reserved
         </p>
       </div>
     </main>

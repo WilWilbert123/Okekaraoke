@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Music2, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { EnrichedQueueItem } from '@/lib/types';
 import { FullQueueModal } from './FullQueueModal';
 
@@ -23,13 +23,9 @@ export function TVQueue({ queue }: TVQueueProps) {
   const overflowCount = Math.max(0, queue.length - MAX_VISIBLE);
 
   if (queue.length === 0) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-3 px-4 text-slate-600">
-        <Music2 size={16} />
-        <span className="text-sm font-medium">Queue is empty — scan QR to add songs</span>
-      </div>
-    );
+    return null;
   }
+
 
   return (
     <>

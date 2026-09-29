@@ -29,8 +29,10 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoplayUnlocked, setAutoplayUnlocked] = useState(false);
   const sessionRef = useRef<string | null>(null);
   const advancingRef = useRef(false);
+  const currentSongRef = useRef<EnrichedQueueItem | null>(null);
 
   // Fetch authoritative state from server
   const fetchState = useCallback(async () => {
@@ -52,6 +54,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       const state = json.data as InstanceState;
       setInstanceState(state);
       setCurrentSong(state.current_song);
+      currentSongRef.current = state.current_song;
       setQueue(state.queue);
       setError(null);
       setConnectionStatus('connected');
@@ -87,6 +90,41 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       window.removeEventListener('offline', handleOffline);
     };
   }, [fetchState]);
+
+  // Auto-start: advance queue to play the first song when nothing is playing
+  const autoStartQueue = useCallback(async () => {
+    if (advancingRef.current) return;
+    if (currentSongRef.current) return; // already playing
+
+    // Wait up to 2s for session to be available
+    let sessionId = sessionRef.current;
+    if (!sessionId) {
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        sessionId = sessionRef.current;
+        if (sessionId) break;
+      }
+    }
+    if (!sessionId) return; // give up
+
+    advancingRef.current = true;
+    try {
+      await fetch('/api/queue/next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          completed_queue_item_id: null,
+        }),
+      });
+      // song_started realtime event will call fetchState
+    } catch (err) {
+      console.error('Auto-start failed:', err);
+    } finally {
+      advancingRef.current = false;
+    }
+  }, [roomCode]);
 
   // Heartbeat
   useHeartbeat({
@@ -136,8 +174,11 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     roomCode: connectionStatus !== 'offline' ? roomCode : null,
     handlers: {
       queue_added: () => {
-        // Refresh state to get updated queue
         fetchState();
+        // If nothing is playing, kick off the first song automatically
+        if (!currentSongRef.current) {
+          setTimeout(() => autoStartQueue(), 300); // small delay for DB to settle
+        }
       },
       queue_removed: () => {
         fetchState();
@@ -145,13 +186,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       queue_updated: () => {
         fetchState();
       },
-      song_started: (payload) => {
-        // Build an optimistic current song from payload
-        fetchState(); // Full refresh for accuracy
+      song_started: () => {
+        fetchState();
         setConnectionStatus('connected');
       },
       song_finished: () => {
         setCurrentSong(null);
+        currentSongRef.current = null;
         fetchState();
       },
       song_skipped: () => {
@@ -217,11 +258,34 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const currentVideoId = currentSong?.song.youtube_video_id ?? null;
   const currentQueueItemId = currentSong?.queue_item_id ?? null;
 
+  // Unlock autoplay on first tap (browser policy)
+  const handleUnlockAutoplay = useCallback(() => {
+    setAutoplayUnlocked(true);
+  }, []);
+
   return (
     <div
       className="flex flex-col"
       style={{ height: '100dvh', background: 'var(--color-bg)', overflow: 'hidden' }}
+      onClick={!autoplayUnlocked ? handleUnlockAutoplay : undefined}
     >
+      {/* Autoplay unlock prompt — shown until user taps the screen */}
+      {!autoplayUnlocked && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            className="flex flex-col items-center gap-4 px-8 py-6 rounded-2xl text-center"
+            style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(99,102,241,0.3)' }}
+          >
+            <div className="text-4xl">▶️</div>
+            <p className="text-white font-bold text-xl">Tap anywhere to enable autoplay</p>
+            <p className="text-slate-400 text-sm">Required once by your browser</p>
+          </div>
+        </div>
+      )}
+
       {/* LAYER 1: Header */}
       <TVHeader
         roomCode={roomCode}
@@ -242,7 +306,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           queueItemId={currentQueueItemId}
           onEnded={handleSongEnded}
           onStateChange={setPlayerState}
-          autoplay={instanceState?.settings.autoplay ?? true}
+          autoplay={autoplayUnlocked && (instanceState?.settings.autoplay ?? true)}
           className="absolute inset-0"
         />
       </div>
