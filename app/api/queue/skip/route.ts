@@ -1,6 +1,7 @@
 // ============================================================
 // OKEKARAOKE — POST /api/queue/skip
 // Stops the target song and advances to the next one in queue.
+// Gracefully clears room state if nothing is left playing.
 // ============================================================
 
 import { NextRequest } from 'next/server';
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
       return apiError('ROOM_NOT_FOUND', 'Room not found or no longer active.', 404);
     }
 
+    const nowIso = new Date().toISOString();
+
     // Touch device session for this room
     await supabase.from('devices').upsert(
       {
@@ -47,13 +50,13 @@ export async function POST(request: NextRequest) {
         device_type: 'remote',
         session_id: session_id,
         is_online: true,
-        last_seen_at: new Date().toISOString(),
+        last_seen_at: nowIso,
       },
       { onConflict: 'instance_id,session_id' }
     );
 
     // 2. Resolve target item to stop:
-    //    Priority 1: The specific queue_item_id requested by client (user intent)
+    //    Priority 1: The specific queue_item_id requested by client
     //    Priority 2: The song currently marked 'playing' in DB
     //    Priority 3: The top queued song
     let targetItem: { id: string; status: string; guest_session_id: string | null } | null = null;
@@ -64,7 +67,6 @@ export async function POST(request: NextRequest) {
         .select('id, status, guest_session_id')
         .eq('id', clientQueueItemId)
         .eq('instance_id', instance.id)
-        .in('status', ['playing', 'queued'])
         .maybeSingle();
       if (clientItem) {
         targetItem = clientItem;
@@ -97,24 +99,20 @@ export async function POST(request: NextRequest) {
       targetItem = topQueued ?? null;
     }
 
-    if (!targetItem) {
-      return apiError('NOTHING_PLAYING', 'No active song to stop in this room.', 404);
-    }
-
-    const nowIso = new Date().toISOString();
-
-    // 3. Clean up target item AND any stale 'playing' items in this room
+    // 3. Always clean up all 'playing' status rows for this instance
     await supabase
       .from('queue_items')
       .update({ status: 'skipped', cancelled_at: nowIso })
       .eq('instance_id', instance.id)
       .eq('status', 'playing');
 
-    await supabase
-      .from('queue_items')
-      .update({ status: 'skipped', cancelled_at: nowIso })
-      .eq('id', targetItem.id)
-      .eq('instance_id', instance.id);
+    if (targetItem) {
+      await supabase
+        .from('queue_items')
+        .update({ status: 'skipped', cancelled_at: nowIso })
+        .eq('id', targetItem.id)
+        .eq('instance_id', instance.id);
+    }
 
     // 4. Start next song in queue if available
     const { data: nextItem } = await supabase
@@ -140,13 +138,13 @@ export async function POST(request: NextRequest) {
       nextYoutubeVideoId = (songObj as any)?.youtube_video_id ?? null;
     }
 
-    // 5. Broadcast Realtime events
+    // 5. Broadcast Realtime events to clear UI on all devices
     const eventName = nextQueueItemId ? 'song_started' : 'song_skipped';
     await broadcastRealtime(normalizedCode, eventName, {
       type: eventName,
       instance_id: instance.id,
       room_code: normalizedCode,
-      skipped_queue_item_id: targetItem.id,
+      skipped_queue_item_id: targetItem?.id ?? null,
       queue_item_id: nextQueueItemId,
       youtube_video_id: nextYoutubeVideoId,
       timestamp: nowIso,
@@ -157,14 +155,14 @@ export async function POST(request: NextRequest) {
         type: 'song_finished',
         instance_id: instance.id,
         room_code: normalizedCode,
-        queue_item_id: targetItem.id,
+        queue_item_id: targetItem?.id ?? null,
         timestamp: nowIso,
       });
     }
 
     return apiSuccess({
       skipped: true,
-      skipped_queue_item_id: targetItem.id,
+      skipped_queue_item_id: targetItem?.id ?? null,
       next_queue_item_id: nextQueueItemId,
       next_youtube_video_id: nextYoutubeVideoId,
     });

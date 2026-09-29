@@ -50,7 +50,6 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
     }
   };
 
-  // Stop user's own currently playing song and advance to next song
   const handleStopOwnSong = async (queueItemId: string) => {
     if (!sessionId) return;
     setStoppingId(queueItemId);
@@ -69,17 +68,14 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
 
       const json = await response.json();
       console.log('[STOP] API response:', response.status, json);
-      if (json.success) {
-        setStopError(null);
-        onRefresh?.();
-      } else {
-        // Show the actual error so we can debug
+      if (!json.success) {
         setStopError(`${response.status}: ${json.error?.code ?? 'ERR'} — ${json.error?.message ?? 'Unknown error'}`);
       }
     } catch (err) {
       setStopError(`Network error: ${err}`);
     } finally {
       setStoppingId(null);
+      onRefresh?.();
     }
   };
 
