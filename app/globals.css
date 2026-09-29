@@ -10,10 +10,10 @@
   --color-border: rgba(99, 102, 241, 0.15);
   --color-border-subtle: rgba(255, 255, 255, 0.06);
 
-  --color-primary: #6366f1;      /* Indigo */
+  --color-primary: #6366f1;
   --color-primary-glow: rgba(99, 102, 241, 0.3);
-  --color-secondary: #a78bfa;    /* Violet */
-  --color-accent: #38bdf8;       /* Sky blue */
+  --color-secondary: #a78bfa;
+  --color-accent: #38bdf8;
 
   --color-text: #f1f5f9;
   --color-text-muted: #94a3b8;
@@ -35,7 +35,9 @@
   --radius-2xl: 32px;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -60,13 +62,16 @@ body {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: var(--color-surface);
 }
+
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
   border-radius: 999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary);
 }
@@ -103,23 +108,47 @@ body {
 
 /* ── Animations ─────────────────────────────────────────────── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--color-primary-glow); }
-  50% { box-shadow: 0 0 0 8px transparent; }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--color-primary-glow);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px transparent;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
 }
 
 @keyframes spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-fade-in {
@@ -150,12 +179,10 @@ body {
 
 /* ── Loading Skeleton ────────────────────────────────────────── */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-surface) 25%,
-    var(--color-surface-2) 50%,
-    var(--color-surface) 75%
-  );
+  background: linear-gradient(90deg,
+      var(--color-surface) 25%,
+      var(--color-surface-2) 50%,
+      var(--color-surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-sm);
@@ -168,13 +195,29 @@ body {
   border-radius: 50%;
   display: inline-block;
 }
-.status-dot.connected { background-color: var(--color-success); }
-.status-dot.reconnecting { background-color: var(--color-warning); animation: pulse-glow 1s ease-in-out infinite; }
-.status-dot.offline { background-color: var(--color-error); }
+
+.status-dot.connected {
+  background-color: var(--color-success);
+}
+
+.status-dot.reconnecting {
+  background-color: var(--color-warning);
+  animation: pulse-glow 1s ease-in-out infinite;
+}
+
+.status-dot.offline {
+  background-color: var(--color-error);
+}
 
 /* ── Utility ─────────────────────────────────────────────────── */
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
 /* ── Modal Backdrop ──────────────────────────────────────────── */
 .modal-backdrop {
