@@ -117,16 +117,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   }, [fetchState]);
 
   // Realtime
+  const realtimeHandlers = useRef({
+    queue_added: fetchState,
+    queue_removed: fetchState,
+    queue_updated: fetchState,
+    song_started: fetchState,
+    song_finished: fetchState,
+    song_skipped: fetchState,
+  }).current;
+
   useRealtime({
-    roomCode: connectionStatus !== 'offline' ? roomCode : null,
-    handlers: {
-      queue_added: () => fetchState(),
-      queue_removed: () => fetchState(),
-      queue_updated: () => fetchState(),
-      song_started: () => fetchState(),
-      song_finished: () => fetchState(),
-      song_skipped: () => fetchState(),
-    },
+    roomCode,
+    handlers: realtimeHandlers,
     enabled: true,
   });
 
@@ -142,7 +144,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         <p className="text-slate-400 mb-6">{error}</p>
         <a href="/" className="px-6 py-3 rounded-xl font-bold text-white"
           style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}>
-          Go to Home
+          Home
         </a>
       </div>
     );
