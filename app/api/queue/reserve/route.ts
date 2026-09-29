@@ -85,12 +85,17 @@ export async function POST(request: NextRequest) {
       } else {
         // Generate a random unique song code
         const newCode = String(Math.floor(10000 + Math.random() * 90000));
+        const rawTitle = title ? String(title) : 'YouTube Karaoke Track';
+        const rawArtist = artist ? String(artist) : '';
+        // Extract real artist from the video title; the passed-in artist is
+        // often the YouTube channel name (e.g. "Sing King"), not the actual artist.
+        const { songTitle: cleanTitle, artist: cleanArtist } = extractArtistFromTitle(rawTitle, rawArtist);
         const { data: newSong, error: createError } = await supabase
           .from('songs')
           .insert({
             code: newCode,
-            title: title ? String(title).slice(0, 200) : 'YouTube Karaoke Track',
-            artist: artist ? String(artist).slice(0, 200) : 'YouTube',
+            title: cleanTitle.slice(0, 200),
+            artist: cleanArtist.slice(0, 200),
             youtube_video_id: cleanYtId,
             thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${cleanYtId}/mqdefault.jpg`,
             category: 'YouTube',
@@ -212,4 +217,47 @@ export async function POST(request: NextRequest) {
     console.error('Unexpected error in /api/queue/reserve:', error);
     return apiError('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
   }
+}
+
+// ─── Extract real artist from karaoke video title ────────────────────────────
+function extractArtistFromTitle(
+  rawTitle: string,
+  channelTitle: string
+): { songTitle: string; artist: string } {
+  const clean = rawTitle
+    .replace(/\(karaoke version\)/gi, '')
+    .replace(/\[karaoke version\]/gi, '')
+    .replace(/\(karaoke\)/gi, '')
+    .replace(/\[karaoke\]/gi, '')
+    .replace(/karaoke version/gi, '')
+    .replace(/\(with lyrics?\)/gi, '')
+    .replace(/\[with lyrics?\]/gi, '')
+    .replace(/with lyrics?/gi, '')
+    .replace(/\(instrumental\)/gi, '')
+    .replace(/\(sing along\)/gi, '')
+    .replace(/sing along/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  // "Song - Artist" pattern
+  const dashIdx = clean.lastIndexOf(' - ');
+  if (dashIdx !== -1) {
+    const possibleArtist = clean.slice(dashIdx + 3).trim();
+    const possibleTitle  = clean.slice(0, dashIdx).trim();
+    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
+      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    }
+  }
+
+  // "Song | Artist" pattern
+  const pipeIdx = clean.lastIndexOf(' | ');
+  if (pipeIdx !== -1) {
+    const possibleArtist = clean.slice(pipeIdx + 3).trim();
+    const possibleTitle  = clean.slice(0, pipeIdx).trim();
+    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
+      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    }
+  }
+
+  return { songTitle: clean || rawTitle, artist: channelTitle || 'YouTube' };
 }

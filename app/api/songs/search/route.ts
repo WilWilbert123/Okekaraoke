@@ -63,19 +63,22 @@ export async function GET(request: NextRequest) {
 
             youtubeResults = ytJson.data.results
               .filter((y: any) => !existingVideoIds.has(y.video_id))
-              .map((y: any) => ({
-                id: `yt_${y.video_id}`,
-                code: 'YT',
-                title: y.title,
-                artist: y.channel_title ?? 'YouTube Karaoke',
-                youtube_video_id: y.video_id,
-                thumbnail_url: y.thumbnail_url,
-                category: 'YouTube',
-                language: 'Tagalog/English',
-                song_type: 'Karaoke',
-                duration_seconds: 240,
-                is_youtube_result: true,
-              }));
+              .map((y: any) => {
+                const { songTitle, artist } = extractArtistFromTitle(y.title, y.channel_title);
+                return {
+                  id: `yt_${y.video_id}`,
+                  code: 'YT',
+                  title: songTitle,
+                  artist,
+                  youtube_video_id: y.video_id,
+                  thumbnail_url: y.thumbnail_url,
+                  category: 'YouTube',
+                  language: 'Tagalog/English',
+                  song_type: 'Karaoke',
+                  duration_seconds: 240,
+                  is_youtube_result: true,
+                };
+              });
           }
         }
       } catch (err) {
@@ -96,4 +99,52 @@ export async function GET(request: NextRequest) {
     console.error('Unexpected error in /api/songs/search:', error);
     return apiError('INTERNAL_ERROR', 'An unexpected error occurred.', 500);
   }
+}
+
+// ─── Extract real artist from karaoke video title ────────────────────────────
+// Most karaoke titles follow: "Song Title - Artist (Karaoke Version)"
+// We parse out the actual artist rather than using the YouTube channel name.
+function extractArtistFromTitle(
+  rawTitle: string,
+  channelTitle: string
+): { songTitle: string; artist: string } {
+  // Strip common karaoke/version suffixes
+  const clean = rawTitle
+    .replace(/\(karaoke version\)/gi, '')
+    .replace(/\[karaoke version\]/gi, '')
+    .replace(/\(karaoke\)/gi, '')
+    .replace(/\[karaoke\]/gi, '')
+    .replace(/karaoke version/gi, '')
+    .replace(/\(with lyrics?\)/gi, '')
+    .replace(/\[with lyrics?\]/gi, '')
+    .replace(/with lyrics?/gi, '')
+    .replace(/\(instrumental\)/gi, '')
+    .replace(/\(sing along\)/gi, '')
+    .replace(/sing along/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+  // Pattern: "Song - Artist" (split on last " - ")
+  const dashIdx = clean.lastIndexOf(' - ');
+  if (dashIdx !== -1) {
+    const possibleArtist = clean.slice(dashIdx + 3).trim();
+    const possibleTitle  = clean.slice(0, dashIdx).trim();
+    // Accept as artist if it's reasonable length and not empty
+    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
+      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    }
+  }
+
+  // Pattern: "Song | Artist" (split on " | ")
+  const pipeIdx = clean.lastIndexOf(' | ');
+  if (pipeIdx !== -1) {
+    const possibleArtist = clean.slice(pipeIdx + 3).trim();
+    const possibleTitle  = clean.slice(0, pipeIdx).trim();
+    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
+      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    }
+  }
+
+  // Fall back to clean title + channel name (better than nothing)
+  return { songTitle: clean || rawTitle, artist: channelTitle ?? 'YouTube' };
 }
