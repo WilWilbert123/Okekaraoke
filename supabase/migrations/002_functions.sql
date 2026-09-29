@@ -113,11 +113,12 @@ BEGIN
     END IF;
   END IF;
 
-  -- Calculate next position atomically (max position + 1)
+  -- Calculate next position atomically (global max + 1).
+  -- Using ALL rows (not just active) so positions never repeat and the
+  -- unique constraint on (instance_id, position, status) is never violated.
   SELECT COALESCE(MAX(position), 0) + 1 INTO v_next_position
   FROM queue_items
-  WHERE instance_id = p_instance_id
-    AND status IN ('queued', 'playing');
+  WHERE instance_id = p_instance_id;
 
   -- Insert the queue item
   INSERT INTO queue_items (
@@ -359,12 +360,12 @@ BEGIN
   WHERE id = p_instance_id AND status = 'active'
   FOR UPDATE;
 
-  -- Mark as skipped
+  -- Mark as skipped (ONLY if currently playing — never skip a queued item)
   UPDATE queue_items
   SET status = 'skipped', cancelled_at = NOW()
   WHERE id = p_queue_item_id
     AND instance_id = p_instance_id
-    AND status IN ('playing', 'queued');
+    AND status = 'playing';
 
   IF NOT FOUND THEN
     RETURN QUERY SELECT false, NULL::UUID, NULL::UUID, NULL::TEXT;
@@ -487,6 +488,7 @@ BEGIN
   JOIN songs s ON s.id = qi.song_id
   WHERE qi.instance_id = v_instance.id
     AND qi.status = 'playing'
+  ORDER BY qi.started_at DESC NULLS LAST, qi.position ASC
   LIMIT 1;
 
   -- Get queued items

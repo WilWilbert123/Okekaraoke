@@ -20,6 +20,9 @@ interface RemoteQueueProps {
 export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh }: RemoteQueueProps) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [stopError, setStopError] = useState<string | null>(null);
+
+  const [startingNext, setStartingNext] = useState(false);
 
   // Delete user's own song from room queue
   const handleCancelOwn = async (queueItemId: string) => {
@@ -47,10 +50,11 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
     }
   };
 
-  // Stop user's own currently playing song
+  // Stop user's own currently playing song and advance to next song
   const handleStopOwnSong = async (queueItemId: string) => {
     if (!sessionId) return;
     setStoppingId(queueItemId);
+    setStopError(null);
 
     try {
       const response = await fetch('/api/queue/skip', {
@@ -64,13 +68,45 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
       });
 
       const json = await response.json();
+      console.log('[STOP] API response:', response.status, json);
+      if (json.success) {
+        setStopError(null);
+        onRefresh?.();
+      } else {
+        // Show the actual error so we can debug
+        setStopError(`${response.status}: ${json.error?.code ?? 'ERR'} — ${json.error?.message ?? 'Unknown error'}`);
+      }
+    } catch (err) {
+      setStopError(`Network error: ${err}`);
+    } finally {
+      setStoppingId(null);
+    }
+  };
+
+  // Play next queued song when room is stopped/idle
+  const handlePlayNextSong = async () => {
+    if (!sessionId) return;
+    setStartingNext(true);
+
+    try {
+      const response = await fetch('/api/queue/next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          completed_queue_item_id: null,
+        }),
+      });
+
+      const json = await response.json();
       if (json.success) {
         onRefresh?.();
       }
     } catch {
       // Error handled silently
     } finally {
-      setStoppingId(null);
+      setStartingNext(false);
     }
   };
 
@@ -91,6 +127,30 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
       <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">
         ROOM QUEUE ({queue.length} waiting{currentSong ? ' + now playing' : ''})
       </p>
+
+      {/* Start Next Song Bar — shown when TV is stopped/idle but songs are waiting */}
+      {!currentSong && queue.length > 0 && (
+        <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-2">
+          <div>
+            <p className="text-xs font-bold text-indigo-300">TV is currently stopped</p>
+            <p className="text-[11px] text-slate-400">{queue.length} song(s) waiting in queue</p>
+          </div>
+          <button
+            onClick={handlePlayNextSong}
+            disabled={startingNext}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 active:scale-95 disabled:opacity-50 transition-all shadow-md"
+          >
+            {startingNext ? (
+              <Loader2 size={12} className="animate-spin text-white" />
+            ) : (
+              <>
+                <Play size={12} className="fill-white text-white" />
+                <span>PLAY NEXT SONG</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Now playing */}
       {currentSong && (
@@ -115,30 +175,36 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs font-bold text-green-400">PLAYING</span>
 
-            {/* Stop button if song belongs to current user */}
-            {isCurrentSongMine && (
-              <button
-                onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
-                disabled={stoppingId === currentSong.queue_item_id}
-                className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  color: '#ef4444',
-                }}
-                title="Stop your song on TV"
-              >
-                {stoppingId === currentSong.queue_item_id ? (
-                  <Loader2 size={12} className="animate-spin text-red-400" />
-                ) : (
-                  <>
-                    <Square size={10} className="fill-red-500 text-red-500" />
-                    <span>STOP</span>
-                  </>
-                )}
-              </button>
-            )}
+            {/* Stop button for currently playing song */}
+            <button
+              onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
+              disabled={stoppingId === currentSong.queue_item_id}
+              className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#ef4444',
+              }}
+              title="Stop song on TV"
+            >
+              {stoppingId === currentSong.queue_item_id ? (
+                <Loader2 size={12} className="animate-spin text-red-400" />
+              ) : (
+                <>
+                  <Square size={10} className="fill-red-500 text-red-500" />
+                  <span>STOP</span>
+                </>
+              )}
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* Stop error feedback */}
+      {stopError && (
+        <div className="px-3 py-2 rounded-lg text-xs text-red-300 font-mono break-all"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+          ⚠️ {stopError}
         </div>
       )}
 

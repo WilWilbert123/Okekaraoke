@@ -37,21 +37,12 @@ export function TVQueue({ queue }: TVQueueProps) {
         {visible.map((item, index) => (
           <div
             key={item.queue_item_id}
-            className="flex items-center gap-1.5 shrink-0 rounded-lg px-3 py-1.5 transition-colors"
-            style={{
-              background: 'rgba(99, 102, 241, 0.08)',
-              border: '1px solid rgba(99, 102, 241, 0.15)',
-            }}
+            className="flex items-center gap-1.5 shrink-0 px-2 py-1"
           >
-            <span className="text-xs font-bold text-indigo-400 w-4 text-right">{index + 1}</span>
-            <div>
-              <p className="text-sm font-semibold text-white leading-tight max-w-[120px] truncate">
-                {item.song.title}
-              </p>
-              <p className="text-xs text-slate-500 truncate max-w-[120px]">
-                {item.song.artist}
-              </p>
-            </div>
+            <span className="text-xs font-bold text-indigo-400 font-mono">{index + 1}.</span>
+            <span className="text-xs font-medium text-slate-200 whitespace-nowrap opacity-90">
+              {item.song.title}
+            </span>
           </div>
         ))}
 

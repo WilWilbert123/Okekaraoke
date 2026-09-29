@@ -28,5 +28,7 @@ export function validateUUID(value: string): boolean {
 }
 
 export function validateSessionId(sessionId: string): boolean {
-  return /^[0-9a-f]{32}$/i.test(sessionId);
+  if (typeof sessionId !== 'string') return false;
+  const trimmed = sessionId.trim();
+  return trimmed.length >= 8 && trimmed.length <= 128;
 }

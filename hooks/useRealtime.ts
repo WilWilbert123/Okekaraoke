@@ -53,6 +53,7 @@ export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeO
       'tv_offline',
       'remote_joined',
       'remote_left',
+      'banner_updated',
     ];
 
     eventTypes.forEach((eventType) => {
@@ -62,6 +63,14 @@ export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeO
           handler(payload.payload as Record<string, unknown>);
         }
       });
+    });
+
+    // Also listen to global broadcast channel for system-wide events like banner updates
+    channel.on('broadcast', { event: 'banner_updated' }, (payload: { payload: Record<string, unknown> }) => {
+      const handler = handlersRef.current['banner_updated'];
+      if (handler) {
+        handler(payload.payload as Record<string, unknown>);
+      }
     });
 
     // Also listen to postgres changes for queue_items table

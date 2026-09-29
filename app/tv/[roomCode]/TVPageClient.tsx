@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { TVHeader } from '@/components/tv/TVHeader';
+import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
 import { YouTubePlayer } from '@/components/tv/YouTubePlayer';
 import { NowPlaying } from '@/components/tv/NowPlaying';
@@ -37,6 +38,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       return newState;
     });
   }, []);
+  const [bannerSettings, setBannerSettings] = useState<{ banner_enabled: boolean; banner_text: string; banner_image_url?: string; banner_speed?: number }>({ banner_enabled: false, banner_text: '' });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,11 +46,62 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const sessionRef = useRef<string | null>(null);
   const advancingRef = useRef(false);
   const currentSongRef = useRef<EnrichedQueueItem | null>(null);
+  const autoStartQueueRef = useRef<() => void>(() => {});
+  // Track queue_item_ids that were stopped/skipped by remote so the YouTube
+  // player's onEnded callback does NOT call /api/queue/next for them.
+  const skippedByRemoteRef = useRef<Set<string>>(new Set());
+
+  // Auto-start: advance queue to play the first song when nothing is playing
+  const autoStartQueue = useCallback(async () => {
+    if (advancingRef.current) return;
+    if (currentSongRef.current) return; // already playing
+
+    // Wait up to 3s for session to be registered in the devices table
+    let sessionId = sessionRef.current;
+    if (!sessionId) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        sessionId = sessionRef.current;
+        if (sessionId) break;
+      }
+    }
+    if (!sessionId) return;
+
+    advancingRef.current = true;
+    try {
+      const res = await fetch('/api/queue/next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          completed_queue_item_id: null,
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data?.next_queue_item_id) {
+        fetchStateRef.current();
+      }
+    } catch (err) {
+      console.error('Auto-start failed:', err);
+    } finally {
+      advancingRef.current = false;
+    }
+  }, [roomCode]);
+
+  // Keep autoStartQueueRef current
+  useEffect(() => { autoStartQueueRef.current = autoStartQueue; }, [autoStartQueue]);
+
+  // fetchState ref (so autoStartQueue can call it without circular dep)
+  const fetchStateRef = useRef<(triggerAutoStart?: boolean) => void>(() => {});
 
   // Fetch authoritative state from server
-  const fetchState = useCallback(async () => {
+  const fetchState = useCallback(async (triggerAutoStart = false) => {
     try {
-      const response = await fetch(`/api/instances/${roomCode}/state`);
+      const response = await fetch(`/api/instances/${roomCode}/state?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -58,7 +111,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           setError(json.error?.message ?? 'Failed to load room state.');
         }
         setConnectionStatus('offline');
-        setLoading(false);
+        fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
         return;
       }
 
@@ -69,30 +122,48 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       setQueue(state.queue);
       setError(null);
       setConnectionStatus('connected');
-      setLoading(false);
+      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
 
-      // Register/update device
+      // Register/update device in localStorage and in Supabase devices table
       const session = getOrCreateGuestSession();
       sessionRef.current = session.session_id;
       setGuestSessionForInstance(state.instance.id, roomCode, 'tv');
 
+      // Register TV device in DB so /api/queue/next accepts it as authorized
+      fetch('/api/instances/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          guest_session_id: session.session_id,
+          device_type: 'tv',
+          guest_name: 'TV Screen',
+        }),
+      }).catch(() => {}); // fire-and-forget
+
+      // Auto-start: if queue has songs but nothing is playing, kick off playback
+      // Delay 1200ms to let the /api/instances/join above complete first
+      if (triggerAutoStart && !state.current_song && state.queue.length > 0) {
+        setTimeout(() => autoStartQueueRef.current(), 1200);
+      }
+
     } catch {
       setConnectionStatus('offline');
-      setLoading(false);
+      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
     }
   }, [roomCode]);
 
-  // Initial load
+  // Keep fetchStateRef current
+  useEffect(() => { fetchStateRef.current = fetchState; }, [fetchState]);
+
+  // Initial load — triggerAutoStart=true so existing queued songs start playing
   useEffect(() => {
-    fetchState();
+    fetchState(true);
   }, [fetchState]);
 
   // Online/offline events
   useEffect(() => {
-    const handleOnline = () => {
-      setConnectionStatus('reconnecting');
-      fetchState();
-    };
+    const handleOnline = () => { setConnectionStatus('reconnecting'); fetchState(); };
     const handleOffline = () => setConnectionStatus('offline');
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -101,41 +172,6 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       window.removeEventListener('offline', handleOffline);
     };
   }, [fetchState]);
-
-  // Auto-start: advance queue to play the first song when nothing is playing
-  const autoStartQueue = useCallback(async () => {
-    if (advancingRef.current) return;
-    if (currentSongRef.current) return; // already playing
-
-    // Wait up to 2s for session to be available
-    let sessionId = sessionRef.current;
-    if (!sessionId) {
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 100));
-        sessionId = sessionRef.current;
-        if (sessionId) break;
-      }
-    }
-    if (!sessionId) return; // give up
-
-    advancingRef.current = true;
-    try {
-      await fetch('/api/queue/next', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room_code: roomCode,
-          session_id: sessionId,
-          completed_queue_item_id: null,
-        }),
-      });
-      // song_started realtime event will call fetchState
-    } catch (err) {
-      console.error('Auto-start failed:', err);
-    } finally {
-      advancingRef.current = false;
-    }
-  }, [roomCode]);
 
   // Heartbeat
   useHeartbeat({
@@ -148,6 +184,14 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
   // Song ended handler — TV notifies server
   const handleSongEnded = useCallback(async (completedQueueItemId: string) => {
+    // If this song was already stopped/skipped by a remote control, the skip
+    // endpoint already advanced the queue. Do NOT call /api/queue/next again
+    // or it will mark the newly-playing song as completed and delete it.
+    if (skippedByRemoteRef.current.has(completedQueueItemId)) {
+      skippedByRemoteRef.current.delete(completedQueueItemId);
+      return;
+    }
+
     if (advancingRef.current) return;
     advancingRef.current = true;
 
@@ -181,23 +225,39 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   // Realtime subscriptions
   const realtimeHandlers = useRef({
     queue_added: () => {
-      fetchState();
+      fetchStateRef.current();
       if (!currentSongRef.current) {
-        setTimeout(() => autoStartQueue(), 300);
+        setTimeout(() => autoStartQueueRef.current(), 300);
       }
     },
-    queue_removed: fetchState,
-    queue_updated: fetchState,
-    song_started: () => {
-      fetchState();
+    queue_removed: () => fetchStateRef.current(),
+    queue_updated: () => fetchStateRef.current(),
+    song_started: (payload: any) => {
+      // The previously-playing song was stopped by a remote — mark it so
+      // handleSongEnded ignores the YouTube player's onEnded for that song.
+      if (payload?.skipped_queue_item_id) {
+        skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
+      } else if (currentSongRef.current?.queue_item_id) {
+        // Fallback: if a new song started and we had one playing, the old one
+        // was externally advanced — prevent double-advance.
+        skippedByRemoteRef.current.add(currentSongRef.current.queue_item_id);
+      }
+      fetchStateRef.current();
       setConnectionStatus('connected');
     },
     song_finished: () => {
       setCurrentSong(null);
       currentSongRef.current = null;
-      fetchState();
+      fetchStateRef.current();
     },
-    song_skipped: fetchState,
+    song_skipped: (payload: any) => {
+      if (payload?.skipped_queue_item_id) {
+        skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
+      }
+      fetchStateRef.current();
+    },
+    instance_updated: () => fetchStateRef.current(),
+    banner_updated: (payload: any) => { if (payload) setBannerSettings(payload); else fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }); },
   }).current;
 
   useRealtime({
@@ -281,6 +341,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       {/* LAYER 1: Floating Header & Up Next Bar (Top) */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-auto">
+        <TVBanner bannerEnabled={bannerSettings.banner_enabled} bannerText={bannerSettings.banner_text} bannerImageUrl={bannerSettings.banner_image_url} bannerSpeed={bannerSettings.banner_speed} />
         <TVHeader
           roomCode={roomCode}
           connectionStatus={connectionStatus}

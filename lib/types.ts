@@ -160,7 +160,8 @@ export type RealtimeEventType =
   | 'tv_online'
   | 'tv_offline'
   | 'remote_joined'
-  | 'remote_left';
+  | 'remote_left'
+  | 'banner_updated';
 
 export interface RealtimeEvent {
   type: RealtimeEventType;

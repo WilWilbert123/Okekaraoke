@@ -2,11 +2,27 @@
 
 // ============================================================
 // OKEKARAOKE — Song Search Component
-// Search songs by title, artist, or keywords
+// Search songs by title, artist, or browse backend karaoke catalog
 // ============================================================
 
-import { useState, useCallback, useRef } from 'react';
-import { Search, Music2, CheckCircle, AlertCircle, Loader2, Plus, X } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import {
+  Search,
+  Music2,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Plus,
+  X,
+  Sparkles,
+  Music,
+  Mic,
+  Radio,
+  Flame,
+  Headphones,
+  Disc,
+  Volume2,
+} from 'lucide-react';
 import type { Song } from '@/lib/types';
 
 interface SongSearchProps {
@@ -21,18 +37,61 @@ interface SongWithReserving extends Song {
   _reserved?: boolean;
 }
 
+const CATEGORY_FILTERS = [
+  { id: 'all', label: 'All Songs', icon: Music },
+  { id: 'karaoke', label: 'Karaoke', icon: Mic },
+  { id: 'opm', label: 'OPM', icon: Radio },
+  { id: 'pop', label: 'Pop', icon: Sparkles },
+  { id: 'rock', label: 'Rock', icon: Flame },
+  { id: 'piano', label: 'Piano', icon: Headphones },
+];
+
+function renderSongTypeIcon(type?: string | null) {
+  if (!type) return <Mic size={11} className="text-indigo-400 shrink-0" />;
+  const t = type.toLowerCase();
+  if (t.includes('piano')) return <Headphones size={11} className="text-indigo-400 shrink-0" />;
+  if (t.includes('acoustic') || t.includes('guitar')) return <Disc size={11} className="text-indigo-400 shrink-0" />;
+  if (t.includes('band') || t.includes('drum') || t.includes('rock')) return <Flame size={11} className="text-indigo-400 shrink-0" />;
+  if (t.includes('instrumental')) return <Volume2 size={11} className="text-indigo-400 shrink-0" />;
+  return <Mic size={11} className="text-indigo-400 shrink-0" />;
+}
+
 export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongSearchProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SongWithReserving[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [catalog, setCatalog] = useState<SongWithReserving[]>([]);
+  const [searchResults, setSearchResults] = useState<SongWithReserving[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searched, setSearched] = useState(false);
   const [reserveStatus, setReserveStatus] = useState<Record<string, { status: 'idle' | 'reserving' | 'success' | 'error'; message?: string }>>({});
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Fetch initial database catalog on mount
+  const fetchCatalog = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/songs/search?limit=50');
+      const json = await response.json();
+      if (json.success && Array.isArray(json.data?.songs)) {
+        setCatalog(json.data.songs);
+      }
+    } catch (err) {
+      console.error('Failed to load songs catalog:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCatalog();
+  }, [fetchCatalog]);
+
+  // Perform search when user types
   const search = useCallback(async (q: string) => {
     if (!q.trim()) {
-      setResults([]);
+      setSearchResults([]);
       setSearched(false);
+      setLoading(false);
       return;
     }
 
@@ -40,17 +99,17 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     setSearched(true);
 
     try {
-      const params = new URLSearchParams({ q: q.trim(), limit: '20' });
+      const params = new URLSearchParams({ q: q.trim(), limit: '30' });
       const response = await fetch(`/api/songs/search?${params.toString()}`);
       const json = await response.json();
 
-      if (json.success) {
-        setResults(json.data.songs ?? []);
+      if (json.success && Array.isArray(json.data?.songs)) {
+        setSearchResults(json.data.songs);
       } else {
-        setResults([]);
+        setSearchResults([]);
       }
     } catch {
-      setResults([]);
+      setSearchResults([]);
     } finally {
       setLoading(false);
     }
@@ -62,7 +121,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       search(value);
-    }, 400);
+    }, 350);
   };
 
   const handleReserve = async (song: Song) => {
@@ -91,7 +150,6 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
       if (json.success) {
         setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
         onReserved();
-        // Reset after 3s
         setTimeout(() => {
           setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
         }, 3000);
@@ -112,10 +170,20 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     }
   };
 
+  // Determine list of displayed songs
+  const baseList = searched ? searchResults : catalog;
+  const filteredList = baseList.filter((song) => {
+    if (activeFilter === 'all') return true;
+    const cat = (song.category || '').toLowerCase();
+    const type = (song.song_type || '').toLowerCase();
+    const filterKey = activeFilter.toLowerCase();
+    return cat.includes(filterKey) || type.includes(filterKey);
+  });
+
   return (
     <div className="flex flex-col h-full">
-      {/* Search input */}
-      <div className="p-4 sticky top-0" style={{ background: 'var(--color-bg)', zIndex: 10 }}>
+      {/* Search Input & Category Filter Bar */}
+      <div className="p-4 sticky top-0 space-y-3" style={{ background: 'var(--color-bg)', zIndex: 10 }}>
         <div className="relative">
           <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -123,8 +191,8 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
             type="search"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
-            placeholder="Search songs, artists..."
-            className="w-full pl-10 pr-10 py-3 rounded-xl text-white placeholder-slate-600 transition-all"
+            placeholder="Search songs, artists, code..."
+            className="w-full pl-10 pr-10 py-3 rounded-xl text-white placeholder-slate-500 transition-all text-sm"
             style={{
               background: 'var(--color-surface-2)',
               border: '1px solid var(--color-border)',
@@ -138,7 +206,11 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
           />
           {query && (
             <button
-              onClick={() => { setQuery(''); setResults([]); setSearched(false); }}
+              onClick={() => {
+                setQuery('');
+                setSearchResults([]);
+                setSearched(false);
+              }}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
               aria-label="Clear search"
             >
@@ -146,66 +218,117 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
             </button>
           )}
         </div>
+
+        {/* Quick Category Filter Pills with Lucide Icons */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {CATEGORY_FILTERS.map((filter) => {
+            const isActive = activeFilter === filter.id;
+            const IconComponent = filter.icon;
+            return (
+              <button
+                key={filter.id}
+                onClick={() => setActiveFilter(filter.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <IconComponent size={13} className={isActive ? 'text-white' : 'text-slate-400'} />
+                <span>{filter.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Results */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Catalog & Results Section */}
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        {/* Header label */}
+        <div className="flex items-center justify-between py-2 mb-1">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Sparkles size={12} className="text-indigo-400" />
+            {searched
+              ? `Search Results (${filteredList.length})`
+              : activeFilter !== 'all'
+              ? `${activeFilter.toUpperCase()} KARAOKE (${filteredList.length})`
+              : `Available Karaoke Catalog (${filteredList.length})`}
+          </span>
+          {!searched && catalog.length > 0 && (
+            <span className="text-[10px] text-indigo-400 font-semibold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 flex items-center gap-1">
+              <Mic size={10} className="text-indigo-400" />
+              <span>Ready to Reserve</span>
+            </span>
+          )}
+        </div>
+
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-8 text-slate-500">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Searching songs...</span>
+          <div className="flex items-center justify-center gap-2 py-12 text-slate-400">
+            <Loader2 size={18} className="animate-spin text-indigo-400" />
+            <span className="text-sm">Loading songs...</span>
           </div>
         )}
 
-        {!loading && searched && results.length === 0 && (
+        {!loading && filteredList.length === 0 && (
           <div className="text-center py-12 px-4">
             <Music2 size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-500 font-medium">NO SONGS FOUND</p>
-            <p className="text-sm text-slate-600 mt-1">Try different keywords or check the song code</p>
+            <p className="text-slate-400 font-medium">NO KARAOKE SONGS FOUND</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {searched
+                ? 'Try searching with different keywords or artist names'
+                : 'No songs match this category filter'}
+            </p>
           </div>
         )}
 
-        {!loading && !searched && (
-          <div className="text-center py-12 px-4">
-            <Search size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-600">Type to search the song catalog</p>
-          </div>
-        )}
-
-        {!loading && results.length > 0 && (
-          <div className="px-4 pb-4 space-y-2">
-            {results.map((song) => {
+        {!loading && filteredList.length > 0 && (
+          <div className="space-y-2">
+            {filteredList.map((song) => {
               const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
               return (
                 <div
                   key={song.id}
-                  className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-xl transition-all"
                   style={{
-                    background: songStatus.status === 'success'
-                      ? 'rgba(34, 197, 94, 0.06)'
-                      : 'var(--color-surface)',
-                    border: `1px solid ${songStatus.status === 'success'
-                      ? 'rgba(34, 197, 94, 0.2)'
-                      : 'var(--color-border-subtle)'}`,
+                    background:
+                      songStatus.status === 'success'
+                        ? 'rgba(34, 197, 94, 0.06)'
+                        : 'var(--color-surface)',
+                    border: `1px solid ${
+                      songStatus.status === 'success'
+                        ? 'rgba(34, 197, 94, 0.2)'
+                        : 'var(--color-border-subtle)'
+                    }`,
                   }}
                 >
-                  {/* Song info */}
+                  {/* Song Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm truncate">{song.title}</p>
-                    <p className="text-xs text-slate-500 truncate">{song.artist}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-slate-700 font-mono">#{song.code}</span>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">{song.artist}</p>
+
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+                        {renderSongTypeIcon(song.song_type)}
+                        <span>{song.song_type || 'Karaoke'}</span>
+                      </span>
+
+                      {song.code && song.code !== 'YT' && (
+                        <span className="text-xs text-slate-400 font-mono">#{song.code}</span>
+                      )}
+
                       {song.category && (
-                        <span className="text-xs text-slate-700">{song.category}</span>
+                        <span className="text-xs text-slate-400">· {song.category}</span>
                       )}
                     </div>
                   </div>
 
-                  {/* Error message */}
+                  {/* Status error notification */}
                   {songStatus.status === 'error' && songStatus.message && (
                     <div className="flex items-center gap-1">
                       <AlertCircle size={14} className="text-red-400 shrink-0" />
-                      <span className="text-xs text-red-300 max-w-24 truncate">{songStatus.message}</span>
+                      <span className="text-xs text-red-300 max-w-24 truncate">
+                        {songStatus.message}
+                      </span>
                     </div>
                   )}
 
@@ -216,12 +339,15 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                     disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
                     className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50"
                     style={{
-                      background: songStatus.status === 'success'
-                        ? 'rgba(34, 197, 94, 0.15)'
-                        : 'rgba(99, 102, 241, 0.15)',
-                      border: `1px solid ${songStatus.status === 'success'
-                        ? 'rgba(34, 197, 94, 0.3)'
-                        : 'rgba(99, 102, 241, 0.3)'}`,
+                      background:
+                        songStatus.status === 'success'
+                          ? 'rgba(34, 197, 94, 0.15)'
+                          : 'rgba(99, 102, 241, 0.15)',
+                      border: `1px solid ${
+                        songStatus.status === 'success'
+                          ? 'rgba(34, 197, 94, 0.3)'
+                          : 'rgba(99, 102, 241, 0.3)'
+                      }`,
                     }}
                     aria-label={`Reserve ${song.title}`}
                   >

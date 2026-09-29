@@ -45,7 +45,6 @@ export function QRPanel({ roomCode, appUrl }: QRPanelProps) {
       <div className="hidden sm:flex flex-col justify-center pr-2">
         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SCAN TO REMOTE</span>
         <span className="text-xs font-black text-indigo-300 tracking-wider font-mono">ROOM {roomCode}</span>
-        <span className="text-[9px] text-slate-400 mt-0.5 max-w-28 truncate">{baseUrl.replace(/^https?:\/\//, '')}</span>
       </div>
     </div>
   );

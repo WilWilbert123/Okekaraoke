@@ -55,7 +55,7 @@ export function MyReservations({ reservations, sessionId, roomCode, onCancelled,
     }
   };
 
-  // Stop own currently playing song
+  // Stop own currently playing song and advance to next song
   const handleStopMySong = async (queueItemId: string) => {
     if (!sessionId) return;
     setStoppingId(queueItemId);

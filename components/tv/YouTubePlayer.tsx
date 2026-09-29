@@ -137,6 +137,11 @@ export function YouTubePlayer({
           setPlayerReady(true);
           if (videoId) {
             currentVideoIdRef.current = videoId;
+            try {
+              playerRef.current?.playVideo();
+            } catch {
+              // Ignore playVideo errors on initial ready
+            }
           }
         },
         onStateChange: (event) => {
@@ -155,8 +160,10 @@ export function YouTubePlayer({
               break;
             case YTState.ENDED:
               playerStatus = 'ended';
-              // Notify parent — TV will call /api/queue/next
-              if (currentQueueItemIdRef.current) {
+              // Only notify parent if we still have an active video — guards
+              // against ghost ENDED events fired by stopVideo() when intentionally
+              // clearing the player (which would call /api/queue/next with null).
+              if (currentQueueItemIdRef.current && currentVideoIdRef.current) {
                 onEndedRef.current(currentQueueItemIdRef.current);
               }
               break;
@@ -204,25 +211,42 @@ export function YouTubePlayer({
     if (!playerRef.current || !playerReady) return;
     if (videoId === currentVideoIdRef.current) return;
 
-    currentVideoIdRef.current = videoId;
-    currentQueueItemIdRef.current = queueItemId;
     setEmbedBlocked(false); // Reset error state for new video
 
     if (videoId) {
+      // Load new video — update refs before loading so onEnded fires with correct IDs
+      currentVideoIdRef.current = videoId;
+      currentQueueItemIdRef.current = queueItemId;
       playerRef.current.loadVideoById(videoId);
+      try {
+        playerRef.current.playVideo();
+      } catch {
+        // Ignore playVideo errors
+      }
     } else {
+      // Stopping — clear refs FIRST so any ghost 'ENDED' event from stopVideo()
+      // has nothing to fire onEnded with, preventing a spurious /api/queue/next call.
+      currentVideoIdRef.current = null;
+      currentQueueItemIdRef.current = null;
       playerRef.current.stopVideo();
     }
   }, [videoId, queueItemId, playerReady]);
 
-  // Keep queueItemId ref current
+  // Keep queueItemId ref current when it changes alongside the same videoId
   useEffect(() => {
-    currentQueueItemIdRef.current = queueItemId;
-  }, [queueItemId]);
+    // Only sync if the videoId hasn't changed (the main effect handles that case)
+    if (queueItemId && currentVideoIdRef.current === videoId) {
+      currentQueueItemIdRef.current = queueItemId;
+    }
+  }, [queueItemId, videoId]);
 
   return (
     <div className={`relative w-full h-full bg-black ${className}`}>
-      <div ref={containerRef} className="w-full h-full" />
+      {/* YouTube Player Container — always sized in DOM so YT player computes proper dimensions */}
+      <div
+        ref={containerRef}
+        className="w-full h-full"
+      />
 
       {/* Embed blocked overlay — shown when video owner disabled embedding */}
       {embedBlocked && videoId && (
@@ -259,12 +283,28 @@ export function YouTubePlayer({
         </div>
       )}
 
-      {/* Empty state overlay — shown when no video */}
+      {/* Empty state idle screen — shown when no active video */}
       {!videoId && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none">
-          <div className="text-center">
-            <p className="text-2xl font-semibold text-slate-400 mb-2">NO SONGS IN QUEUE</p>
-            <p className="text-slate-600">Scan the QR code to reserve your next song.</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-slate-950 text-white z-10">
+          <div className="relative flex flex-col items-center text-center px-6 max-w-md">
+            {/* Ambient decorative glow ring */}
+            <div
+              className="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-2xl"
+              style={{
+                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(124, 58, 237, 0.1) 70%)',
+                border: '1px solid rgba(124, 58, 237, 0.4)',
+                boxShadow: '0 0 40px rgba(99, 102, 241, 0.2)',
+              }}
+            >
+              <span className="text-4xl animate-bounce">🎤</span>
+            </div>
+
+            <p className="text-3xl font-black tracking-tight text-slate-100 mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+              NO SONGS IN QUEUE
+            </p>
+            <p className="text-slate-400 font-medium text-base">
+              Scan the QR code to reserve your next song.
+            </p>
           </div>
         </div>
       )}
