@@ -1,6 +1,6 @@
 // ============================================================
 // OKEKARAOKE — POST /api/queue/skip
-// Admin/TV can skip the currently playing item
+// Allows TV host, admin, OR song owner to stop/skip a song
 // ============================================================
 
 import { NextRequest } from 'next/server';
@@ -31,74 +31,110 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Find active instance
+    // 1. Find active instance
     const { data: instance } = await supabase
       .from('instances')
       .select('id')
       .ilike('room_code', normalizedCode)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
     if (!instance) {
       return apiError('ROOM_NOT_FOUND', 'Room not found.', 404);
     }
 
-    // Verify this session is TV or admin
+    // 2. Fetch the target queue item
+    const { data: queueItem } = await supabase
+      .from('queue_items')
+      .select('id, guest_session_id, status')
+      .eq('id', queue_item_id)
+      .eq('instance_id', instance.id)
+      .maybeSingle();
+
+    if (!queueItem) {
+      return apiError('ITEM_NOT_FOUND', 'Target song was not found in the queue.', 404);
+    }
+
+    // 3. Verify authorization: TV device, Admin, OR the song owner themselves
+    const isSongOwner = queueItem.guest_session_id === session_id;
+
     const { data: device } = await supabase
       .from('devices')
       .select('device_type')
       .eq('instance_id', instance.id)
       .eq('session_id', session_id)
       .in('device_type', ['tv', 'admin'])
-      .single();
+      .maybeSingle();
 
-    if (!device) {
-      return apiError('UNAUTHORIZED', 'Only the TV or admin can skip songs.', 403);
+    const isHostOrAdmin = !!device;
+
+    if (!isSongOwner && !isHostOrAdmin) {
+      return apiError('UNAUTHORIZED', 'You can only stop or skip your own songs.', 403);
     }
 
-    // Check skip is allowed
-    const { data: settings } = await supabase
-      .from('instance_settings')
-      .select('allow_skip')
-      .eq('instance_id', instance.id)
-      .single();
+    let nextQueueItemId: string | null = null;
+    let nextYoutubeVideoId: string | null = null;
 
-    if (settings && !settings.allow_skip && device.device_type !== 'admin') {
-      return apiError('SKIP_NOT_ALLOWED', 'Skipping songs is not allowed in this room.', 403);
-    }
-
-    // Skip atomically
+    // 4. Try RPC skip first
     const { data: result, error: rpcError } = await supabase.rpc('skip_queue_item_atomic', {
       p_instance_id: instance.id,
       p_queue_item_id: queue_item_id,
     });
 
-    if (rpcError) {
-      console.error('skip_queue_item_atomic RPC error:', rpcError);
-      return apiError('SKIP_FAILED', 'Failed to skip song. Please try again.', 500);
-    }
-
     const resultRow = Array.isArray(result) ? result[0] : result;
 
-    // Broadcast
+    if (!rpcError && resultRow?.success) {
+      nextQueueItemId = resultRow.next_queue_item_id ?? null;
+      nextYoutubeVideoId = resultRow.next_youtube_video_id ?? null;
+    } else {
+      // 5. Direct DB update fallback
+      await supabase
+        .from('queue_items')
+        .update({ status: 'skipped', cancelled_at: new Date().toISOString() })
+        .eq('id', queue_item_id)
+        .eq('instance_id', instance.id);
+
+      // Advance to next song in queue
+      const { data: nextItem } = await supabase
+        .from('queue_items')
+        .select('id, song_id, guest_name, position, songs(id, youtube_video_id)')
+        .eq('instance_id', instance.id)
+        .eq('status', 'queued')
+        .order('position', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (nextItem) {
+        await supabase
+          .from('queue_items')
+          .update({ status: 'playing', started_at: new Date().toISOString() })
+          .eq('id', nextItem.id);
+
+        const songObj = Array.isArray(nextItem.songs) ? nextItem.songs[0] : nextItem.songs;
+        nextQueueItemId = nextItem.id;
+        nextYoutubeVideoId = songObj?.youtube_video_id ?? null;
+      }
+    }
+
+    // 6. Broadcast Realtime event
     await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
       type: 'broadcast',
-      event: resultRow?.next_queue_item_id ? 'song_started' : 'song_skipped',
+      event: nextQueueItemId ? 'song_started' : 'song_skipped',
       payload: {
-        type: resultRow?.next_queue_item_id ? 'song_started' : 'song_skipped',
+        type: nextQueueItemId ? 'song_started' : 'song_skipped',
         instance_id: instance.id,
         room_code: normalizedCode,
         skipped_queue_item_id: queue_item_id,
-        queue_item_id: resultRow?.next_queue_item_id ?? null,
-        youtube_video_id: resultRow?.next_youtube_video_id ?? null,
+        queue_item_id: nextQueueItemId,
+        youtube_video_id: nextYoutubeVideoId,
         timestamp: new Date().toISOString(),
       },
     });
 
     return apiSuccess({
       skipped: true,
-      next_queue_item_id: resultRow?.next_queue_item_id ?? null,
-      next_youtube_video_id: resultRow?.next_youtube_video_id ?? null,
+      next_queue_item_id: nextQueueItemId,
+      next_youtube_video_id: nextYoutubeVideoId,
     });
   } catch (error) {
     console.error('Unexpected error in /api/queue/skip:', error);

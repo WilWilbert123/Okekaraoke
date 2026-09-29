@@ -2,25 +2,81 @@
 
 // ============================================================
 // OKEKARAOKE — Remote Queue Component
-// Full room queue view on the phone (not limited to 10)
+// Full room queue view on the phone with delete/stop for owner's songs
 // ============================================================
 
-import { Play, Music2, User } from 'lucide-react';
+import { useState } from 'react';
+import { Play, Music2, User, Trash2, Square, Loader2 } from 'lucide-react';
 import type { EnrichedQueueItem } from '@/lib/types';
 
 interface RemoteQueueProps {
   queue: EnrichedQueueItem[];
   currentSong: EnrichedQueueItem | null;
   sessionId: string;
+  roomCode: string;
+  onRefresh?: () => void;
 }
 
-export function RemoteQueue({ queue, currentSong, sessionId }: RemoteQueueProps) {
-  const allItems = [
-    ...(currentSong ? [{ ...currentSong, _isCurrent: true }] : []),
-    ...queue,
-  ];
+export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh }: RemoteQueueProps) {
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
-  if (allItems.length === 0) {
+  // Delete user's own song from room queue
+  const handleCancelOwn = async (queueItemId: string) => {
+    if (!sessionId) return;
+    setCancellingId(queueItemId);
+
+    try {
+      const response = await fetch('/api/queue/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queue_item_id: queueItemId,
+          guest_session_id: sessionId,
+        }),
+      });
+
+      const json = await response.json();
+      if (json.success) {
+        onRefresh?.();
+      }
+    } catch {
+      // Error handled silently
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  // Stop user's own currently playing song
+  const handleStopOwnSong = async (queueItemId: string) => {
+    if (!sessionId) return;
+    setStoppingId(queueItemId);
+
+    try {
+      const response = await fetch('/api/queue/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          queue_item_id: queueItemId,
+        }),
+      });
+
+      const json = await response.json();
+      if (json.success) {
+        onRefresh?.();
+      }
+    } catch {
+      // Error handled silently
+    } finally {
+      setStoppingId(null);
+    }
+  };
+
+  const isCurrentSongMine = currentSong?.guest_session_id === sessionId;
+
+  if (!currentSong && queue.length === 0) {
     return (
       <div className="text-center py-16 px-4">
         <Music2 size={40} className="text-slate-700 mx-auto mb-3" />
@@ -55,13 +111,41 @@ export function RemoteQueue({ queue, currentSong, sessionId }: RemoteQueueProps)
             <p className="font-semibold text-white text-sm truncate">{currentSong.song.title}</p>
             <p className="text-xs text-slate-500 truncate">{currentSong.song.artist}</p>
           </div>
-          <span className="text-xs font-bold text-green-400 shrink-0">PLAYING</span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs font-bold text-green-400">PLAYING</span>
+
+            {/* Stop button if song belongs to current user */}
+            {isCurrentSongMine && (
+              <button
+                onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
+                disabled={stoppingId === currentSong.queue_item_id}
+                className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#ef4444',
+                }}
+                title="Stop your song on TV"
+              >
+                {stoppingId === currentSong.queue_item_id ? (
+                  <Loader2 size={12} className="animate-spin text-red-400" />
+                ) : (
+                  <>
+                    <Square size={10} className="fill-red-500 text-red-500" />
+                    <span>STOP</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
       {/* Queued items */}
       {queue.map((item, index) => {
         const isMyItem = item.guest_session_id === sessionId;
+        const isCancelling = cancellingId === item.queue_item_id;
 
         return (
           <div
@@ -93,17 +177,34 @@ export function RemoteQueue({ queue, currentSong, sessionId }: RemoteQueueProps)
               <p className="text-xs text-slate-500 truncate">{item.song.artist}</p>
             </div>
 
-            {/* Guest + Mine indicator */}
-            <div className="text-right shrink-0">
+            {/* Guest + Delete button (ONLY for user's own songs) */}
+            <div className="flex items-center gap-2 shrink-0">
               {item.guest_name && (
                 <div className="flex items-center gap-1 text-xs text-slate-500">
                   <User size={10} />
                   <span className="truncate max-w-16">{item.guest_name}</span>
                 </div>
               )}
-              {isMyItem && (
-                <span className="text-xs font-bold text-indigo-400">YOU</span>
-              )}
+
+              {isMyItem ? (
+                <button
+                  onClick={() => handleCancelOwn(item.queue_item_id)}
+                  disabled={isCancelling}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors active:scale-95 disabled:opacity-50"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                  }}
+                  title="Delete your reservation"
+                  aria-label={`Delete ${item.song.title}`}
+                >
+                  {isCancelling ? (
+                    <Loader2 size={12} className="text-red-400 animate-spin" />
+                  ) : (
+                    <Trash2 size={12} className="text-red-400" />
+                  )}
+                </button>
+              ) : null}
             </div>
           </div>
         );

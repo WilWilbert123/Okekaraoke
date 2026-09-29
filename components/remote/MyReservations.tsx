@@ -2,16 +2,17 @@
 
 // ============================================================
 // OKEKARAOKE — My Reservations Component
-// Shows the current user's own reservations in this room
+// Allows each user to cancel their own queued songs or stop their playing song
 // ============================================================
 
 import { useState } from 'react';
-import { Star, Loader2, X, Play, CheckCircle, Music2 } from 'lucide-react';
+import { Star, Loader2, Trash2, Square, Play, CheckCircle } from 'lucide-react';
 import type { EnrichedQueueItem } from '@/lib/types';
 
 interface MyReservationsProps {
   reservations: EnrichedQueueItem[];
   sessionId: string;
+  roomCode: string;
   onCancelled: () => void;
   allowCancel: boolean;
 }
@@ -24,12 +25,13 @@ const statusColors = {
   skipped: { bg: 'rgba(239, 68, 68, 0.08)', border: 'rgba(239, 68, 68, 0.2)', text: '#ef4444', label: 'SKIPPED' },
 };
 
-export function MyReservations({ reservations, sessionId, onCancelled, allowCancel }: MyReservationsProps) {
+export function MyReservations({ reservations, sessionId, roomCode, onCancelled, allowCancel }: MyReservationsProps) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
 
+  // Cancel own queued song
   const handleCancel = async (queueItemId: string) => {
     if (!sessionId) return;
-
     setCancellingId(queueItemId);
 
     try {
@@ -43,7 +45,6 @@ export function MyReservations({ reservations, sessionId, onCancelled, allowCanc
       });
 
       const json = await response.json();
-
       if (json.success) {
         onCancelled();
       }
@@ -51,6 +52,33 @@ export function MyReservations({ reservations, sessionId, onCancelled, allowCanc
       // Error handled silently
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  // Stop own currently playing song
+  const handleStopMySong = async (queueItemId: string) => {
+    if (!sessionId) return;
+    setStoppingId(queueItemId);
+
+    try {
+      const response = await fetch('/api/queue/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          queue_item_id: queueItemId,
+        }),
+      });
+
+      const json = await response.json();
+      if (json.success) {
+        onCancelled();
+      }
+    } catch {
+      // Error handled silently
+    } finally {
+      setStoppingId(null);
     }
   };
 
@@ -75,7 +103,9 @@ export function MyReservations({ reservations, sessionId, onCancelled, allowCanc
       {reservations.map((item, index) => {
         const statusStyle = statusColors[item.status] ?? statusColors.queued;
         const isCancelling = cancellingId === item.queue_item_id;
+        const isStopping = stoppingId === item.queue_item_id;
         const canCancel = allowCancel && item.status === 'queued';
+        const isPlaying = item.status === 'playing';
 
         return (
           <div
@@ -91,7 +121,7 @@ export function MyReservations({ reservations, sessionId, onCancelled, allowCanc
               className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
               style={{ background: statusStyle.bg }}
             >
-              {item.status === 'playing' ? (
+              {isPlaying ? (
                 <Play size={16} style={{ fill: statusStyle.text, color: statusStyle.text }} />
               ) : item.status === 'completed' ? (
                 <CheckCircle size={16} style={{ color: statusStyle.text }} />
@@ -108,28 +138,56 @@ export function MyReservations({ reservations, sessionId, onCancelled, allowCanc
               <p className="text-xs text-slate-500 truncate">{item.song.artist}</p>
             </div>
 
-            {/* Status badge */}
+            {/* Actions & status badge */}
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-xs font-bold" style={{ color: statusStyle.text }}>
                 {statusStyle.label}
               </span>
 
+              {/* Stop button for playing song */}
+              {isPlaying && (
+                <button
+                  id={`stop-btn-${item.queue_item_id}`}
+                  onClick={() => handleStopMySong(item.queue_item_id)}
+                  disabled={isStopping}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                  }}
+                  title="Stop your song on TV"
+                  aria-label={`Stop playing ${item.song.title}`}
+                >
+                  {isStopping ? (
+                    <Loader2 size={12} className="animate-spin text-red-400" />
+                  ) : (
+                    <>
+                      <Square size={10} className="fill-red-500 text-red-500" />
+                      <span>STOP</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {/* Delete button for queued song */}
               {canCancel && (
                 <button
                   id={`cancel-btn-${item.queue_item_id}`}
                   onClick={() => handleCancel(item.queue_item_id)}
                   disabled={isCancelling}
-                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors active:scale-95 disabled:opacity-50"
                   style={{
                     background: 'rgba(239, 68, 68, 0.1)',
                     border: '1px solid rgba(239, 68, 68, 0.2)',
                   }}
-                  aria-label={`Cancel reservation for ${item.song.title}`}
+                  title="Delete reservation"
+                  aria-label={`Delete reservation for ${item.song.title}`}
                 >
                   {isCancelling ? (
-                    <Loader2 size={12} className="text-red-400 animate-spin" />
+                    <Loader2 size={14} className="text-red-400 animate-spin" />
                   ) : (
-                    <X size={12} className="text-red-400" />
+                    <Trash2 size={14} className="text-red-400" />
                   )}
                 </button>
               )}

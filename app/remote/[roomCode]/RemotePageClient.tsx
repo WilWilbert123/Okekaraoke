@@ -159,7 +159,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     );
   }
 
-  const myReservations = queue.filter((item) => item.guest_session_id === sessionId);
+  const myReservations = [
+    ...(currentSong && currentSong.guest_session_id === sessionId ? [currentSong] : []),
+    ...queue.filter((item) => item.guest_session_id === sessionId),
+  ];
 
   return (
     <div
@@ -289,6 +292,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           <MyReservations
             reservations={myReservations}
             sessionId={sessionId}
+            roomCode={roomCode}
             onCancelled={() => fetchState()}
             allowCancel={instanceState?.settings.allow_cancel ?? true}
           />
@@ -298,6 +302,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             queue={queue}
             currentSong={currentSong}
             sessionId={sessionId}
+            roomCode={roomCode}
+            onRefresh={() => fetchState()}
           />
         )}
       </div>
