@@ -2,20 +2,22 @@
 
 // ============================================================
 // OKEKARAOKE — Remote Page Client
-// Phone remote experience for searching and reserving songs
+// Phone remote: search songs, chat, manage reservations, queue
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, Users, ListMusic, Star } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
-import { ArtistBrowser } from '@/components/remote/ArtistBrowser';
+import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
 import { RemoteQueue } from '@/components/remote/RemoteQueue';
+import { NameModal } from '@/components/remote/NameModal';
+import { EmojiReactions } from '@/components/remote/EmojiReactions';
 import { useRealtime } from '@/hooks/useRealtime';
-import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
+import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
 import type { EnrichedQueueItem, InstanceState, ConnectionStatus } from '@/lib/types';
 
-type RemoteTab = 'search' | 'artists' | 'my-songs' | 'queue';
+type RemoteTab = 'search' | 'chat' | 'my-songs' | 'queue';
 
 interface RemotePageClientProps {
   roomCode: string;
@@ -26,6 +28,8 @@ const statusConfig = {
   reconnecting: { icon: RefreshCw, color: '#f59e0b', label: 'Reconnecting' },
   offline: { icon: WifiOff, color: '#ef4444', label: 'Offline' },
 };
+
+const NAME_CONFIRMED_KEY = 'okekaraoke_name_confirmed';
 
 export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [tab, setTab] = useState<RemoteTab>('search');
@@ -39,9 +43,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [sessionId, setSessionId] = useState<string>('');
   const [instanceId, setInstanceId] = useState<string>('');
 
+  // ── Name modal + inline editing ──────────────────────────
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
   const fetchState = useCallback(async () => {
     try {
-      const response = await fetch(`/api/instances/${roomCode}/state`);
+      const response = await fetch(`/api/instances/${roomCode}/state?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' },
+      });
       const json = await response.json();
 
       if (!response.ok || !json.success) {
@@ -96,11 +109,17 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     }
   }, [roomCode, instanceState]);
 
-  // Load saved guest name
+  // Load saved guest name & decide if modal should show
   useEffect(() => {
     const session = getOrCreateGuestSession();
     setSessionId(session.session_id);
-    if (session.guest_name) setGuestName(session.guest_name);
+
+    const confirmed = localStorage.getItem(NAME_CONFIRMED_KEY);
+    if (session.guest_name && confirmed) {
+      setGuestName(session.guest_name);
+    } else {
+      setShowNameModal(true);
+    }
     fetchState();
   }, [fetchState]);
 
@@ -131,6 +150,42 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     handlers: realtimeHandlers,
     enabled: true,
   });
+
+  // ── Name modal confirm ────────────────────────────────────
+  const handleNameConfirm = useCallback((name: string) => {
+    const trimmed = name.trim();
+    setGuestName(trimmed);
+    updateGuestSession({ guest_name: trimmed });
+    localStorage.setItem(NAME_CONFIRMED_KEY, '1');
+    setShowNameModal(false);
+    registerDevice(trimmed);
+  }, [registerDevice]);
+
+  // ── Inline name edit ──────────────────────────────────────
+  const startEditName = () => {
+    setEditNameValue(guestName);
+    setEditingName(true);
+    setTimeout(() => editInputRef.current?.focus(), 50);
+  };
+
+  const saveEditName = () => {
+    const trimmed = editNameValue.trim();
+    if (trimmed) {
+      setGuestName(trimmed);
+      updateGuestSession({ guest_name: trimmed });
+      registerDevice(trimmed);
+    }
+    setEditingName(false);
+  };
+
+  const cancelEditName = () => {
+    setEditingName(false);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') saveEditName();
+    if (e.key === 'Escape') cancelEditName();
+  };
 
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = statusConfig[connectionStatus];
 
@@ -165,15 +220,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   ];
 
   return (
+    /* Root: position:relative so the emoji overlay is scoped here */
     <div
-      className="flex flex-col"
+      className="flex flex-col relative"
       style={{
         height: '100dvh',
         background: 'var(--color-bg)',
         maxWidth: '480px',
         margin: '0 auto',
+        overflow: 'hidden',
       }}
     >
+      {/* Name entry modal */}
+      <NameModal open={showNameModal} onConfirm={handleNameConfirm} />
+
       {/* Header */}
       <header
         className="px-4 py-3 shrink-0"
@@ -212,17 +272,45 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </span>
           </div>
 
-          {/* Guest name input */}
-          <input
-            type="text"
-            value={guestName}
-            onChange={(e) => setGuestName(e.target.value)}
-            onBlur={() => registerDevice(guestName)}
-            placeholder="Your name"
-            maxLength={30}
-            className="text-right text-sm text-slate-300 bg-transparent border-b border-transparent focus:border-indigo-500 outline-none transition-colors placeholder-slate-600"
-            aria-label="Your name"
-          />
+          {/* Guest name — editable */}
+          <div className="flex items-center gap-1.5">
+            {editingName ? (
+              <>
+                <input
+                  ref={editInputRef}
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onKeyDown={handleEditKeyDown}
+                  maxLength={30}
+                  className="text-right text-sm text-white bg-transparent border-b border-indigo-500 outline-none w-28"
+                  aria-label="Edit your name"
+                />
+                <button onClick={saveEditName} aria-label="Save name" className="text-green-400 active:scale-90 transition-transform">
+                  <Check size={14} />
+                </button>
+                <button onClick={cancelEditName} aria-label="Cancel" className="text-slate-500 active:scale-90 transition-transform">
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <>
+                <span
+                  className="text-sm font-semibold text-slate-300 cursor-pointer"
+                  onClick={startEditName}
+                >
+                  {guestName || 'Your name'}
+                </span>
+                <button
+                  onClick={startEditName}
+                  aria-label="Edit name"
+                  className="text-slate-600 hover:text-indigo-400 transition-colors active:scale-90"
+                >
+                  <Pencil size={12} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Now playing mini */}
@@ -248,7 +336,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       >
         {[
           { id: 'search' as const, icon: Search, label: 'Search' },
-          { id: 'artists' as const, icon: Users, label: 'Artists' },
+          { id: 'chat' as const, icon: MessageSquare, label: 'Chat' },
           { id: 'my-songs' as const, icon: Star, label: `Mine${myReservations.length > 0 ? ` (${myReservations.length})` : ''}` },
           { id: 'queue' as const, icon: ListMusic, label: `Queue (${queue.length})` },
         ].map(({ id, icon: Icon, label }) => (
@@ -270,8 +358,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         ))}
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Tab content — relative so emoji overlay stacks correctly */}
+      <div className="flex-1 overflow-y-auto relative">
         {tab === 'search' && (
           <SongSearch
             roomCode={roomCode}
@@ -280,12 +368,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             onReserved={() => fetchState()}
           />
         )}
-        {tab === 'artists' && (
-          <ArtistBrowser
+        {tab === 'chat' && (
+          <RoomChat
             roomCode={roomCode}
             sessionId={sessionId}
             guestName={guestName}
-            onReserved={() => { fetchState(); }}
           />
         )}
         {tab === 'my-songs' && (
@@ -307,6 +394,13 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           />
         )}
       </div>
+
+      {/* Emoji reactions bar + floating particles — always visible at bottom */}
+      <EmojiReactions
+        roomCode={roomCode}
+        sessionId={sessionId}
+        guestName={guestName}
+      />
     </div>
   );
 }

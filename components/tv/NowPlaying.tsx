@@ -14,17 +14,7 @@ interface NowPlayingProps {
 
 export function NowPlaying({ currentSong }: NowPlayingProps) {
   if (!currentSong) {
-    return (
-      <div className="flex items-center gap-3 py-2">
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(99, 102, 241, 0.15)' }}>
-          <Music2 size={16} className="text-indigo-400" />
-        </div>
-        <div>
-          <p className="text-xs font-bold text-indigo-400 tracking-wider uppercase">READY FOR SINGING</p>
-          <p className="text-slate-300 font-medium text-sm">STANDING BY — Scan QR code on screen to reserve a song</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

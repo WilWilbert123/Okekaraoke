@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
       : `${query} karaoke`;
 
     // Fetch public search page HTML from YouTube
-    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
+    // sp=EgIQAQ%3D%3D filters to videos only (no playlists, channels, shorts)
+    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}&sp=EgIQAQ%3D%3D`;
     const response = await fetch(ytUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -74,11 +75,11 @@ export async function GET(request: NextRequest) {
                     duration,
                   });
 
-                  if (results.length >= 15) break;
+                  if (results.length >= 20) break;
                 }
               }
             }
-            if (results.length >= 15) break;
+            if (results.length >= 20) break;
           }
         }
       } catch (e) {
