@@ -94,13 +94,21 @@ export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeO
   }, [roomCode, enabled]);
 
   useEffect(() => {
-    subscribe();
+    try {
+      subscribe();
+    } catch (err) {
+      console.error('[Realtime] Subscription error:', err);
+    }
 
     return () => {
-      const supabase = createClient();
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+      try {
+        const supabase = createClient();
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+      } catch (err) {
+        console.error('[Realtime] Cleanup error:', err);
       }
     };
   }, [subscribe]);
