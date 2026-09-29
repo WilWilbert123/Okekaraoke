@@ -26,10 +26,12 @@ export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscree
 
   return (
     <header
-      className="flex items-center justify-between px-6 py-3 shrink-0"
+      className="flex items-center justify-between px-6 py-2.5 shrink-0"
       style={{
-        background: 'rgba(5, 5, 8, 0.95)',
-        borderBottom: '1px solid var(--color-border)',
+        background: 'linear-gradient(to bottom, rgba(5, 5, 12, 0.85) 0%, rgba(5, 5, 12, 0.4) 100%)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
       }}
     >
       {/* Brand */}

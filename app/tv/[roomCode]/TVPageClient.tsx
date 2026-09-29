@@ -2,7 +2,7 @@
 
 // ============================================================
 // OKEKARAOKE — TV Page Client
-// The main karaoke TV screen experience
+// Full-screen cinema karaoke TV screen experience with glass overlays
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
@@ -41,7 +41,6 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [autoplayUnlocked, setAutoplayUnlocked] = useState(false);
   const sessionRef = useRef<string | null>(null);
   const advancingRef = useRef(false);
   const currentSongRef = useRef<EnrichedQueueItem | null>(null);
@@ -166,9 +165,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       const json = await response.json();
 
       if (json.success && json.data.next_queue_item_id) {
-        // Realtime will update state, but we can proactively update
-        // to reduce latency (server is still the authority)
-        setCurrentSong(null); // Will be set by realtime event
+        fetchState();
       } else {
         // No next song
         setCurrentSong(null);
@@ -179,7 +176,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     } finally {
       advancingRef.current = false;
     }
-  }, [roomCode]);
+  }, [roomCode, fetchState]);
 
   // Realtime subscriptions
   const realtimeHandlers = useRef({
@@ -265,67 +262,51 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const currentVideoId = currentSong?.song.youtube_video_id ?? null;
   const currentQueueItemId = currentSong?.queue_item_id ?? null;
 
-  // Unlock autoplay on first tap (browser policy)
-  const handleUnlockAutoplay = useCallback(() => {
-    setAutoplayUnlocked(true);
-  }, []);
-
   return (
     <div
-      className="flex flex-col"
-      style={{ height: '100dvh', background: 'var(--color-bg)', overflow: 'hidden' }}
-      onClick={!autoplayUnlocked ? handleUnlockAutoplay : undefined}
+      className="relative w-full h-full"
+      style={{ height: '100dvh', background: '#000', overflow: 'hidden' }}
     >
-      {/* Autoplay unlock prompt — shown until user taps the screen */}
-      {!autoplayUnlocked && (
-        <div
-          className="absolute inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
-        >
-          <div
-            className="flex flex-col items-center gap-4 px-8 py-6 rounded-2xl text-center"
-            style={{ background: 'rgba(20,20,30,0.95)', border: '1px solid rgba(99,102,241,0.3)' }}
-          >
-            <div className="text-4xl">▶️</div>
-            <p className="text-white font-bold text-xl">Tap anywhere to enable autoplay</p>
-            <p className="text-slate-400 text-sm">Required once by your browser</p>
-          </div>
-        </div>
-      )}
-
-      {/* LAYER 1: Header */}
-      <TVHeader
-        roomCode={roomCode}
-        connectionStatus={connectionStatus}
-        onFullscreen={handleFullscreen}
-        isFullscreen={isFullscreen}
-      />
-
-      {/* LAYER 2: Next Songs Bar */}
-      <div style={{ background: 'rgba(13, 13, 20, 0.9)', borderBottom: '1px solid var(--color-border)' }}>
-        <TVQueue queue={queue} />
-      </div>
-
-      {/* LAYER 3: YouTube Player (flex-1 = takes remaining space) */}
-      <div className="flex-1 relative min-h-0" style={{ background: '#000' }}>
+      {/* LAYER 0: Fullscreen YouTube Video Player (Corner-to-Corner) */}
+      <div className="absolute inset-0 z-0">
         <YouTubePlayer
           videoId={currentVideoId}
           queueItemId={currentQueueItemId}
           onEnded={handleSongEnded}
           onStateChange={handlePlayerStateChange}
-          autoplay={autoplayUnlocked && (instanceState?.settings.autoplay ?? true)}
-          className="absolute inset-0"
+          autoplay={instanceState?.settings.autoplay ?? true}
+          className="w-full h-full"
         />
       </div>
 
-      {/* LAYER 4: Now Playing */}
-      <NowPlaying currentSong={currentSong} />
+      {/* LAYER 1: Floating Header & Up Next Bar (Top) */}
+      <div className="absolute top-0 left-0 right-0 z-20 pointer-events-auto">
+        <TVHeader
+          roomCode={roomCode}
+          connectionStatus={connectionStatus}
+          onFullscreen={handleFullscreen}
+          isFullscreen={isFullscreen}
+        />
+        {queue.length > 0 && (
+          <div style={{ background: 'rgba(5, 5, 12, 0.65)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
+            <TVQueue queue={queue} />
+          </div>
+        )}
+      </div>
 
-      {/* LAYER 5: QR Panel */}
-      <QRPanel
-        roomCode={roomCode}
-        appUrl={process.env.NEXT_PUBLIC_APP_URL}
-      />
+      {/* LAYER 2: Floating Glass Bottom Bar (Now Playing + QR Code Card) */}
+      <div
+        className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-between gap-4 px-6 py-3 pointer-events-auto"
+        style={{
+          background: 'linear-gradient(to top, rgba(5, 5, 12, 0.95) 0%, rgba(5, 5, 12, 0.5) 75%, transparent 100%)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        }}
+      >
+        <NowPlaying currentSong={currentSong} />
+        <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
+      </div>
     </div>
   );
 }

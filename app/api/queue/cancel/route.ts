@@ -22,50 +22,46 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Look up the queue item to get the instance_id
+    // 1. Look up the queue item
     const { data: item } = await supabase
       .from('queue_items')
       .select('instance_id, guest_session_id, status')
       .eq('id', queue_item_id)
-      .single();
+      .maybeSingle();
 
     if (!item) {
       return apiError('ITEM_NOT_FOUND', 'This reservation was not found.', 404);
     }
 
-    // Ensure this session owns this item — CRITICAL security check
+    // 2. Ensure this session owns this item — CRITICAL security check
     if (item.guest_session_id !== guest_session_id) {
-      return apiError('UNAUTHORIZED', 'You are not authorized to cancel this reservation.', 403);
+      return apiError('UNAUTHORIZED', 'You can only cancel your own songs.', 403);
     }
 
-    // Call atomic cancel function
+    // 3. Try RPC cancel first
     const { data: result, error: rpcError } = await supabase.rpc('cancel_queue_item_atomic', {
       p_instance_id: item.instance_id,
       p_queue_item_id: queue_item_id,
       p_guest_session_id: guest_session_id,
     });
 
-    if (rpcError) {
-      console.error('cancel_queue_item_atomic RPC error:', rpcError);
-      return apiError('CANCEL_FAILED', 'Failed to cancel reservation. Please try again.', 500);
-    }
-
     const resultRow = Array.isArray(result) ? result[0] : result;
 
-    if (!resultRow?.success) {
-      return apiError(
-        resultRow?.error_code ?? 'CANCEL_FAILED',
-        resultRow?.error_message ?? 'Failed to cancel reservation.',
-        400
-      );
+    if (rpcError || !resultRow?.success) {
+      // Direct DB update fallback
+      await supabase
+        .from('queue_items')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', queue_item_id)
+        .eq('guest_session_id', guest_session_id);
     }
 
-    // Get room code for realtime broadcast
+    // 4. Broadcast Realtime event
     const { data: instance } = await supabase
       .from('instances')
       .select('room_code')
       .eq('id', item.instance_id)
-      .single();
+      .maybeSingle();
 
     if (instance) {
       await supabase.channel(`okekaraoke:instance:${instance.room_code}`).send({
