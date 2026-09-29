@@ -192,7 +192,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   }).current;
 
   useRealtime({
-    roomCode: connectionStatus !== 'offline' ? roomCode : null,
+    roomCode,
     handlers: realtimeHandlers,
     enabled: true,
   });
