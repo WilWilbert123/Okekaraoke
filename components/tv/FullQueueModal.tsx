@@ -15,7 +15,7 @@ interface FullQueueModalProps {
 }
 
 export function FullQueueModal({ queue, onClose }: FullQueueModalProps) {
-  // Keyboard navigation
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' || e.key === 'Backspace') {
@@ -40,7 +40,7 @@ export function FullQueueModal({ queue, onClose }: FullQueueModalProps) {
         className="glass rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
         style={{ margin: '20px' }}
       >
-        {/* Header */}
+
         <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: 'var(--color-border)' }}>
           <div>
             <h2 className="text-2xl font-bold text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -58,7 +58,7 @@ export function FullQueueModal({ queue, onClose }: FullQueueModalProps) {
           </button>
         </div>
 
-        {/* Queue list */}
+
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {queue.map((item, index) => (
             <div
