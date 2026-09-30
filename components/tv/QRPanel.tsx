@@ -2,7 +2,7 @@
 
 // ============================================================
 // OKEKARAOKE — Minimal QR Code (Bottom Right Corner)
-// White square box with QR code + REMOTE label
+// White square box with QR code + Room Code display
 // ============================================================
 
 import { QRCodeSVG } from 'qrcode.react';
@@ -30,10 +30,10 @@ export function QRPanel({ roomCode, appUrl }: QRPanelProps) {
         includeMargin={false}
       />
       <span
-        className="text-[10px] font-black text-black uppercase tracking-widest pt-1 pb-0.5 leading-none"
-        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+        className="text-[11px] font-black text-black uppercase tracking-widest pt-1 pb-0.5 leading-none font-mono"
+        style={{ fontFamily: 'Space Grotesk, monospace' }}
       >
-        REMOTE
+        {roomCode.toUpperCase()}
       </span>
     </div>
   );
