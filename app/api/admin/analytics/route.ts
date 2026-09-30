@@ -87,8 +87,54 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    const instanceIds = (activeRoomsList || []).map((r) => r.id);
+    const roomCodes = (activeRoomsList || []).map((r) => r.room_code);
+
+    // Fetch active queue items for all active instances
+    const { data: queueItems } = instanceIds.length > 0
+      ? await supabase
+          .from('queue_items')
+          .select('id, instance_id, status, guest_name, songs(title, artist)')
+          .in('instance_id', instanceIds)
+          .in('status', ['playing', 'queued'])
+      : { data: [] };
+
+    // Fetch chat counts for active room codes
+    const { data: chatItems } = roomCodes.length > 0
+      ? await supabase
+          .from('room_chats')
+          .select('id, room_code')
+          .in('room_code', roomCodes)
+      : { data: [] };
+
+    const playingMap = new Map<string, { title: string; artist: string; guest_name?: string | null }>();
+    const queueCountMap = new Map<string, number>();
+    const chatCountMap = new Map<string, number>();
+
+    (queueItems || []).forEach((item: any) => {
+      if (item.status === 'playing' && item.songs) {
+        playingMap.set(item.instance_id, {
+          title: item.songs.title,
+          artist: item.songs.artist,
+          guest_name: item.guest_name,
+        });
+      } else if (item.status === 'queued') {
+        const count = queueCountMap.get(item.instance_id) || 0;
+        queueCountMap.set(item.instance_id, count + 1);
+      }
+    });
+
+    (chatItems || []).forEach((chat: any) => {
+      const count = chatCountMap.get(chat.room_code) || 0;
+      chatCountMap.set(chat.room_code, count + 1);
+    });
+
     const activeRoomsFormatted = (activeRoomsList || []).map((room) => {
       const stats = roomCounts.get(room.room_code) || { user_count: 0, tv_count: 0, remote_count: 0, city: room.city || 'Local Area', country: room.country || 'Philippines' };
+      const playing = playingMap.get(room.id) || null;
+      const queueCount = queueCountMap.get(room.id) || 0;
+      const chatCount = chatCountMap.get(room.room_code) || 0;
+
       return {
         id: room.id,
         room_code: room.room_code,
@@ -99,7 +145,10 @@ export async function GET(request: NextRequest) {
         remote_count: stats.remote_count,
         city: stats.city,
         country: stats.country,
-        is_online: stats.user_count > 0,
+        is_online: stats.user_count > 0 || playing !== null || queueCount > 0,
+        currently_playing: playing,
+        queue_count: queueCount,
+        chat_count: chatCount,
       };
     });
 
