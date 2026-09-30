@@ -122,26 +122,29 @@ export default function LandingPage() {
           style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
       </div>
 
-      {/* White Frosted Card Container */}
-      <div className="relative z-10 w-full max-w-md bg-white/95 backdrop-blur-xl border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900 animate-fadeIn">
-        {/* Logo & Brand */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-3">
+      {/* Outer Content Container */}
+      <div className="relative z-10 w-full max-w-md flex flex-col items-center animate-fadeIn">
+        {/* Logo & Brand (Floating outside white card) */}
+        <div className="text-center mb-6 flex flex-col items-center">
+          <div className="flex items-center justify-center mb-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/okekaraokelogo.png"
               alt="OKEKARAOKE Logo"
-              className="w-36 h-36 md:w-44 md:h-44 object-contain drop-shadow-md"
+              className="w-36 h-36 md:w-44 md:h-44 object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.6)]"
             />
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
-            <span className="text-indigo-600">
+          <h1 className="text-4xl md:text-5xl font-black tracking-tight drop-shadow-md" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
+            <span className="text-indigo-400">
               OKE
             </span>
-            <span className="text-slate-900">KARAOKE</span>
+            <span className="text-white">KARAOKE</span>
           </h1>
         </div>
+
+        {/* White Frosted Card Container */}
+        <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900">
 
         {/* How it works */}
         <div className="grid grid-cols-2 gap-3 mb-6">
@@ -231,6 +234,7 @@ export default function LandingPage() {
           © {new Date().getFullYear()} <span className="text-slate-600 font-semibold">Wilbert Gamis</span> · All Rights Reserved
         </p>
       </div>
-    </main>
+    </div>
+  </main>
   );
 }
