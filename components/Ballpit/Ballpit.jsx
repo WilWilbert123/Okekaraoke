@@ -483,9 +483,9 @@ class W {
             t[s + 1] = E(2 * e.maxY);
             t[s + 2] = E(2 * e.maxZ);
             if (v) {
-                v[s] = k(-0.025, 0.025);
-                v[s + 1] = k(-0.025, 0.025);
-                v[s + 2] = k(-0.015, 0.015);
+                v[s] = k(-0.008, 0.008);
+                v[s + 1] = k(-0.008, 0.008);
+                v[s + 2] = k(-0.004, 0.004);
             }
         }
     }
@@ -512,22 +512,24 @@ class W {
             B.y -= e.delta * t.gravity * n[idx];
             B.multiplyScalar(t.friction);
 
-            // Gentle ambient sinusoidal wave floating force so balls never freeze or stop moving
+            // Very slow, peaceful floating wave motion
             const floatOffset = idx * 1.35;
-            const now = performance.now() * 0.001;
-            B.x += Math.sin(now * 0.8 + floatOffset) * 0.0003;
-            B.y += Math.cos(now * 0.6 + floatOffset * 1.5) * 0.0003;
-            B.z += Math.sin(now * 0.7 + floatOffset * 2.1) * 0.0001;
+            const now = performance.now() * 0.0003;
+            B.x += Math.sin(now + floatOffset) * 0.00008;
+            B.y += Math.cos(now * 0.8 + floatOffset * 1.5) * 0.00008;
+            B.z += Math.sin(now * 0.6 + floatOffset * 2.1) * 0.00004;
 
-            // Maintain a subtle minimum floating velocity so balls continuously drift and bounce smoothly
+            // Maintain a very gentle, slow minimum drift speed
             const speed = B.length();
-            if (speed < 0.01) {
-                B.x += (Math.random() - 0.5) * 0.004;
-                B.y += (Math.random() - 0.5) * 0.004;
-                B.z += (Math.random() - 0.5) * 0.002;
+            if (speed < 0.002) {
+                B.x += (Math.random() - 0.5) * 0.0008;
+                B.y += (Math.random() - 0.5) * 0.0008;
+                B.z += (Math.random() - 0.5) * 0.0004;
             }
 
-            B.clampLength(0, t.maxVelocity);
+            // Cap max velocity to a soft, slow floating speed cap
+            const maxFloatVel = Math.min(t.maxVelocity ?? 0.012, 0.012);
+            B.clampLength(0, maxFloatVel);
             I.add(B);
             I.toArray(s, base);
             B.toArray(o, base);
