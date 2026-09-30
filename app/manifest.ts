@@ -13,13 +13,13 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['entertainment', 'music'],
     icons: [
       {
-        src: '/icons/icon-192x192.png',
+        src: '/okekaraokelogo.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'maskable',
       },
       {
-        src: '/icons/icon-512x512.png',
+        src: '/okekaraokelogo.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',

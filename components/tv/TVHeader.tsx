@@ -36,7 +36,8 @@ export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscree
     >
       {/* Brand */}
       <div className="flex items-center gap-2">
-        <Mic2 size={20} className="text-indigo-400" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-9 h-9 object-contain drop-shadow" />
         <span
           className="text-lg font-black tracking-tight"
           style={{ fontFamily: 'Space Grotesk, sans-serif' }}

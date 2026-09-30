@@ -228,11 +228,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${
-                  isActive
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${isActive
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                     : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <IconComponent size={13} className={isActive ? 'text-white' : 'text-slate-400'} />
                 <span>{filter.label}</span>
@@ -247,12 +246,12 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
         {/* Header label */}
         <div className="flex items-center justify-between py-2 mb-1">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Sparkles size={12} className="text-indigo-400" />
+
             {searched
               ? `Search Results (${filteredList.length})`
               : activeFilter !== 'all'
-              ? `${activeFilter.toUpperCase()} KARAOKE (${filteredList.length})`
-              : `Available Karaoke Catalog (${filteredList.length})`}
+                ? `${activeFilter.toUpperCase()} KARAOKE (${filteredList.length})`
+                : `Available Karaoke Catalog (${filteredList.length})`}
           </span>
           {!searched && catalog.length > 0 && (
             <span className="text-[10px] text-indigo-400 font-semibold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 flex items-center gap-1">
@@ -294,11 +293,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                       songStatus.status === 'success'
                         ? 'rgba(34, 197, 94, 0.06)'
                         : 'var(--color-surface)',
-                    border: `1px solid ${
-                      songStatus.status === 'success'
+                    border: `1px solid ${songStatus.status === 'success'
                         ? 'rgba(34, 197, 94, 0.2)'
                         : 'var(--color-border-subtle)'
-                    }`,
+                      }`,
                   }}
                 >
                   {/* Song Info */}
@@ -316,7 +314,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                         <span className="text-xs text-slate-400 font-mono">#{song.code}</span>
                       )}
 
-                      {song.category && (
+                      {song.category && (song.category as string) !== 'YouTube' && (
                         <span className="text-xs text-slate-400">· {song.category}</span>
                       )}
                     </div>
@@ -343,11 +341,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                         songStatus.status === 'success'
                           ? 'rgba(34, 197, 94, 0.15)'
                           : 'rgba(99, 102, 241, 0.15)',
-                      border: `1px solid ${
-                        songStatus.status === 'success'
+                      border: `1px solid ${songStatus.status === 'success'
                           ? 'rgba(34, 197, 94, 0.3)'
                           : 'rgba(99, 102, 241, 0.3)'
-                      }`,
+                        }`,
                     }}
                     aria-label={`Reserve ${song.title}`}
                   >

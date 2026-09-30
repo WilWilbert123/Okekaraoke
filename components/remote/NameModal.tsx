@@ -73,12 +73,8 @@ export function NameModal({ open, onConfirm }: NameModalProps) {
       >
         {/* Logo + greeting */}
         <div className="flex flex-col items-center gap-2 text-center">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}
-          >
-            <Mic2 size={26} className="text-white" />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-24 h-24 object-contain drop-shadow-md" />
           <h2
             className="text-xl font-black text-white"
             style={{ fontFamily: 'Space Grotesk, sans-serif' }}

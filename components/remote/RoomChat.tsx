@@ -2,8 +2,8 @@
 
 // ============================================================
 // OKEKARAOKE — Room Chat Component
-// Real-time in-room group chat using Supabase broadcast
-// Only users in the same room can see & send messages
+// Real-time in-room group chat with persistent database storage
+// & local storage fallback so messages stay across page refreshes.
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -37,7 +37,69 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
   const supabase = createClient();
 
-  // ── Subscribe to room broadcast channel ──────────────────
+  const storageKey = `okekaraoke_chat_${roomCode.toUpperCase()}`;
+
+  // Helper to save messages to local storage
+  const saveToLocalStorage = useCallback((msgs: ChatMessage[]) => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(msgs.slice(-150)));
+      }
+    } catch (e) {
+      console.warn('Failed to save chat to localStorage:', e);
+    }
+  }, [storageKey]);
+
+  // ── 1. Load initial chat (localStorage + DB API) ────────
+  useEffect(() => {
+    let isMounted = true;
+
+    // First load from localStorage immediately
+    try {
+      if (typeof window !== 'undefined') {
+        const cached = localStorage.getItem(storageKey);
+        if (cached) {
+          const parsed = JSON.parse(cached) as ChatMessage[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to read chat from localStorage:', e);
+    }
+
+    // Then fetch persisted chat from server API
+    async function fetchServerChat() {
+      try {
+        const res = await fetch(`/api/instances/${roomCode}/chat`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.success && Array.isArray(json.messages) && isMounted) {
+          setMessages((prev) => {
+            const map = new Map<string, ChatMessage>();
+            // Add previous local messages
+            prev.forEach((m) => map.set(m.id, m));
+            // Add server messages (takes precedence if available)
+            json.messages.forEach((m: ChatMessage) => map.set(m.id, m));
+            const merged = Array.from(map.values()).sort((a, b) => a.sent_at - b.sent_at);
+            saveToLocalStorage(merged);
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('Error fetching server chat:', err);
+      }
+    }
+
+    fetchServerChat();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [roomCode, storageKey, saveToLocalStorage]);
+
+  // ── 2. Subscribe to room broadcast channel ──────────────
   useEffect(() => {
     const channelName = `okekaraoke:chat:${roomCode}`;
 
@@ -51,9 +113,10 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
       .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
         const msg = payload as ChatMessage;
         setMessages((prev) => {
-          // Deduplicate by id
           if (prev.some((m) => m.id === msg.id)) return prev;
-          return [...prev, msg].sort((a, b) => a.sent_at - b.sent_at);
+          const updated = [...prev, msg].sort((a, b) => a.sent_at - b.sent_at);
+          saveToLocalStorage(updated);
+          return updated;
         });
       })
       .subscribe((status) => {
@@ -65,21 +128,23 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
       channelRef.current = null;
       setJoined(false);
     };
-  }, [roomCode, supabase]);
+  }, [roomCode, supabase, saveToLocalStorage]);
 
   // ── Auto-scroll to bottom when new messages arrive ───────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ── Send a message via broadcast ─────────────────────────
+  // ── 3. Send a message ─────────────────────────────────────
   const sendMessage = useCallback(async () => {
     const text = input.trim();
-    if (!text || !channelRef.current || sending) return;
+    if (!text || sending) return;
 
     const displayName = guestName?.trim() || 'Guest';
-    const msg: ChatMessage = {
-      id: `${sessionId}-${Date.now()}`,
+    const tempId = `${sessionId}-${Date.now()}`;
+
+    const newMsg: ChatMessage = {
+      id: tempId,
       sender_name: displayName,
       sender_session_id: sessionId,
       text,
@@ -89,16 +154,39 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     setSending(true);
     setInput('');
 
+    // Optimistically update local state & localStorage
+    setMessages((prev) => {
+      const updated = [...prev, newMsg].sort((a, b) => a.sent_at - b.sent_at);
+      saveToLocalStorage(updated);
+      return updated;
+    });
+
     try {
-      await channelRef.current.send({
-        type: 'broadcast',
-        event: 'chat_message',
-        payload: msg,
+      // Broadcast to other live users in room via Realtime
+      if (channelRef.current) {
+        await channelRef.current.send({
+          type: 'broadcast',
+          event: 'chat_message',
+          payload: newMsg,
+        });
+      }
+
+      // Persist message to database via API
+      await fetch(`/api/instances/${roomCode}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender_name: displayName,
+          sender_session_id: sessionId,
+          text,
+        }),
       });
+    } catch (err) {
+      console.warn('Failed to send/save chat message:', err);
     } finally {
       setSending(false);
     }
-  }, [input, sessionId, guestName, sending]);
+  }, [input, sessionId, guestName, roomCode, sending, saveToLocalStorage]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -109,7 +197,6 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-
       {/* Room badge */}
       <div
         className="px-4 py-2.5 shrink-0 flex items-center gap-2"
@@ -161,12 +248,12 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
                   <div
                     className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0"
                     style={{
-                      background: `hsl(${Math.abs(msg.sender_name.charCodeAt(0) * 47) % 360}, 60%, 20%)`,
-                      border: `1px solid hsl(${Math.abs(msg.sender_name.charCodeAt(0) * 47) % 360}, 60%, 35%)`,
-                      color: `hsl(${Math.abs(msg.sender_name.charCodeAt(0) * 47) % 360}, 80%, 70%)`,
+                      background: `hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 60%, 20%)`,
+                      border: `1px solid hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 60%, 35%)`,
+                      color: `hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 80%, 70%)`,
                     }}
                   >
-                    {msg.sender_name.charAt(0).toUpperCase()}
+                    {(msg.sender_name || 'G').charAt(0).toUpperCase()}
                   </div>
                 )}
                 <span className="text-[10px] text-slate-600 font-medium">
@@ -177,7 +264,7 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
 
               {/* Bubble */}
               <div
-                className="max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug"
+                className="max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug break-words"
                 style={
                   isMe
                     ? {
@@ -215,20 +302,23 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={joined ? `Message room ${roomCode}...` : 'Connecting...'}
+            placeholder={`Message room ${roomCode}...`}
             maxLength={200}
-            disabled={!joined}
-            className="flex-1 px-4 py-2.5 rounded-2xl text-sm text-white outline-none transition-all placeholder-slate-600 disabled:opacity-40"
+            className="flex-1 px-4 py-2.5 rounded-2xl text-sm text-white outline-none transition-all placeholder-slate-600"
             style={{
               background: 'var(--color-surface-2)',
               border: '1px solid var(--color-border)',
             }}
-            onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.5)'; }}
-            onBlur={(e) => { e.target.style.borderColor = 'var(--color-border)'; }}
+            onFocus={(e) => {
+              e.target.style.borderColor = 'rgba(99,102,241,0.5)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'var(--color-border)';
+            }}
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim() || !joined || sending}
+            disabled={!input.trim() || sending}
             className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all active:scale-95 disabled:opacity-30"
             style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}
             aria-label="Send message"

@@ -191,6 +191,41 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 6.5 If no song is currently playing in this instance, auto-advance queue so the 1st song starts playing immediately
+    const { data: playingSong } = await supabase
+      .from('queue_items')
+      .select('id')
+      .eq('instance_id', instance.id)
+      .eq('status', 'playing')
+      .maybeSingle();
+
+    if (!playingSong) {
+      const { data: advanceResult } = await supabase.rpc('advance_queue_atomic', {
+        p_instance_id: instance.id,
+        p_completed_queue_item_id: null,
+      });
+
+      const advRow = Array.isArray(advanceResult) ? advanceResult[0] : advanceResult;
+      if (advRow?.success && advRow.next_queue_item_id) {
+        // Broadcast song_started so TV receives it live & starts video immediately
+        await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
+          type: 'broadcast',
+          event: 'song_started',
+          payload: {
+            type: 'song_started',
+            instance_id: instance.id,
+            room_code: normalizedCode,
+            queue_item_id: advRow.next_queue_item_id,
+            song_id: advRow.next_song_id,
+            youtube_video_id: advRow.next_youtube_video_id,
+            guest_name: advRow.next_guest_name,
+            position: advRow.next_position,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+    }
+
     // 7. Broadcast Realtime event to TV
     await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
       type: 'broadcast',

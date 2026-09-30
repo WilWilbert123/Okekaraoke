@@ -50,10 +50,23 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const supabase = createAdminClient();
 
+    // 1. Delete or clear foreign key references in queue_items & reservation_logs
+    await supabase.from('queue_items').delete().eq('song_id', id);
+    await supabase.from('reservation_logs').delete().eq('queue_item_id', id);
+
+    // 2. Delete song from songs catalog
     const { error } = await supabase.from('songs').delete().eq('id', id);
+
     if (error) {
-      console.error('Delete song error:', error);
-      return apiError('DELETE_FAILED', error.message, 500);
+      console.warn('Hard delete failed, attempting soft delete:', error.message);
+      const { error: softError } = await supabase
+        .from('songs')
+        .update({ is_active: false })
+        .eq('id', id);
+
+      if (softError) {
+        return apiError('DELETE_FAILED', softError.message, 500);
+      }
     }
 
     return apiSuccess({ deleted: true });

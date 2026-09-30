@@ -5,7 +5,7 @@
 // Professional, icon-based, real-time control system
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Edit,
@@ -50,13 +50,23 @@ interface AnalyticsData {
     room_code: string;
     status: string;
     created_at: string;
+    user_count: number;
+    tv_count: number;
+    remote_count: number;
+    city: string;
+    country: string;
+    is_online: boolean;
   }>;
   online_devices_list: Array<{
     id: string;
+    room_code: string;
     device_type: string;
     device_name: string;
     is_online: boolean;
     last_seen_at: string;
+    city: string;
+    country: string;
+    ip_address: string;
   }>;
 }
 
@@ -155,75 +165,153 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
         className="p-5 rounded-2xl flex flex-col h-full overflow-hidden"
         style={{ background: 'rgba(18, 18, 28, 0.8)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
       >
-        <div className="flex items-center gap-2 mb-3 shrink-0">
-          <Tv size={15} className="text-green-400" />
-          <h2 className="text-sm font-bold text-white">Active TV Rooms ({analytics?.active_rooms_list.length ?? 0})</h2>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <Tv size={15} className="text-green-400" />
+            <h2 className="text-sm font-bold text-white">
+              Active TV Rooms ({analytics?.active_rooms_list.length ?? 0})
+            </h2>
+          </div>
+          <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-green-400 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping" />
+            REALTIME
+          </span>
         </div>
+
         {!analytics?.active_rooms_list.length ? (
           <p className="text-xs text-slate-500 py-8 text-center my-auto">No active TV rooms right now.</p>
         ) : (
-          <div className="space-y-2 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+          <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
             {analytics.active_rooms_list.map((room) => (
               <div
                 key={room.id}
-                className="p-3 rounded-xl flex items-center justify-between"
-                style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)' }}
+                className="p-3.5 rounded-xl flex items-center justify-between transition-all"
+                style={{
+                  background: room.is_online ? 'rgba(34, 197, 94, 0.03)' : 'rgba(255, 255, 255, 0.02)',
+                  border: `1px solid ${room.is_online ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.04)'}`,
+                }}
               >
-                <div>
-                  <span className="text-sm font-black text-white font-mono tracking-wider">
-                    ROOM {room.room_code}
-                  </span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-sm font-black text-white font-mono tracking-wider">
+                      ROOM {room.room_code}
+                    </span>
+                  </div>
+
+                  {/* Realtime User Count breakdown */}
+                  <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+                    <Users size={12} className="text-indigo-400" />
+                    <span>
+                      {room.user_count} {room.user_count === 1 ? 'User' : 'Users'} connected
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      ({room.tv_count} TV, {room.remote_count} Remote{room.remote_count !== 1 ? 's' : ''})
+                    </span>
+                  </div>
+
+                  {/* Location info */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Globe size={11} className="text-slate-500" />
+                    <span>
+                      {room.city}, {room.country}
+                    </span>
+                    <span className="text-slate-600">·</span>
                     <Clock size={10} className="text-slate-600" />
-                    <p className="text-[11px] text-slate-500">
+                    <span className="text-slate-500">
                       {new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    </span>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-                  LIVE
-                </span>
+
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                      room.is_online
+                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                    }`}
+                  >
+                    {room.is_online ? '● LIVE ONLINE' : 'IDLE'}
+                  </span>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      {/* Connected Remotes */}
+      {/* Connected Remotes & Devices */}
       <div
         className="p-5 rounded-2xl flex flex-col h-full overflow-hidden"
         style={{ background: 'rgba(18, 18, 28, 0.8)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
       >
-        <div className="flex items-center gap-2 mb-3 shrink-0">
-          <Smartphone size={15} className="text-indigo-400" />
-          <h2 className="text-sm font-bold text-white">
-            Connected Remotes ({analytics?.online_devices_list.length ?? 0})
-          </h2>
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <Smartphone size={15} className="text-indigo-400" />
+            <h2 className="text-sm font-bold text-white">
+              Connected Devices ({analytics?.online_devices_list.length ?? 0})
+            </h2>
+          </div>
+          <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-indigo-400 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25">
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+            REALTIME
+          </span>
         </div>
+
         {!analytics?.online_devices_list.length ? (
-          <p className="text-xs text-slate-500 py-8 text-center my-auto">No remotes currently connected.</p>
+          <p className="text-xs text-slate-500 py-8 text-center my-auto">No devices currently connected.</p>
         ) : (
-          <div className="space-y-2 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+          <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
             {analytics.online_devices_list.map((dev) => (
               <div
                 key={dev.id}
-                className="p-3 rounded-xl flex items-center justify-between"
-                style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.04)' }}
+                className="p-3.5 rounded-xl flex items-center justify-between transition-all"
+                style={{
+                  background: dev.is_online ? 'rgba(99, 102, 241, 0.03)' : 'rgba(255, 255, 255, 0.01)',
+                  border: `1px solid ${dev.is_online ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.03)'}`,
+                }}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
-                  <div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        dev.is_online ? 'bg-green-400 animate-pulse' : 'bg-slate-600'
+                      }`}
+                    />
                     <p className="text-xs font-bold text-white">{dev.device_name || 'Guest Remote'}</p>
-                    <p className="text-[10px] text-slate-500 font-mono">{dev.id.slice(0, 12)}...</p>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                      Room {dev.room_code}
+                    </span>
+                  </div>
+
+                  {/* Device location & IP */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Globe size={11} className="text-indigo-400 shrink-0" />
+                    <span>
+                      {dev.city}, {dev.country}
+                    </span>
+                    {dev.ip_address && (
+                      <span className="text-[10px] text-slate-500 font-mono">({dev.ip_address})</span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
+
+                <div className="flex items-center gap-2 shrink-0">
                   {dev.is_online ? (
-                    <Wifi size={12} className="text-green-400" />
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
+                      <Wifi size={10} />
+                      <span>ONLINE</span>
+                    </span>
                   ) : (
-                    <WifiOff size={12} className="text-slate-600" />
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-500 border border-slate-500/20 flex items-center gap-1">
+                      <WifiOff size={10} />
+                      <span>OFFLINE</span>
+                    </span>
                   )}
-                  <span className="text-xs font-semibold text-slate-400 uppercase">{dev.device_type}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 uppercase">
+                    {dev.device_type}
+                  </span>
                 </div>
               </div>
             ))}
@@ -397,6 +485,8 @@ function SongsTab({ songs, totalCount, onRefresh }: { songs: Song[]; totalCount:
     try {
       await fetch('/api/songs/' + id, { method: 'DELETE' });
       onRefresh();
+    } catch (err) {
+      console.error('Delete song failed:', err);
     } finally {
       setDeletingId(null);
     }
@@ -781,6 +871,14 @@ export default function AdminDashboardPage() {
     });
   }, [router]);
 
+  const bannerIsDirtyRef = useRef(false);
+
+  // Helper to update banner state & mark form as user-edited
+  const updateBanner = (newSettings: BannerSettings) => {
+    bannerIsDirtyRef.current = true;
+    setBanner(newSettings);
+  };
+
   // Fetch all data
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -796,7 +894,10 @@ export default function AdminDashboardPage() {
       const songsJson = songsRes && songsRes.ok ? await songsRes.json().catch(() => null) : null;
 
       if (analyticsJson?.success) setAnalytics(analyticsJson.data);
-      if (settingsJson?.success) setBanner(settingsJson.data);
+      // Only update banner state if user is NOT currently editing the form
+      if (settingsJson?.success && !bannerIsDirtyRef.current) {
+        setBanner(settingsJson.data);
+      }
       if (songsJson?.success) {
         setSongs(songsJson.data.songs);
         setTotalSongsCount(songsJson.data.total);
@@ -811,7 +912,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(true), 10_000);
+    const interval = setInterval(() => fetchData(true), 4_000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -828,6 +929,7 @@ export default function AdminDashboardPage() {
       });
       const json = await res.json();
       if (json.success) {
+        bannerIsDirtyRef.current = false; // Reset dirty flag on save success
         setBannerSaveSuccess(true);
         setTimeout(() => setBannerSaveSuccess(false), 4000);
       }
@@ -838,7 +940,9 @@ export default function AdminDashboardPage() {
 
   // Kill Room
   const handleKillRoom = async (roomCode: string) => {
-    // 1. Optimistic UI update
+    const codeUpper = roomCode.trim().toUpperCase();
+
+    // 1. Optimistic UI update — remove room & its devices immediately from state
     setAnalytics((prev) => {
       if (!prev) return prev;
       return {
@@ -848,17 +952,20 @@ export default function AdminDashboardPage() {
           active_rooms: Math.max(0, prev.metrics.active_rooms - 1),
         },
         active_rooms_list: prev.active_rooms_list.filter(
-          (r) => r.room_code.toUpperCase() !== roomCode.toUpperCase()
+          (r) => r.room_code.toUpperCase() !== codeUpper
+        ),
+        online_devices_list: prev.online_devices_list.filter(
+          (d) => d.room_code.toUpperCase() !== codeUpper
         ),
       };
     });
 
     try {
-      await fetch(`/api/admin/rooms?room_code=${roomCode}`, { method: 'DELETE' });
+      await fetch(`/api/admin/rooms?room_code=${encodeURIComponent(codeUpper)}`, { method: 'DELETE' });
     } catch (err) {
       console.error('Failed to kill room:', err);
     }
-    setTimeout(() => fetchData(true), 1000);
+    fetchData(true);
   };
 
   const handleLogout = async () => {
@@ -894,10 +1001,11 @@ export default function AdminDashboardPage() {
       >
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
+            className="w-9 h-9 rounded-xl flex items-center justify-center p-1"
             style={{ background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.3)' }}
           >
-            <ShieldCheck size={19} className="text-indigo-400" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-7 h-7 object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-black text-white tracking-wide" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
@@ -986,7 +1094,7 @@ export default function AdminDashboardPage() {
         {activeTab === 'banner' && (
           <BannerTab
             banner={banner}
-            setBanner={setBanner}
+            setBanner={updateBanner}
             onSave={handleSaveBanner}
             saving={savingBanner}
             saved={bannerSaveSuccess}

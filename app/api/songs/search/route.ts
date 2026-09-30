@@ -171,37 +171,18 @@ function extractArtistFromTitle(
     .replace(/[\s\-|·•]+$/, '')
     .trim();
 
-  // ── Step 2: Try dash separator (" - ") with word-count tiebreaker ────────────
-  // The KEY insight: artist names are usually shorter (fewer words) than song titles.
-  // "The Calling - Wherever You Will Go" → left=2 words (artist), right=4 words (song)
-  // "Wherever You Will Go - The Calling" → left=4 words (song), right=2 words (artist)
+  // ── Step 2: Try dash separator (" - ") ─────────────────────────────────────────
+  // Standard format on YouTube is "Artist - Song Title".
+  // Therefore, left = Artist, right = Song Title.
   {
     const parts = clean.split(' - ');
     if (parts.length >= 2) {
-      // Try every split point, score each candidate
-      for (let i = parts.length - 1; i >= 1; i--) {
-        const left  = parts.slice(0, i).join(' - ').trim();
-        const right = parts.slice(i).join(' - ').trim();
+      const left = parts[0].trim();
+      const right = parts.slice(1).join(' - ').trim();
 
-        const leftWords  = left.split(/\s+/).length;
-        const rightWords = right.split(/\s+/).length;
-
-        if (!isPlausibleArtist(left) && !isPlausibleArtist(right)) continue;
-
-        // Both plausible → pick shorter as artist
-        if (isPlausibleArtist(left) && isPlausibleArtist(right)) {
-          if (leftWords <= rightWords) {
-            // left is the artist
-            return { songTitle: right, artist: left };
-          } else {
-            // right is the artist
-            return { songTitle: left, artist: right };
-          }
-        }
-
-        // Only one side is plausible as artist
-        if (isPlausibleArtist(right)) return { songTitle: left, artist: right };
-        if (isPlausibleArtist(left))  return { songTitle: right, artist: left };
+      if (isPlausibleArtist(left) || isPlausibleArtist(right)) {
+        // Standard YouTube format: Artist - Song Title
+        return { songTitle: right, artist: left };
       }
     }
   }

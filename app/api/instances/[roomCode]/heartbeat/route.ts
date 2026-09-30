@@ -40,7 +40,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return apiError('ROOM_NOT_FOUND', 'Room not found.', 404);
     }
 
-    // Update device heartbeat
+    // Update device heartbeat with location
+    const { extractLocationFromRequest } = await import('@/lib/utils/location');
+    const loc = extractLocationFromRequest(request);
+
     const now = new Date().toISOString();
     await supabase
       .from('devices')
@@ -49,6 +52,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         device_type,
         session_id,
         is_online: true,
+        city: body.city || loc.city,
+        country: body.country || loc.country,
+        ip_address: loc.ip,
         last_seen_at: now,
       }, {
         onConflict: 'instance_id,session_id',

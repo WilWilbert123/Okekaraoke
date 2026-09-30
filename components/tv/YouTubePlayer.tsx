@@ -206,29 +206,30 @@ export function YouTubePlayer({
     };
   }, [initPlayer]);
 
-  // Load new video when videoId changes
+  // Load new video when videoId changes OR when playerReady transitions to true
   useEffect(() => {
     if (!playerRef.current || !playerReady) return;
-    if (videoId === currentVideoIdRef.current) return;
-
-    setEmbedBlocked(false); // Reset error state for new video
 
     if (videoId) {
-      // Load new video — update refs before loading so onEnded fires with correct IDs
-      currentVideoIdRef.current = videoId;
-      currentQueueItemIdRef.current = queueItemId;
-      playerRef.current.loadVideoById(videoId);
-      try {
-        playerRef.current.playVideo();
-      } catch {
-        // Ignore playVideo errors
+      if (currentVideoIdRef.current !== videoId) {
+        currentVideoIdRef.current = videoId;
+        currentQueueItemIdRef.current = queueItemId;
+        setEmbedBlocked(false);
+        try {
+          playerRef.current.loadVideoById(videoId);
+          playerRef.current.playVideo();
+        } catch (e) {
+          console.warn('Error playing video:', e);
+        }
       }
     } else {
-      // Stopping — clear refs FIRST so any ghost 'ENDED' event from stopVideo()
-      // has nothing to fire onEnded with, preventing a spurious /api/queue/next call.
-      currentVideoIdRef.current = null;
-      currentQueueItemIdRef.current = null;
-      playerRef.current.stopVideo();
+      if (currentVideoIdRef.current !== null) {
+        currentVideoIdRef.current = null;
+        currentQueueItemIdRef.current = null;
+        try {
+          playerRef.current.stopVideo();
+        } catch {}
+      }
     }
   }, [videoId, queueItemId, playerReady]);
 
