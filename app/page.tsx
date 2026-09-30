@@ -115,7 +115,7 @@ export default function LandingPage() {
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
       {/* 3D Interactive Auto-Floating Ballpit Background */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <Ballpit
           count={55}
           gravity={0}
