@@ -107,8 +107,8 @@ export default function LandingPage() {
         <Ballpit
           count={55}
           gravity={0}
-          friction={0.999}
-          wallBounce={0.98}
+          friction={0.9995}
+          wallBounce={0.99}
           followCursor={true}
           colors={[0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff]}
         />
