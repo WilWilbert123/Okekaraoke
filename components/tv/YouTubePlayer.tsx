@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { VolumeX } from 'lucide-react';
 import type { PlayerState } from '@/lib/types';
 
 // YouTube IFrame API type declarations
@@ -106,8 +107,22 @@ export function YouTubePlayer({
   const currentQueueItemIdRef = useRef<string | null>(null);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
+  const [showUnmutePrompt, setShowUnmutePrompt] = useState(false);
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
+
+  const handleUserGesture = useCallback(() => {
+    if (playerRef.current) {
+      try {
+        playerRef.current.unMute();
+        setShowUnmutePrompt(false);
+        const state = playerRef.current.getPlayerState?.();
+        if (state === 2 || state === 5 || state === -1) {
+          playerRef.current.playVideo();
+        }
+      } catch {}
+    }
+  }, []);
 
   // Keep refs current
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
@@ -163,10 +178,16 @@ export function YouTubePlayer({
           switch (event.data) {
             case YTState.PLAYING:
               playerStatus = 'playing';
-              // Attempt un-muting once playing starts
               try {
                 playerRef.current?.unMute();
-              } catch {}
+                if (playerRef.current?.isMuted()) {
+                  setShowUnmutePrompt(true);
+                } else {
+                  setShowUnmutePrompt(false);
+                }
+              } catch {
+                setShowUnmutePrompt(true);
+              }
               break;
             case YTState.PAUSED:
               playerStatus = 'paused';
@@ -298,10 +319,16 @@ export function YouTubePlayer({
           }
         }
 
-        // 2. Force play & unmute if player stuck in cued (5), paused (2), or unstarted (-1)
+        // 2. Force play & fallback mute if player stuck in cued (5), paused (2), or unstarted (-1)
         if (state === 5 || state === 2 || state === -1) {
-          playerRef.current.playVideo();
-          try { playerRef.current.unMute(); } catch {}
+          try {
+            playerRef.current.playVideo();
+          } catch {
+            try {
+              playerRef.current.mute();
+              playerRef.current.playVideo();
+            } catch {}
+          }
         }
       } catch {}
     }, 1000);
@@ -316,6 +343,17 @@ export function YouTubePlayer({
         ref={containerRef}
         className="w-full h-full"
       />
+
+      {/* Unmute prompt overlay — shown when browser autoplay policy requires gesture */}
+      {showUnmutePrompt && videoId && (
+        <button
+          onClick={handleUserGesture}
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-teal-400 hover:bg-teal-300 text-black font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-2xl active:scale-95 transition-all animate-bounce pointer-events-auto"
+        >
+          <VolumeX size={16} />
+          <span>Tap Screen to Enable Audio</span>
+        </button>
+      )}
 
       {/* Embed blocked overlay — shown when video owner disabled embedding */}
       {embedBlocked && videoId && (
