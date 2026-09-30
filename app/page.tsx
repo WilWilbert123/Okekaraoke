@@ -1,17 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Mic2, Tv2, Smartphone, Music2, ChevronRight, Wifi } from 'lucide-react';
+import { Mic2, Tv2, Smartphone, Music2, ChevronRight, Wifi, Download, History, QrCode } from 'lucide-react';
 import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 import Ballpit from '@/components/Ballpit/Ballpit';
 
 export default function LandingPage() {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
+  const [lastRoom, setLastRoom] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isInstallable, isStandalone, installApp } = usePWAInstall();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('okekaraoke_last_room');
+      if (saved) {
+        setLastRoom(saved);
+      }
+    }
+  }, []);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -191,6 +203,25 @@ export default function LandingPage() {
           <div className="flex-1 h-px bg-slate-200" />
         </div>
 
+        {/* Rejoin Last Room Button if available */}
+        {lastRoom && (
+          <div className="mb-4">
+            <button
+              onClick={() => {
+                setJoinCode(lastRoom);
+                router.push(`/remote/${lastRoom}`);
+              }}
+              className="w-full py-3 px-4 rounded-2xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <History size={16} className="text-indigo-600" />
+                <span>Rejoin Last Room: <strong className="text-indigo-900 font-extrabold tracking-wider">{lastRoom}</strong></span>
+              </div>
+              <ChevronRight size={16} className="text-indigo-600" />
+            </button>
+          </div>
+        )}
+
         {/* Join Room Form */}
         <form onSubmit={handleJoin} className="space-y-3">
           <div className="relative">
@@ -225,6 +256,19 @@ export default function LandingPage() {
             )}
           </button>
         </form>
+
+        {/* PWA Mobile App Installation Prompt */}
+        {!isStandalone && (
+          <div className="mt-4 pt-3 border-t border-slate-200/80 text-center">
+            <button
+              onClick={installApp}
+              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Download size={14} className="text-indigo-600" />
+              <span>{isInstallable ? 'INSTALL OKEKARAOKE APP' : 'ADD TO HOME SCREEN / INSTALL APP'}</span>
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-400 mt-6 font-medium">
