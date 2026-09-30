@@ -475,13 +475,18 @@ class W {
         this.setSizes();
     }
     #R() {
-        const { config: e, positionData: t } = this;
+        const { config: e, positionData: t, velocityData: v } = this;
         this.center.toArray(t, 0);
         for (let i = 1; i < e.count; i++) {
             const s = 3 * i;
             t[s] = E(2 * e.maxX);
             t[s + 1] = E(2 * e.maxY);
             t[s + 2] = E(2 * e.maxZ);
+            if (v) {
+                v[s] = k(-0.025, 0.025);
+                v[s + 1] = k(-0.025, 0.025);
+                v[s + 2] = k(-0.015, 0.015);
+            }
         }
     }
     setSizes() {
