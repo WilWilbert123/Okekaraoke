@@ -25,6 +25,16 @@ import {
 } from 'three';
 import { RoomEnvironment as z } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
+function isWebGLAvailable() {
+    try {
+        if (typeof window === 'undefined') return false;
+        const canvas = document.createElement('canvas');
+        return !!(window.WebGLRenderingContext && (canvas.getContext('webgl2') || canvas.getContext('webgl')));
+    } catch {
+        return false;
+    }
+}
+
 class x {
     #e;
     canvas;
@@ -82,14 +92,8 @@ class x {
         if (!this.canvas) return;
         this.canvas.style.display = 'block';
 
-        // Pre-check if WebGL context is available on canvas
-        try {
-            const testGl = this.canvas.getContext('webgl2') || this.canvas.getContext('webgl') || this.canvas.getContext('experimental-webgl');
-            if (!testGl) {
-                console.warn('WebGL context unavailable in current environment.');
-                return;
-            }
-        } catch {
+        if (!isWebGLAvailable()) {
+            console.warn('WebGL unavailable in current browser/device environment.');
             return;
         }
 
@@ -787,11 +791,22 @@ const Ballpit = ({ className = '', followCursor = true, ...props }) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
 
-        spheresInstanceRef.current = createBallpit(canvas, { followCursor, ...props });
+        if (!isWebGLAvailable()) {
+            console.warn('WebGL is not supported on this device/browser.');
+            return;
+        }
+
+        try {
+            spheresInstanceRef.current = createBallpit(canvas, { followCursor, ...props });
+        } catch (e) {
+            console.warn('Ballpit initialization failed:', e);
+        }
 
         return () => {
-            if (spheresInstanceRef.current) {
-                spheresInstanceRef.current.dispose();
+            if (spheresInstanceRef.current && typeof spheresInstanceRef.current.dispose === 'function') {
+                try {
+                    spheresInstanceRef.current.dispose();
+                } catch {}
                 spheresInstanceRef.current = null;
             }
         };
