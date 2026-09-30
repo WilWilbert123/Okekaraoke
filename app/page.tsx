@@ -136,9 +136,9 @@ export default function LandingPage() {
 
       {/* Outer Content Container */}
       <div className="relative z-10 w-full max-w-md flex flex-col items-center animate-fadeIn">
-        {/* Logo & Brand (Horizontal 1-Line outside white card) */}
+
         <div className="flex items-center justify-center gap-3.5 mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+
           <img
             src="/okekaraokelogo.png"
             alt="OKEKARAOKE Logo"
@@ -155,127 +155,127 @@ export default function LandingPage() {
         {/* White Frosted Card Container */}
         <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900">
 
-        {/* How it works */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-            <Tv2 size={24} className="text-slate-900 mx-auto mb-1.5" />
-            <p className="text-sm font-bold text-slate-900">TV Screen</p>
-            <p className="text-xs text-slate-500 mt-0.5">Karaoke display</p>
+          {/* How it works */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
+              <Tv2 size={24} className="text-slate-900 mx-auto mb-1.5" />
+              <p className="text-sm font-bold text-slate-900">TV Screen</p>
+              <p className="text-xs text-slate-500 mt-0.5">Karaoke display</p>
+            </div>
+            <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
+              <Smartphone size={24} className="text-slate-900 mx-auto mb-1.5" />
+              <p className="text-sm font-bold text-slate-900">Phone Remote</p>
+              <p className="text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
+            </div>
           </div>
-          <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-            <Smartphone size={24} className="text-slate-900 mx-auto mb-1.5" />
-            <p className="text-sm font-bold text-slate-900">Phone Remote</p>
-            <p className="text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
-          </div>
-        </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200 animate-fade-in">
-            {error}
-          </div>
-        )}
-
-        {/* Create Room Button */}
-        <button
-          id="create-room-btn"
-          onClick={handleCreate}
-          disabled={creating || joining}
-          className="w-full py-4 px-6 rounded-2xl font-black text-white text-base md:text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 bg-slate-900 hover:bg-black active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
-        >
-          {creating ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span className="text-white font-black">CREATING OKEKARAOKE...</span>
-            </>
-          ) : (
-            <>
-              <Music2 size={20} className="text-white stroke-[2.5]" />
-              <span className="text-white font-black">CREATE OKEKARAOKE</span>
-            </>
+          {/* Error message */}
+          {error && (
+            <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200 animate-fade-in">
+              {error}
+            </div>
           )}
-        </button>
 
-        {/* Divider */}
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">or join a room</span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-
-        {/* Rejoin Last Room Button if available */}
-        {lastRoom && (
-          <div className="mb-4">
-            <button
-              onClick={() => {
-                setJoinCode(lastRoom);
-                router.push(`/remote/${lastRoom}`);
-              }}
-              className="w-full py-3 px-4 rounded-2xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2">
-                <History size={16} className="text-indigo-600" />
-                <span>Rejoin Last Room: <strong className="text-indigo-900 font-extrabold tracking-wider">{lastRoom}</strong></span>
-              </div>
-              <ChevronRight size={16} className="text-indigo-600" />
-            </button>
-          </div>
-        )}
-
-        {/* Join Room Form */}
-        <form onSubmit={handleJoin} className="space-y-3">
-          <div className="relative">
-            <Wifi size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              id="join-code-input"
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              placeholder="ENTER ROOM CODE"
-              maxLength={8}
-              className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
-            />
-          </div>
-
+          {/* Create Room Button */}
           <button
-            id="join-room-btn"
-            type="submit"
-            disabled={creating || joining || joinCode.length < 4}
-            className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-black hover:bg-slate-900 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+            id="create-room-btn"
+            onClick={handleCreate}
+            disabled={creating || joining}
+            className="w-full py-4 px-6 rounded-2xl font-black text-white text-base md:text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 bg-slate-900 hover:bg-black active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
           >
-            {joining ? (
+            {creating ? (
               <>
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                JOINING...
+                <span className="text-white font-black">CREATING OKEKARAOKE...</span>
               </>
             ) : (
               <>
-                JOIN ROOM
-                <ChevronRight size={20} />
+                <Music2 size={20} className="text-white stroke-[2.5]" />
+                <span className="text-white font-black">CREATE OKEKARAOKE</span>
               </>
             )}
           </button>
-        </form>
 
-        {/* PWA Mobile App Installation Prompt */}
-        {!isStandalone && (
-          <div className="mt-4 pt-3 border-t border-slate-200/80 text-center">
-            <button
-              onClick={installApp}
-              className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
-            >
-              <Download size={14} className="text-indigo-600" />
-              <span>{isInstallable ? 'INSTALL OKEKARAOKE APP' : 'ADD TO HOME SCREEN / INSTALL APP'}</span>
-            </button>
+          {/* Divider */}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">or join a room</span>
+            <div className="flex-1 h-px bg-slate-200" />
           </div>
-        )}
 
-        {/* Footer */}
-        <p className="text-center text-xs text-slate-400 mt-6 font-medium">
-          © {new Date().getFullYear()} <span className="text-slate-600 font-semibold">Wilbert Gamis</span> · All Rights Reserved
-        </p>
+          {/* Rejoin Last Room Button if available */}
+          {lastRoom && (
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  setJoinCode(lastRoom);
+                  router.push(`/remote/${lastRoom}`);
+                }}
+                className="w-full py-3 px-4 rounded-2xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <History size={16} className="text-indigo-600" />
+                  <span>Rejoin Last Room: <strong className="text-indigo-900 font-extrabold tracking-wider">{lastRoom}</strong></span>
+                </div>
+                <ChevronRight size={16} className="text-indigo-600" />
+              </button>
+            </div>
+          )}
+
+          {/* Join Room Form */}
+          <form onSubmit={handleJoin} className="space-y-3">
+            <div className="relative">
+              <Wifi size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                id="join-code-input"
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="ENTER ROOM CODE"
+                maxLength={8}
+                className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
+              />
+            </div>
+
+            <button
+              id="join-room-btn"
+              type="submit"
+              disabled={creating || joining || joinCode.length < 4}
+              className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-black hover:bg-slate-900 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+            >
+              {joining ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  JOINING...
+                </>
+              ) : (
+                <>
+                  JOIN ROOM
+                  <ChevronRight size={20} />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* PWA Mobile App Installation Prompt */}
+          {!isStandalone && (
+            <div className="mt-4 pt-3 border-t border-slate-200/80 text-center">
+              <button
+                onClick={installApp}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                <Download size={14} className="text-indigo-600" />
+                <span>{isInstallable ? 'INSTALL OKEKARAOKE APP' : 'ADD TO HOME SCREEN / INSTALL APP'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Footer */}
+          <p className="text-center text-xs text-slate-400 mt-6 font-medium">
+            © {new Date().getFullYear()} <span className="text-slate-600 font-semibold">Wilbert Gamis</span> · All Rights Reserved
+          </p>
+        </div>
       </div>
-    </div>
-  </main>
+    </main>
   );
 }
