@@ -81,6 +81,18 @@ class x {
         }
         if (!this.canvas) return;
         this.canvas.style.display = 'block';
+
+        // Pre-check if WebGL context is available on canvas
+        try {
+            const testGl = this.canvas.getContext('webgl2') || this.canvas.getContext('webgl') || this.canvas.getContext('experimental-webgl');
+            if (!testGl) {
+                console.warn('WebGL context unavailable in current environment.');
+                return;
+            }
+        } catch {
+            return;
+        }
+
         const e = {
             canvas: this.canvas,
             powerPreference: 'high-performance',
@@ -680,6 +692,18 @@ function createBallpit(e, t = {}) {
         rendererOptions: { antialias: true, alpha: true }
     });
     let s;
+    if (!i.renderer) {
+        return {
+            three: i,
+            spheres: null,
+            setCount() {},
+            updateConfig() {},
+            togglePause() {},
+            dispose() {
+                try { i.dispose(); } catch {}
+            }
+        };
+    }
     i.renderer.toneMapping = v;
     i.camera.position.set(0, 0, 20);
     i.camera.lookAt(0, 0, 0);
