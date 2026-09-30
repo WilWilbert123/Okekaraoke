@@ -110,16 +110,16 @@ export default function LandingPage() {
           friction={0.999}
           wallBounce={0.98}
           followCursor={true}
-          colors={[0x6366f1, 0x7c3aed, 0x38bdf8, 0xa78bfa, 0xec4899]}
+          colors={[0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff]}
         />
       </div>
 
       {/* Ambient decorative glow overlays */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]" aria-hidden="true">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)' }} />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-15"
-          style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-10"
+          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-10"
+          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
       </div>
 
       {/* Outer Content Container */}
