@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,9 +10,9 @@ export const metadata: Metadata = {
   applicationName: 'OKEKARAOKE',
   manifest: '/manifest.json',
   icons: {
-    icon: '/icon.png',
-    shortcut: '/icon.png',
-    apple: '/icon.png',
+    icon: '/icon-512.png',
+    shortcut: '/icon-192.png',
+    apple: '/icon-512.png',
   },
   appleWebApp: {
     capable: true,
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
     title: 'OKEKARAOKE',
     description: 'TV-first karaoke system controlled from your phone.',
     type: 'website',
-    images: [{ url: '/icon.png' }],
+    images: [{ url: '/icon-512.png' }],
   },
 };
 
@@ -44,11 +45,14 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="apple-touch-icon" href="/icon.png" />
-        <link rel="icon" type="image/png" href="/icon.png" />
-        <link rel="shortcut icon" href="/icon.png" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icon-512.png" />
+        <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+        <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+        <link rel="shortcut icon" href="/icon-512.png" />
       </head>
       <body className="antialiased">
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>
