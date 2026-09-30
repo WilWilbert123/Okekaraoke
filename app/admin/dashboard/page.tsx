@@ -972,7 +972,7 @@ export default function AdminDashboardPage() {
       const [analyticsRes, settingsRes, songsRes] = await Promise.all([
         fetch('/api/admin/analytics').catch(() => null),
         fetch('/api/admin/settings').catch(() => null),
-        fetch('/api/songs?limit=20&include_inactive=true').catch(() => null),
+        fetch('/api/songs?limit=500&include_inactive=true').catch(() => null),
       ]);
 
       const analyticsJson = analyticsRes && analyticsRes.ok ? await analyticsRes.json().catch(() => null) : null;
