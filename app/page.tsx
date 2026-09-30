@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mic2, Tv2, Smartphone, Music2, ChevronRight, Wifi } from 'lucide-react';
 import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
+import Ballpit from '@/components/Ballpit/Ballpit';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -101,14 +102,24 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
-      {/* Background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      {/* 3D Interactive Ballpit Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        <Ballpit
+          count={50}
+          gravity={0.01}
+          friction={0.9975}
+          wallBounce={0.95}
+          followCursor={false}
+          colors={[0x6366f1, 0x7c3aed, 0x38bdf8]}
+        />
+      </div>
+
+      {/* Ambient decorative glow overlays */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]" aria-hidden="true">
         <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-20"
           style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)' }} />
         <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-15"
           style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full opacity-5"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 60%)' }} />
       </div>
 
       <div className="relative z-10 w-full max-w-md">
