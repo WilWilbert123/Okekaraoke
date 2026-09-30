@@ -38,6 +38,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     nextSong?: { title: string; artist: string; guestName?: string | null } | null;
     completedQueueItemId: string;
   } | null>(null);
+  const scoreModalDataRef = useRef<typeof scoreModalData>(null);
 
   const [playerState, setPlayerState] = useState<PlayerState>({ status: 'idle', video_id: null, queue_item_id: null });
   const handlePlayerStateChange = useCallback((newState: PlayerState) => {
@@ -152,8 +153,10 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       if (state.current_song) {
         if (state.current_song.queue_item_id !== lastCountdownSongIdRef.current) {
-          lastCountdownSongIdRef.current = state.current_song.queue_item_id;
-          setCountdownSong(state.current_song);
+          if (!scoreModalDataRef.current) {
+            lastCountdownSongIdRef.current = state.current_song.queue_item_id;
+            setCountdownSong(state.current_song);
+          }
         }
       } else {
         lastCountdownSongIdRef.current = null;
@@ -263,7 +266,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     }
   }, [roomCode, fetchState]);
 
-  // Score popup trigger: when song finishes playing, pop up score modal before advancing
+  // Score popup trigger: when song finishes playing, pop up score modal and advance queue in background
   const triggerSongEndedScore = useCallback((completedQueueItemId: string) => {
     if (skippedByRemoteRef.current.has(completedQueueItemId)) {
       skippedByRemoteRef.current.delete(completedQueueItemId);
@@ -285,25 +288,29 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       guestName: remainingQueue[0].guest_name,
     } : null;
 
-    setScoreModalData({
+    const modalData = {
       completedSong: completed,
       nextSong: next,
       completedQueueItemId,
-    });
-  }, []);
+    };
+
+    setScoreModalData(modalData);
+    scoreModalDataRef.current = modalData;
+
+    // Advance queue in background immediately so next song is loaded & ready
+    handleSongEnded(completedQueueItemId);
+  }, [handleSongEnded]);
 
   const handleScoreModalComplete = useCallback(() => {
-    let queueItemId: string | null = null;
-    setScoreModalData((prev) => {
-      if (prev) {
-        queueItemId = prev.completedQueueItemId;
-      }
-      return null;
-    });
-    if (queueItemId) {
-      handleSongEnded(queueItemId);
+    setScoreModalData(null);
+    scoreModalDataRef.current = null;
+
+    // Seamlessly transition into 5s Countdown Modal for the newly-advanced song!
+    if (currentSongRef.current) {
+      lastCountdownSongIdRef.current = currentSongRef.current.queue_item_id;
+      setCountdownSong(currentSongRef.current);
     }
-  }, [handleSongEnded]);
+  }, []);
 
   // Realtime subscriptions
   const realtimeHandlers = useRef({
@@ -503,8 +510,8 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     );
   }
 
-  const currentVideoId = currentSong?.song.youtube_video_id ?? null;
-  const currentQueueItemId = currentSong?.queue_item_id ?? null;
+  const currentVideoId = scoreModalData ? null : (currentSong?.song.youtube_video_id ?? null);
+  const currentQueueItemId = scoreModalData ? null : (currentSong?.queue_item_id ?? null);
 
   return (
     <div
