@@ -40,6 +40,9 @@ export function usePWAInstall() {
   }, []);
 
   const installApp = async () => {
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+    const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+
     if (deferredPrompt) {
       try {
         await deferredPrompt.prompt();
@@ -47,23 +50,23 @@ export function usePWAInstall() {
         if (choice.outcome === 'accepted') {
           setIsInstallable(false);
           setDeferredPrompt(null);
+          return;
         }
-        return;
       } catch (err) {
-        console.error('Install prompt failed:', err);
+        console.error('Install prompt error:', err);
       }
     }
 
-    // Fallback guidance if deferredPrompt is not available (e.g. Android Chrome without prompt or iOS Safari)
-    const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
-
-    if (isAndroid) {
-      alert("To Install OKEKARAOKE App on Android:\n\n1. Tap the Chrome Menu (3 dots top-right ⋮)\n2. Tap 'Add to Home screen' or 'Install app'");
-    } else if (isIOS) {
-      alert("To Install OKEKARAOKE App on iPhone/iPad:\n\n1. Tap the Share button at the bottom (⎋)\n2. Scroll down and tap 'Add to Home Screen'");
+    if (isIOS) {
+      alert("To Install OKEKARAOKE on iPhone/iPad:\n\n1. Tap the Share button at the bottom (⎋)\n2. Scroll down and select 'Add to Home Screen'");
     } else {
-      alert("To Install App:\n\nUse your browser menu (⋮ or ⋯) and select 'Add to Home screen' or 'Install App'.");
+      // Trigger actual APK file download for Android, Android TV, and Smart TVs
+      const link = document.createElement('a');
+      link.href = '/api/download/apk';
+      link.download = 'OKEKARAOKE.apk';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 

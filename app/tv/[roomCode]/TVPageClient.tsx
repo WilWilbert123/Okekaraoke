@@ -510,8 +510,8 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     );
   }
 
-  const currentVideoId = scoreModalData ? null : (currentSong?.song.youtube_video_id ?? null);
-  const currentQueueItemId = scoreModalData ? null : (currentSong?.queue_item_id ?? null);
+  const currentVideoId = currentSong?.song.youtube_video_id ?? null;
+  const currentQueueItemId = currentSong?.queue_item_id ?? null;
 
   return (
     <div
@@ -551,14 +551,9 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         <Maximize2 size={18} />
       </button>
 
-      {/* LAYER 2: Floating Corner Widgets (Transparent center for song lyrics) */}
-      <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">
-        <div className="pointer-events-auto">
-          <NowPlaying currentSong={currentSong} />
-        </div>
-        <div className="pointer-events-auto">
-          <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
-        </div>
+      {/* LAYER 2: Floating Bottom Right QR Code */}
+      <div className="absolute bottom-3 right-3 z-20 pointer-events-auto">
+        <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
       </div>
 
       {/* LAYER 3: Authentic Videoke/Karaoke Score Screen Popup Modal */}

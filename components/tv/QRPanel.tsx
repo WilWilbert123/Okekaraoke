@@ -1,8 +1,8 @@
 'use client';
 
 // ============================================================
-// OKEKARAOKE — Floating Compact QR Code Panel
-// Transparent glass floating QR card for phone pairing
+// OKEKARAOKE — Minimal QR Code (Bottom Right Corner)
+// White square box with QR code + REMOTE label
 // ============================================================
 
 import { QRCodeSVG } from 'qrcode.react';
@@ -18,37 +18,23 @@ export function QRPanel({ roomCode, appUrl }: QRPanelProps) {
 
   return (
     <div
-      className="flex items-center gap-3 p-2.5 rounded-2xl shrink-0 transition-all bg-zinc-950/85 border border-zinc-800 shadow-2xl"
-      style={{
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-      }}
+      className="p-1.5 bg-white shadow-2xl flex flex-col items-center justify-center border border-white/20 select-none"
+      aria-label={`QR code to join room ${roomCode}`}
     >
-      <div
-        className="shrink-0 p-1.5 rounded-xl bg-white flex items-center justify-center shadow-md"
-        aria-label={`QR code to join room ${roomCode}`}
+      <QRCodeSVG
+        value={remoteUrl}
+        size={72}
+        level="H"
+        bgColor="#ffffff"
+        fgColor="#000000"
+        includeMargin={false}
+      />
+      <span
+        className="text-[10px] font-black text-black uppercase tracking-widest pt-1 pb-0.5 leading-none"
+        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
       >
-        <QRCodeSVG
-          value={remoteUrl}
-          size={62}
-          level="H"
-          bgColor="#ffffff"
-          fgColor="#000000"
-          includeMargin={false}
-        />
-      </div>
-
-      <div className="flex flex-col justify-center pr-2">
-        <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
-          SCAN TO REMOTE
-        </span>
-        <div className="flex items-center gap-1 mt-0.5">
-          <span className="text-[10px] font-bold text-zinc-500 font-mono">ROOM</span>
-          <span className="text-sm font-black text-teal-400 font-mono tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            {roomCode}
-          </span>
-        </div>
-      </div>
+        REMOTE
+      </span>
     </div>
   );
 }
