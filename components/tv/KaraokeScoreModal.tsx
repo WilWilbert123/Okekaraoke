@@ -61,7 +61,7 @@ export default function KaraokeScoreModal({
   onCountdownComplete,
   onSkip,
 }: KaraokeScoreModalProps) {
-  // Deterministic realistic score seed based on song title & artist (88 - 99 range)
+
   const [targetScore] = useState(() => {
     const seedStr = `${completedSong.title}-${completedSong.artist}`;
     let hash = 0;
@@ -77,7 +77,7 @@ export default function KaraokeScoreModal({
   const [countdown, setCountdown] = useState(6);
   const hasFinishedRef = useRef(false);
 
-  // Phase 1: Analyzing Vocals (1.2s suspense)
+
   useEffect(() => {
     const analyzeTimer = setTimeout(() => {
       setPhase('rolling');
@@ -86,7 +86,7 @@ export default function KaraokeScoreModal({
     return () => clearTimeout(analyzeTimer);
   }, []);
 
-  // Phase 2: Rapid Score Rollup Animation
+
   useEffect(() => {
     if (phase !== 'rolling') return;
 
@@ -121,7 +121,7 @@ export default function KaraokeScoreModal({
               osc.stop(ctx.currentTime + idx * 0.12 + 0.35);
             });
           }
-        } catch {}
+        } catch { }
 
       } else {
         setDisplayScore(Math.floor(current));
@@ -163,7 +163,7 @@ export default function KaraokeScoreModal({
 
       {/* Main Score Card Modal */}
       <div className={`relative z-10 w-full max-w-2xl bg-slate-900/90 border border-slate-700/80 p-8 sm:p-10 rounded-3xl text-center text-white ${phase === 'revealed' ? grade.glow : 'shadow-2xl'} transition-all duration-500 flex flex-col items-center`}>
-        
+
         {/* Top Header Badge */}
         <div className="flex items-center justify-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-slate-800/90 border border-slate-700 text-xs sm:text-sm font-bold tracking-widest text-slate-300 uppercase">
           <Sparkles className="w-4 h-4 text-amber-400" />
