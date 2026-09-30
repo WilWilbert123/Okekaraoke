@@ -69,21 +69,18 @@ export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscree
 
       {/* Status + Controls */}
       <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <div
-            className="status-dot"
-            style={{ backgroundColor: statusColor }}
-            aria-hidden="true"
-          />
-          <StatusIcon
-            size={14}
-            style={{ color: statusColor }}
-            className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
-          />
-          <span className="text-xs font-bold" style={{ color: statusColor }}>
-            {statusLabel}
-          </span>
-        </div>
+        {connectionStatus !== 'connected' && (
+          <div className="flex items-center gap-2">
+            <StatusIcon
+              size={14}
+              style={{ color: statusColor }}
+              className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
+            />
+            <span className="text-xs font-bold" style={{ color: statusColor }}>
+              {statusLabel}
+            </span>
+          </div>
+        )}
 
         <button
           id="tv-fullscreen-btn"

@@ -56,6 +56,9 @@ interface AnalyticsData {
     city: string;
     country: string;
     is_online: boolean;
+    currently_playing?: { title: string; artist: string; guest_name?: string | null } | null;
+    queue_count?: number;
+    chat_count?: number;
   }>;
   online_devices_list: Array<{
     id: string;
@@ -660,6 +663,8 @@ function RoomsTab({
   const [confirmKill, setConfirmKill] = useState<string | null>(null);
   const [previewRoom, setPreviewRoom] = useState<string | null>(null);
 
+  const [inspectorView, setInspectorView] = useState<'tv' | 'remote'>('tv');
+
   const handleKill = async (roomCode: string) => {
     if (confirmKill !== roomCode) {
       setConfirmKill(roomCode);
@@ -679,17 +684,19 @@ function RoomsTab({
 
   return (
     <div
-      className="p-5 rounded-2xl flex flex-col h-[calc(100vh-380px)] min-h-[350px] overflow-hidden gap-3.5"
+      className="p-5 rounded-2xl flex flex-col h-[calc(100vh-380px)] min-h-[420px] overflow-hidden gap-3.5"
       style={{ background: 'rgba(18, 18, 28, 0.8)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
     >
-      <div className="shrink-0">
-        <h2 className="text-sm font-bold text-white flex items-center gap-2">
-          <Tv size={16} className="text-green-400" />
-          <span>Room Control Center</span>
-        </h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Monitor and manage all active karaoke room sessions. Use the kill switch to immediately terminate a room.
-        </p>
+      <div className="shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white flex items-center gap-2">
+            <Tv size={16} className="text-green-400" />
+            <span>Room Control Center</span>
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Monitor and manage all active karaoke room sessions in real time. Easily identify idle/unused rooms to clear space.
+          </p>
+        </div>
       </div>
 
       {/* Kill switch warning */}
@@ -699,7 +706,7 @@ function RoomsTab({
       >
         <AlertTriangle size={13} className="text-yellow-400 shrink-0" />
         <p className="text-[11px] text-yellow-300">
-          Killing a room immediately clears its song queue, disconnects remotes, and returns TV to standby.
+          Killing a room immediately clears its song queue, disconnects remotes, and returns TV to standby to optimize Supabase database storage.
         </p>
       </div>
 
@@ -709,7 +716,7 @@ function RoomsTab({
           <p className="text-xs text-slate-500">No active rooms right now.</p>
         </div>
       ) : (
-        <div className="space-y-2 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+        <div className="space-y-3 overflow-y-auto pr-1 flex-1 custom-scrollbar">
           {analytics.active_rooms_list.map((room) => {
             const isKilling = killing === room.room_code;
             const isKilled = killed === room.room_code;
@@ -720,59 +727,108 @@ function RoomsTab({
               ? `${uptimeMin}m uptime`
               : `${Math.floor(uptimeMin / 60)}h ${uptimeMin % 60}m uptime`;
 
+            const isIdle = !room.is_online && room.user_count === 0 && !room.currently_playing && (room.queue_count || 0) === 0;
+
             return (
               <div
                 key={room.id}
-                className="p-4 rounded-2xl flex items-center justify-between gap-4"
+                className="p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
                 style={{
                   background: isKilled
                     ? 'rgba(239, 68, 68, 0.05)'
+                    : isIdle
+                    ? 'rgba(245, 158, 11, 0.03)'
                     : 'rgba(255, 255, 255, 0.02)',
-                  border: `1px solid ${isKilled ? 'rgba(239,68,68,0.2)' : 'rgba(255, 255, 255, 0.05)'}`,
+                  border: `1px solid ${
+                    isKilled
+                      ? 'rgba(239, 68, 68, 0.2)'
+                      : isIdle
+                      ? 'rgba(245, 158, 11, 0.2)'
+                      : 'rgba(255, 255, 255, 0.06)'
+                  }`,
                 }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-start md:items-center gap-3.5 flex-1 min-w-0">
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)' }}
+                    className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 md:mt-0"
+                    style={{
+                      background: isIdle ? 'rgba(245, 158, 11, 0.1)' : 'rgba(34, 197, 94, 0.1)',
+                      border: `1px solid ${isIdle ? 'rgba(245, 158, 11, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`,
+                    }}
                   >
-                    <Tv size={18} className="text-green-400" />
+                    <Tv size={20} className={isIdle ? 'text-amber-400' : 'text-green-400'} />
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-black text-white font-mono tracking-widest">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="text-lg font-black text-white font-mono tracking-widest">
                         {room.room_code}
                       </span>
+
                       {isKilled ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
                           TERMINATED
                         </span>
+                      ) : isIdle ? (
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                          ⚠️ IDLE / UNUSED
+                        </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
                           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
-                          LIVE
+                          ONLINE ({room.user_count} users: {room.tv_count} TV, {room.remote_count} remotes)
                         </span>
                       )}
+
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-md border border-white/5">
+                        <Globe size={11} className="text-indigo-400" />
+                        {room.city}, {room.country}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-[11px] text-slate-500 flex items-center gap-1">
+
+                    {/* Song & Queue Info */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs mt-1">
+                      <div className="flex items-center gap-1.5 text-slate-200 truncate">
+                        <Music2 size={12} className={room.currently_playing ? 'text-green-400 animate-pulse' : 'text-slate-500'} />
+                        {room.currently_playing ? (
+                          <span className="font-semibold text-green-300">
+                            Now Playing: {room.currently_playing.title} <span className="text-slate-400 font-normal">by {room.currently_playing.artist}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">No song currently playing</span>
+                        )}
+                      </div>
+
+                      <span className="text-slate-600">•</span>
+
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <span className="font-medium text-indigo-300">{room.queue_count || 0} queued</span>
+                        <span>·</span>
+                        <span className="font-medium text-slate-300">{room.chat_count || 0} chats</span>
+                      </div>
+                    </div>
+
+                    {/* Uptime footer */}
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
+                      <span className="flex items-center gap-1">
                         <Clock size={10} />
                         {uptimeStr}
                       </span>
-                      <span className="text-[11px] text-slate-600">
-                        Started {new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                      <span>Started {new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
                   <button
-                    onClick={() => setPreviewRoom(room.room_code)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-300 hover:text-indigo-200 transition-colors"
-                    style={{ border: "1px solid rgba(99, 102, 241, 0.2)", background: "rgba(99, 102, 241, 0.06)" }}
+                    onClick={() => {
+                      setInspectorView('tv');
+                      setPreviewRoom(room.room_code);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-300 hover:text-white transition-colors flex items-center gap-1.5"
+                    style={{ border: "1px solid rgba(99, 102, 241, 0.25)", background: "rgba(99, 102, 241, 0.1)" }}
                   >
-                    View TV
+                    <Tv size={13} />
+                    Inspect Room
                   </button>
 
                   <button
@@ -781,9 +837,9 @@ function RoomsTab({
                     className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 disabled:opacity-40"
                     style={{
                       background: isConfirming
-                        ? 'rgba(239, 68, 68, 0.2)'
+                        ? 'rgba(239, 68, 68, 0.25)'
                         : 'rgba(239, 68, 68, 0.08)',
-                      border: `1px solid ${isConfirming ? 'rgba(239,68,68,0.5)' : 'rgba(239, 68, 68, 0.2)'}`,
+                      border: `1px solid ${isConfirming ? 'rgba(239,68,68,0.6)' : 'rgba(239, 68, 68, 0.2)'}`,
                       color: isConfirming ? '#fca5a5' : '#ef4444',
                     }}
                   >
@@ -799,40 +855,70 @@ function RoomsTab({
         </div>
       )}
 
-      {/* TV Preview Modal */}
+      {/* Room Inspector Preview Modal (TV / Remote Views) */}
       {previewRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/85 backdrop-blur-md animate-fadeIn">
           <div
-            className="relative w-full max-w-4xl bg-slate-900 border border-slate-700/60 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
-            style={{ height: '75vh', maxHeight: '600px' }}
+            className="relative w-full max-w-5xl bg-slate-900 border border-slate-700/60 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+            style={{ height: '85vh', maxHeight: '720px' }}
           >
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-950 border-b border-white/10 shrink-0">
-              <div className="flex items-center gap-2">
+            {/* Modal Header */}
+            <div className="flex flex-wrap items-center justify-between px-4 py-3 bg-slate-950 border-b border-white/10 gap-3 shrink-0">
+              <div className="flex items-center gap-3">
                 <div className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-xs font-bold text-white font-mono tracking-wider">
-                  LIVE PREVIEW — ROOM {previewRoom}
+                <span className="text-sm font-black text-white font-mono tracking-wider">
+                  ROOM INSPECTOR — {previewRoom}
                 </span>
+
+                {/* View Mode Switcher Tabs */}
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-white/10">
+                  <button
+                    onClick={() => setInspectorView('tv')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      inspectorView === 'tv'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Tv size={13} />
+                    TV Screen
+                  </button>
+                  <button
+                    onClick={() => setInspectorView('remote')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 ${
+                      inspectorView === 'remote'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone size={13} />
+                    Remote Control
+                  </button>
+                </div>
               </div>
+
               <div className="flex items-center gap-2">
                 <Link
-                  href={`/tv/${previewRoom}`}
+                  href={inspectorView === 'tv' ? `/tv/${previewRoom}` : `/remote/${previewRoom}`}
                   target="_blank"
-                  className="px-2.5 py-1 text-[11px] font-bold text-indigo-300 hover:text-white bg-indigo-500/10 rounded-lg border border-indigo-500/20"
+                  className="px-3 py-1.5 text-xs font-bold text-indigo-300 hover:text-white bg-indigo-500/10 rounded-lg border border-indigo-500/20 flex items-center gap-1 transition-colors"
                 >
-                  Open Fullscreen ↗
+                  Open {inspectorView === 'tv' ? 'TV' : 'Remote'} Fullscreen ↗
                 </Link>
                 <button
                   onClick={() => setPreviewRoom(null)}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 text-xs font-bold"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 text-sm font-bold transition-colors"
                 >
                   ✕
                 </button>
               </div>
             </div>
+
+            {/* Modal Iframe Content */}
             <iframe
-              src={`/tv/${previewRoom}`}
+              src={inspectorView === 'tv' ? `/tv/${previewRoom}` : `/remote/${previewRoom}`}
               className="w-full flex-1 border-0 bg-black"
-              title="Live TV Preview"
+              title={`Room ${previewRoom} ${inspectorView}`}
             />
           </div>
         </div>

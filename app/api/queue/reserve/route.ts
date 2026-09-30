@@ -260,37 +260,37 @@ function extractArtistFromTitle(
   channelTitle: string
 ): { songTitle: string; artist: string } {
   const clean = rawTitle
-    .replace(/\(karaoke version\)/gi, '')
-    .replace(/\[karaoke version\]/gi, '')
-    .replace(/\(karaoke\)/gi, '')
-    .replace(/\[karaoke\]/gi, '')
-    .replace(/karaoke version/gi, '')
-    .replace(/\(with lyrics?\)/gi, '')
-    .replace(/\[with lyrics?\]/gi, '')
-    .replace(/with lyrics?/gi, '')
-    .replace(/\(instrumental\)/gi, '')
-    .replace(/\(sing along\)/gi, '')
-    .replace(/sing along/gi, '')
+    .replace(/[\(\[](karaoke( track| version| sing along)?|videoke|with lead vocals?|no lead vocals?|with lyrics?|sing along|instrumental)[\)\]]/gi, '')
+    .replace(/[\|•·—–]\s*(karaoke( version| track)?|videoke|with lyrics?|sing along|instrumental)\s*$/gi, '')
+    .replace(/\bkaraoke( version| track)?\b/gi, '')
+    .replace(/\bvideoke\b/gi, '')
+    .replace(/\bwith lyrics?\b/gi, '')
+    .replace(/\bsing along\b/gi, '')
+    .replace(/\blyric video\b/gi, '')
+    .replace(/\(official.*?\)/gi, '')
+    .replace(/\[official.*?\]/gi, '')
     .replace(/\s{2,}/g, ' ')
+    .trim()
+    .replace(/[\s\-|·•]+$/, '')
     .trim();
 
-  // "Song - Artist" pattern
-  const dashIdx = clean.lastIndexOf(' - ');
+  // Standard YouTube Karaoke format: "Artist - Song Title"
+  const dashIdx = clean.indexOf(' - ');
   if (dashIdx !== -1) {
-    const possibleArtist = clean.slice(dashIdx + 3).trim();
-    const possibleTitle  = clean.slice(0, dashIdx).trim();
-    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
-      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    const leftPart  = clean.slice(0, dashIdx).trim();
+    const rightPart = clean.slice(dashIdx + 3).trim();
+    if (leftPart.length > 0 && rightPart.length > 0) {
+      return { songTitle: rightPart, artist: leftPart };
     }
   }
 
-  // "Song | Artist" pattern
-  const pipeIdx = clean.lastIndexOf(' | ');
+  // "Artist | Song Title" pattern
+  const pipeIdx = clean.indexOf(' | ');
   if (pipeIdx !== -1) {
-    const possibleArtist = clean.slice(pipeIdx + 3).trim();
-    const possibleTitle  = clean.slice(0, pipeIdx).trim();
-    if (possibleArtist.length > 0 && possibleArtist.length <= 60) {
-      return { songTitle: possibleTitle || rawTitle, artist: possibleArtist };
+    const leftPart  = clean.slice(0, pipeIdx).trim();
+    const rightPart = clean.slice(pipeIdx + 3).trim();
+    if (leftPart.length > 0 && rightPart.length > 0) {
+      return { songTitle: rightPart, artist: leftPart };
     }
   }
 

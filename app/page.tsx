@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Mic2, Tv2, Smartphone, Music2, ChevronRight, Wifi } from 'lucide-react';
 import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
+import Ballpit from '@/components/Ballpit/Ballpit';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -101,93 +102,96 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
-      {/* Background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)' }} />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-15"
-          style={{ background: 'radial-gradient(circle, #a78bfa 0%, transparent 70%)' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full opacity-5"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 60%)' }} />
+      {/* 3D Interactive Auto-Floating Ballpit Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden">
+        <Ballpit
+          count={55}
+          gravity={0}
+          friction={0.9995}
+          wallBounce={0.99}
+          followCursor={true}
+          colors={[0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff]}
+        />
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
-        {/* Logo & Brand */}
-        <div className="text-center mb-10">
-          <div className="flex items-center justify-center mb-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/okekaraokelogo.png"
-              alt="OKEKARAOKE Logo"
-              className="w-44 h-44 md:w-52 md:h-52 object-contain drop-shadow-[0_0_35px_rgba(99,102,241,0.4)]"
-            />
-          </div>
+      {/* Ambient decorative glow overlays */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]" aria-hidden="true">
+        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-10"
+          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-10"
+          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
+      </div>
 
-          <h1 className="text-5xl font-black tracking-tight mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
-            <span style={{ background: 'linear-gradient(135deg, #a78bfa 0%, #6366f1 50%, #38bdf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+      {/* Outer Content Container */}
+      <div className="relative z-10 w-full max-w-md flex flex-col items-center animate-fadeIn">
+        {/* Logo & Brand (Horizontal 1-Line outside white card) */}
+        <div className="flex items-center justify-center gap-3.5 mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/okekaraokelogo.png"
+            alt="OKEKARAOKE Logo"
+            className="w-12 h-12 md:w-16 md:h-16 object-contain"
+          />
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
+            <span className="text-teal-400">
               OKE
             </span>
             <span className="text-white">KARAOKE</span>
           </h1>
-
         </div>
 
+        {/* White Frosted Card Container */}
+        <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900">
+
         {/* How it works */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <div className="glass rounded-xl p-4 text-center">
-            <Tv2 size={24} className="text-indigo-400 mx-auto mb-2" />
-            <p className="text-sm font-medium text-slate-200">TV Screen</p>
-            <p className="text-xs text-slate-400 mt-1">Karaoke display</p>
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
+            <Tv2 size={24} className="text-slate-900 mx-auto mb-1.5" />
+            <p className="text-sm font-bold text-slate-900">TV Screen</p>
+            <p className="text-xs text-slate-500 mt-0.5">Karaoke display</p>
           </div>
-          <div className="glass rounded-xl p-4 text-center">
-            <Smartphone size={24} className="text-violet-400 mx-auto mb-2" />
-            <p className="text-sm font-medium text-slate-200">Phone Remote</p>
-            <p className="text-xs text-slate-400 mt-1">Search &amp; reserve</p>
+          <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
+            <Smartphone size={24} className="text-slate-900 mx-auto mb-1.5" />
+            <p className="text-sm font-bold text-slate-900">Phone Remote</p>
+            <p className="text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
           </div>
         </div>
 
         {/* Error message */}
         {error && (
-          <div className="mb-4 p-3 rounded-lg text-sm text-red-300 animate-fade-in"
-            style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+          <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200 animate-fade-in">
             {error}
           </div>
         )}
 
-        {/* Create */}
+        {/* Create Room Button */}
         <button
           id="create-room-btn"
           onClick={handleCreate}
           disabled={creating || joining}
-          className="w-full py-4 px-6 rounded-xl font-bold text-white text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{
-            background: creating
-              ? 'rgba(99, 102, 241, 0.5)'
-              : 'linear-gradient(135deg, #6366f1 0%, #7c3aed 100%)',
-            boxShadow: creating ? 'none' : '0 4px 20px rgba(99, 102, 241, 0.4)',
-          }}
+          className="w-full py-4 px-6 rounded-2xl font-black text-white text-base md:text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 bg-slate-900 hover:bg-black active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
         >
           {creating ? (
             <>
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              CREATING OKEKARAOKE...
+              <span className="text-white font-black">CREATING OKEKARAOKE...</span>
             </>
           ) : (
             <>
-              <Music2 size={20} />
-              CREATE OKEKARAOKE
+              <Music2 size={20} className="text-white stroke-[2.5]" />
+              <span className="text-white font-black">CREATE OKEKARAOKE</span>
             </>
           )}
         </button>
 
         {/* Divider */}
         <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1 h-px" style={{ background: 'var(--color-border)' }} />
-          <span className="text-sm text-slate-500">or join a room</span>
-          <div className="flex-1 h-px" style={{ background: 'var(--color-border)' }} />
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">or join a room</span>
+          <div className="flex-1 h-px bg-slate-200" />
         </div>
 
-        {/* Join */}
+        {/* Join Room Form */}
         <form onSubmit={handleJoin} className="space-y-3">
           <div className="relative">
             <Wifi size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -198,19 +202,7 @@ export default function LandingPage() {
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
               placeholder="ENTER ROOM CODE"
               maxLength={8}
-              className="w-full pl-11 pr-4 py-4 rounded-xl text-white placeholder-slate-500 font-bold tracking-widest text-center text-lg transition-all duration-200"
-              style={{
-                background: 'var(--color-surface-2)',
-                border: '1px solid var(--color-border)',
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
-                e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'var(--color-border)';
-                e.target.style.boxShadow = 'none';
-              }}
+              className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
             />
           </div>
 
@@ -218,11 +210,7 @@ export default function LandingPage() {
             id="join-room-btn"
             type="submit"
             disabled={creating || joining || joinCode.length < 4}
-            className="w-full py-4 px-6 rounded-xl font-bold text-white text-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border)',
-            }}
+            className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-black hover:bg-slate-900 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
           >
             {joining ? (
               <>
@@ -239,10 +227,11 @@ export default function LandingPage() {
         </form>
 
         {/* Footer */}
-        <p className="text-center text-xs text-slate-600 mt-8">
-          © {new Date().getFullYear()} <span className="text-slate-500 font-medium">Wilbert Gamis</span> · All Rights Reserved
+        <p className="text-center text-xs text-slate-400 mt-6 font-medium">
+          © {new Date().getFullYear()} <span className="text-slate-600 font-semibold">Wilbert Gamis</span> · All Rights Reserved
         </p>
       </div>
-    </main>
+    </div>
+  </main>
   );
 }

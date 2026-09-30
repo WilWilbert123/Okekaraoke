@@ -252,14 +252,16 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <StatusIcon
-              size={12}
-              style={{ color: statusColor }}
-              className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
-            />
-            <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
-          </div>
+          {connectionStatus !== 'connected' && (
+            <div className="flex items-center gap-1.5">
+              <StatusIcon
+                size={12}
+                style={{ color: statusColor }}
+                className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
+              />
+              <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
@@ -329,38 +331,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         )}
       </header>
 
-      {/* Tabs */}
-      <div
-        className="flex shrink-0"
-        style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)' }}
-        role="tablist"
-      >
-        {[
-          { id: 'search' as const, icon: Search, label: 'Search' },
-          { id: 'chat' as const, icon: MessageSquare, label: 'Chat' },
-          { id: 'my-songs' as const, icon: Star, label: `Mine${myReservations.length > 0 ? ` (${myReservations.length})` : ''}` },
-          { id: 'queue' as const, icon: ListMusic, label: `Queue (${queue.length})` },
-        ].map(({ id, icon: Icon, label }) => (
-          <button
-            key={id}
-            id={`remote-tab-${id}`}
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className="flex-1 flex flex-col items-center gap-0.5 py-2 text-xs font-semibold transition-colors"
-            style={{
-              color: tab === id ? '#a78bfa' : '#64748b',
-              borderBottom: tab === id ? '2px solid #6366f1' : '2px solid transparent',
-            }}
-          >
-            <Icon size={16} />
-            {label}
-          </button>
-        ))}
-      </div>
-
       {/* Tab content — relative so emoji overlay stacks correctly */}
-      <div className="flex-1 overflow-y-auto relative">
+      <div className="flex-1 overflow-y-auto relative pb-2">
         {tab === 'search' && (
           <SongSearch
             roomCode={roomCode}
@@ -396,12 +368,56 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         )}
       </div>
 
-      {/* Emoji reactions bar + floating particles — always visible at bottom */}
+      {/* Emoji reactions bar + floating particles */}
       <EmojiReactions
         roomCode={roomCode}
         sessionId={sessionId}
         guestName={guestName}
       />
+
+      {/* Bottom Navigation Bar */}
+      <nav
+        className="shrink-0 flex items-center justify-around py-1.5 px-2 z-30"
+        style={{
+          background: 'rgba(5, 5, 12, 0.96)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.4)',
+        }}
+        role="tablist"
+      >
+        {[
+          { id: 'search' as const, icon: Search, label: 'Search' },
+          { id: 'chat' as const, icon: MessageSquare, label: 'Chat' },
+          { id: 'my-songs' as const, icon: Star, label: 'Mine', count: myReservations.length },
+          { id: 'queue' as const, icon: ListMusic, label: 'Queue', count: queue.length },
+        ].map(({ id, icon: Icon, label, count }) => (
+          <button
+            key={id}
+            id={`remote-tab-${id}`}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1 transition-all relative"
+          >
+            <div
+              className={`p-1 rounded-xl transition-all ${
+                tab === id ? 'bg-indigo-600/30 text-indigo-400 scale-105' : 'text-slate-500'
+              }`}
+            >
+              <Icon size={19} />
+            </div>
+            <span
+              className={`text-[11px] font-bold ${
+                tab === id ? 'text-indigo-300 font-black' : 'text-slate-400'
+              }`}
+            >
+              {label} {count !== undefined ? `(${count})` : ''}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

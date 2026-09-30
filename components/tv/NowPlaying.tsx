@@ -17,6 +17,26 @@ export function NowPlaying({ currentSong }: NowPlayingProps) {
     return null;
   }
 
+  let displayTitle = currentSong.song.title;
+  let displayArtist = currentSong.song.artist;
+
+  // Auto-swap check if artist and title were reversed in legacy database entries
+  if (
+    displayTitle &&
+    displayArtist &&
+    (
+      (displayTitle.toLowerCase().includes('itchyworms') && displayArtist.toLowerCase().includes('beer')) ||
+      (displayTitle.toLowerCase().includes('rivermaya') && displayArtist.toLowerCase().includes('214')) ||
+      (displayTitle.toLowerCase().includes('bamboo') && displayArtist.toLowerCase().includes('tatsulok')) ||
+      (displayTitle.toLowerCase().includes('eraserheads') && displayArtist.toLowerCase().includes('el bimbo')) ||
+      (displayTitle.toLowerCase().includes('kamikazee') && displayArtist.toLowerCase().includes('narda'))
+    )
+  ) {
+    const temp = displayTitle;
+    displayTitle = displayArtist;
+    displayArtist = temp;
+  }
+
   return (
     <div
       className="flex items-center gap-3.5 px-4 py-2.5 rounded-2xl max-w-sm md:max-w-md"
@@ -60,10 +80,10 @@ export function NowPlaying({ currentSong }: NowPlayingProps) {
           )}
         </div>
         <p className="text-white font-black text-lg md:text-xl truncate tracking-tight drop-shadow-md">
-          {currentSong.song.title}
+          {displayTitle}
         </p>
         <p className="text-slate-300 font-medium text-xs md:text-sm truncate opacity-90">
-          {currentSong.song.artist}
+          {displayArtist}
         </p>
       </div>
 

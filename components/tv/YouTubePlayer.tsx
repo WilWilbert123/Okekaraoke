@@ -46,6 +46,9 @@ interface YTPlayer {
   stopVideo(): void;
   getPlayerState(): number;
   destroy(): void;
+  mute(): void;
+  unMute(): void;
+  isMuted(): boolean;
 }
 
 let apiReady = false;
@@ -124,6 +127,7 @@ export function YouTubePlayer({
       videoId: videoId ?? undefined,
       playerVars: {
         autoplay: autoplay ? 1 : 0,
+        mute: 1,
         controls: 1,
         rel: 0,
         modestbranding: 1,
@@ -138,9 +142,14 @@ export function YouTubePlayer({
           if (videoId) {
             currentVideoIdRef.current = videoId;
             try {
+              playerRef.current?.mute();
+              playerRef.current?.loadVideoById(videoId);
               playerRef.current?.playVideo();
-            } catch {
-              // Ignore playVideo errors on initial ready
+              setTimeout(() => {
+                try { playerRef.current?.unMute(); } catch {}
+              }, 400);
+            } catch (e) {
+              console.warn('onReady load video error:', e);
             }
           }
         },
@@ -151,6 +160,10 @@ export function YouTubePlayer({
           switch (event.data) {
             case YTState.PLAYING:
               playerStatus = 'playing';
+              // Attempt un-muting once playing starts
+              try {
+                playerRef.current?.unMute();
+              } catch {}
               break;
             case YTState.PAUSED:
               playerStatus = 'paused';
@@ -160,9 +173,6 @@ export function YouTubePlayer({
               break;
             case YTState.ENDED:
               playerStatus = 'ended';
-              // Only notify parent if we still have an active video — guards
-              // against ghost ENDED events fired by stopVideo() when intentionally
-              // clearing the player (which would call /api/queue/next with null).
               if (currentQueueItemIdRef.current && currentVideoIdRef.current) {
                 onEndedRef.current(currentQueueItemIdRef.current);
               }
@@ -179,7 +189,6 @@ export function YouTubePlayer({
           });
         },
         onError: (event) => {
-          // Error codes 101 and 150 mean embedding is disabled by the video owner
           if (event.data === 101 || event.data === 150) {
             setEmbedBlocked(true);
           }
@@ -197,7 +206,21 @@ export function YouTubePlayer({
   useEffect(() => {
     initPlayer();
 
+    // Enable audio on user interaction anywhere on TV page
+    const handleUserGesture = () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.unMute();
+          if (playerRef.current.getPlayerState?.() === 2) playerRef.current.playVideo();
+        } catch {}
+      }
+    };
+    window.addEventListener('pointerdown', handleUserGesture, { passive: true });
+    window.addEventListener('keydown', handleUserGesture, { passive: true });
+
     return () => {
+      window.removeEventListener('pointerdown', handleUserGesture);
+      window.removeEventListener('keydown', handleUserGesture);
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
@@ -216,8 +239,14 @@ export function YouTubePlayer({
         currentQueueItemIdRef.current = queueItemId;
         setEmbedBlocked(false);
         try {
+          playerRef.current.mute();
           playerRef.current.loadVideoById(videoId);
           playerRef.current.playVideo();
+          setTimeout(() => {
+            try {
+              playerRef.current?.unMute();
+            } catch {}
+          }, 400);
         } catch (e) {
           console.warn('Error playing video:', e);
         }
