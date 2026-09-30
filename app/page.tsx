@@ -124,19 +124,16 @@ export default function LandingPage() {
 
       {/* Outer Content Container */}
       <div className="relative z-10 w-full max-w-md flex flex-col items-center animate-fadeIn">
-        {/* Logo & Brand (Floating outside white card) */}
-        <div className="text-center mb-6 flex flex-col items-center">
-          <div className="flex items-center justify-center mb-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/okekaraokelogo.png"
-              alt="OKEKARAOKE Logo"
-              className="w-36 h-36 md:w-44 md:h-44 object-contain drop-shadow-[0_10px_25px_rgba(0,0,0,0.6)]"
-            />
-          </div>
-
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight drop-shadow-md" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
-            <span className="text-indigo-400">
+        {/* Logo & Brand (Horizontal 1-Line outside white card) */}
+        <div className="flex items-center justify-center gap-3.5 mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/okekaraokelogo.png"
+            alt="OKEKARAOKE Logo"
+            className="w-12 h-12 md:w-16 md:h-16 object-contain"
+          />
+          <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
+            <span className="text-teal-400">
               OKE
             </span>
             <span className="text-white">KARAOKE</span>
