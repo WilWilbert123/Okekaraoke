@@ -87,29 +87,49 @@ class x {
         } else if (this.#e.id) {
             this.canvas = document.getElementById(this.#e.id);
         } else {
-            console.error('Three: Missing canvas or id parameter');
+            return;
         }
         if (!this.canvas) return;
         this.canvas.style.display = 'block';
 
         if (!isWebGLAvailable()) {
-            console.warn('WebGL unavailable in current browser/device environment.');
             return;
         }
 
-        const e = {
+        const opts = {
             canvas: this.canvas,
-            powerPreference: 'high-performance',
-            failIfMajorPerformanceCaveat: false,
+            antialias: true,
+            alpha: true,
             ...(this.#e.rendererOptions ?? {})
         };
+
+        const origError = console.error;
         try {
-            this.renderer = new s(e);
+            // Suppress Three.js internal console.error during WebGL init so Next.js dev overlay is not triggered
+            console.error = (...args) => {
+                if (args[0] && typeof args[0] === 'string' && args[0].includes('THREE.WebGLRenderer')) return;
+                origError.apply(console, args);
+            };
+
+            this.renderer = new s(opts);
             if (this.renderer) {
                 this.renderer.outputColorSpace = n;
             }
-        } catch (err) {
-            console.warn('Three.js WebGLRenderer init failed/suppressed:', err);
+        } catch {
+            // Secondary fallback: let Three.js create its own fresh canvas element if target canvas context is blocked
+            try {
+                this.renderer = new s({ antialias: false, alpha: true });
+                if (this.renderer && this.renderer.domElement && this.canvas.parentNode) {
+                    this.canvas.parentNode.replaceChild(this.renderer.domElement, this.canvas);
+                    this.canvas = this.renderer.domElement;
+                    this.canvas.style.display = 'block';
+                    this.renderer.outputColorSpace = n;
+                }
+            } catch {
+                this.renderer = null;
+            }
+        } finally {
+            console.error = origError;
         }
     }
     #g() {
