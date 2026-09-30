@@ -149,12 +149,12 @@ export default function LandingPage() {
         {/* How it works */}
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-            <Tv2 size={24} className="text-indigo-600 mx-auto mb-1.5" />
+            <Tv2 size={24} className="text-slate-900 mx-auto mb-1.5" />
             <p className="text-sm font-bold text-slate-900">TV Screen</p>
             <p className="text-xs text-slate-500 mt-0.5">Karaoke display</p>
           </div>
           <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-            <Smartphone size={24} className="text-indigo-600 mx-auto mb-1.5" />
+            <Smartphone size={24} className="text-slate-900 mx-auto mb-1.5" />
             <p className="text-sm font-bold text-slate-900">Phone Remote</p>
             <p className="text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
           </div>
@@ -205,7 +205,7 @@ export default function LandingPage() {
               onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
               placeholder="ENTER ROOM CODE"
               maxLength={8}
-              className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none"
+              className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
             />
           </div>
 
@@ -213,7 +213,7 @@ export default function LandingPage() {
             id="join-room-btn"
             type="submit"
             disabled={creating || joining || joinCode.length < 4}
-            className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+            className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-black hover:bg-slate-900 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
           >
             {joining ? (
               <>
