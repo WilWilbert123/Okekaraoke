@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageCircle } from 'lucide-react';
+import { Send, MessageCircle, Users } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 interface ChatMessage {
@@ -33,6 +33,9 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [joined, setJoined] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<Array<{ name?: string; session_id?: string; device_type?: string }>>([]);
+  const [showUserModal, setShowUserModal] = useState(false);
+
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
   const supabase = createClient();
@@ -99,12 +102,12 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     };
   }, [roomCode, storageKey, saveToLocalStorage]);
 
-  // ── 2. Subscribe to room broadcast channel ──────────────
+  // ── 2. Subscribe to room broadcast & presence channel ──────────────
   useEffect(() => {
     const channelName = `okekaraoke:chat:${roomCode}`;
 
     const channel = supabase.channel(channelName, {
-      config: { broadcast: { self: true } },
+      config: { broadcast: { self: true }, presence: { key: sessionId } },
     });
 
     channelRef.current = channel;
@@ -119,8 +122,26 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
           return updated;
         });
       })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') setJoined(true);
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const activeList: Array<{ name?: string; session_id?: string; device_type?: string }> = [];
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            if (p.name || p.session_id) activeList.push(p);
+          });
+        });
+        setOnlineUsers(activeList);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          setJoined(true);
+          await channel.track({
+            session_id: sessionId,
+            name: guestName || 'Guest Remote',
+            device_type: 'remote',
+            online_at: new Date().toISOString(),
+          });
+        }
       });
 
     return () => {
@@ -128,7 +149,7 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
       channelRef.current = null;
       setJoined(false);
     };
-  }, [roomCode, supabase, saveToLocalStorage]);
+  }, [roomCode, supabase, sessionId, guestName, saveToLocalStorage]);
 
   // ── Auto-scroll to bottom when new messages arrive ───────
   useEffect(() => {
@@ -195,9 +216,11 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     }
   };
 
+  const userCount = Math.max(1, onlineUsers.length);
+
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-      {/* Room badge */}
+      {/* Room Chat Header Bar */}
       <div
         className="px-4 py-2.5 shrink-0 flex items-center gap-2"
         style={{ borderBottom: '1px solid var(--color-border)' }}
@@ -206,16 +229,22 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
         <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
           Room Chat
         </span>
-        <span
-          className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full"
+
+        {/* User Count Pill -> Tapping opens Online Members Modal */}
+        <button
+          onClick={() => setShowUserModal(true)}
+          className="ml-auto text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
           style={{
-            background: joined ? 'rgba(34,197,94,0.1)' : 'rgba(99,102,241,0.1)',
-            color: joined ? '#4ade80' : '#818cf8',
-            border: `1px solid ${joined ? 'rgba(34,197,94,0.25)' : 'rgba(99,102,241,0.25)'}`,
+            background: 'rgba(34, 197, 94, 0.12)',
+            color: '#4ade80',
+            border: '1px solid rgba(34, 197, 94, 0.3)',
           }}
+          title="Click to view online room members"
         >
-          {joined ? '● LIVE' : 'Connecting...'}
-        </span>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
+          <Users size={12} className="text-green-400" />
+          <span>{userCount} {userCount === 1 ? 'User' : 'Users'}</span>
+        </button>
       </div>
 
       {/* Message list */}
@@ -330,6 +359,69 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
           Only users in this room can see messages
         </p>
       </div>
+
+      {/* Online Users Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div
+            className="relative w-full max-w-xs bg-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 text-left"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-green-400" />
+                <span className="text-sm font-black text-white font-mono tracking-wider">
+                  ROOM MEMBERS ({userCount})
+                </span>
+              </div>
+              <button
+                onClick={() => setShowUserModal(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Active users connected to Room <span className="text-indigo-400 font-bold">{roomCode}</span>:
+            </p>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
+              {(onlineUsers.length > 0 ? onlineUsers : [{ name: guestName || 'You (Guest)', session_id: sessionId }]).map((user, idx) => {
+                const isCurrent = user.session_id === sessionId;
+                return (
+                  <div
+                    key={user.session_id || idx}
+                    className="flex items-center justify-between p-2.5 rounded-xl text-xs"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
+                      <span className="font-bold text-slate-200 truncate">
+                        {user.name || 'Guest Remote'}
+                      </span>
+                      {isCurrent && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          YOU
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-semibold text-green-400 shrink-0">
+                      ONLINE
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => setShowUserModal(false)}
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-colors text-center mt-1"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
