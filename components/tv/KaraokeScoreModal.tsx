@@ -102,7 +102,7 @@ export default function KaraokeScoreModal({
         setPhase('revealed');
         clearInterval(timer);
 
-        // Play victory chime when score is revealed
+
         try {
           const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
           if (AudioCtx) {

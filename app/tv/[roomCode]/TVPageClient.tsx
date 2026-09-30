@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Smartphone, RotateCw } from 'lucide-react';
 import { TVHeader } from '@/components/tv/TVHeader';
 import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
@@ -332,7 +333,27 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     enabled: true,
   });
 
-  // Fullscreen
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
+
+  useEffect(() => {
+    const checkMobileAndOrientation = () => {
+      const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || (typeof window !== 'undefined' && window.innerWidth < 768);
+      setIsMobileDevice(mobile);
+      setIsPortrait(typeof window !== 'undefined' && window.innerHeight > window.innerWidth);
+    };
+
+    checkMobileAndOrientation();
+    window.addEventListener('resize', checkMobileAndOrientation);
+    window.addEventListener('orientationchange', checkMobileAndOrientation);
+    return () => {
+      window.removeEventListener('resize', checkMobileAndOrientation);
+      window.removeEventListener('orientationchange', checkMobileAndOrientation);
+    };
+  }, []);
+
+  // Fullscreen & Mobile Landscape Lock
   const handleFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
@@ -346,6 +367,35 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       // Fullscreen not supported
     }
   }, []);
+
+  const handleMobileLandscapeFullscreen = useCallback(async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        }
+      }
+      if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).lock) {
+        try {
+          await (screen.orientation as any).lock('landscape');
+        } catch {}
+      }
+      setIsFullscreen(true);
+    } catch (err) {
+      console.log('Mobile landscape fullscreen request error:', err);
+    }
+  }, []);
+
+  // TV Remote & Keyboard Controls (Press 'F' for Fullscreen, D-Pad support)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'f' || e.key === 'F') {
+        handleFullscreen();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleFullscreen]);
 
   useEffect(() => {
     const handleChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -439,6 +489,29 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           onCountdownComplete={handleScoreModalComplete}
           onSkip={handleScoreModalComplete}
         />
+      )}
+
+      {/* LAYER 4: Mobile Portrait TV Mode Overlay Banner — ONLY shown when viewing TV mode on mobile devices in portrait orientation */}
+      {isMobileDevice && isPortrait && (
+        <div className="fixed inset-x-4 top-20 z-40 p-4 rounded-2xl bg-indigo-950/95 border border-indigo-500/80 backdrop-blur-xl text-white shadow-2xl flex items-center justify-between gap-3 animate-bounce">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600/40 border border-indigo-400/50 flex items-center justify-center text-indigo-300 shrink-0">
+              <Smartphone size={20} className="rotate-90" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-indigo-200 uppercase tracking-wider">Mobile TV Screen Mode</p>
+              <p className="text-xs text-slate-300 font-medium">Rotate to landscape or connect to TV!</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleMobileLandscapeFullscreen}
+            className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-lg active:scale-95"
+          >
+            <RotateCw size={14} />
+            <span>Go Landscape</span>
+          </button>
+        </div>
       )}
     </div>
   );

@@ -6,14 +6,16 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
 import { RemoteQueue } from '@/components/remote/RemoteQueue';
 import { NameModal } from '@/components/remote/NameModal';
 import { EmojiReactions } from '@/components/remote/EmojiReactions';
+import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
 import { useRealtime } from '@/hooks/useRealtime';
+import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
 import type { EnrichedQueueItem, InstanceState, ConnectionStatus } from '@/lib/types';
 
@@ -42,6 +44,15 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [guestName, setGuestName] = useState<string>('');
   const [sessionId, setSessionId] = useState<string>('');
   const [instanceId, setInstanceId] = useState<string>('');
+  const [showScanModal, setShowScanModal] = useState(false);
+  const { isInstallable, installApp } = usePWAInstall();
+
+  // Remember last room code for app shortcuts & quick rejoining
+  useEffect(() => {
+    if (typeof window !== 'undefined' && roomCode) {
+      localStorage.setItem('okekaraoke_last_room', roomCode.toUpperCase());
+    }
+  }, [roomCode]);
 
   // ── Name modal + inline editing ──────────────────────────
   const [showNameModal, setShowNameModal] = useState(false);
@@ -252,27 +263,47 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </span>
           </div>
 
-          {connectionStatus !== 'connected' && (
-            <div className="flex items-center gap-1.5">
-              <StatusIcon
-                size={12}
-                style={{ color: statusColor }}
-                className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
-              />
-              <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isInstallable && (
+              <button
+                onClick={installApp}
+                className="px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
+              >
+                <Download size={11} />
+                <span>INSTALL APP</span>
+              </button>
+            )}
+
+            {connectionStatus !== 'connected' && (
+              <div className="flex items-center gap-1.5">
+                <StatusIcon
+                  size={12}
+                  style={{ color: statusColor }}
+                  className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
+                />
+                <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">ROOM</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500 font-medium">ROOM</span>
             <span
-              className="text-lg font-black text-white tracking-widest"
-              style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '0.15em' }}
+              className="text-base font-black text-white tracking-widest"
+              style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '0.12em' }}
             >
               {roomCode}
             </span>
+            <button
+              onClick={() => setShowScanModal(true)}
+              className="ml-1 px-2 py-0.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all"
+              title="Scan TV / Switch Room"
+            >
+              <QrCode size={12} />
+              <span>Scan TV</span>
+            </button>
           </div>
 
           {/* Guest name — editable */}
@@ -368,11 +399,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         )}
       </div>
 
-      {/* Emoji reactions bar + floating particles */}
-      <EmojiReactions
-        roomCode={roomCode}
-        sessionId={sessionId}
-        guestName={guestName}
+      {/* Emoji reactions bar + floating particles — ONLY visible on Chat tab */}
+      {tab === 'chat' && (
+        <EmojiReactions
+          roomCode={roomCode}
+          sessionId={sessionId}
+          guestName={guestName}
+        />
+      )}
+
+      {/* Camera QR Code Scanner & Room Switcher Modal */}
+      <ScanRoomModal
+        currentRoomCode={roomCode}
+        isOpen={showScanModal}
+        onClose={() => setShowScanModal(false)}
       />
 
       {/* Bottom Navigation Bar */}
