@@ -30,6 +30,7 @@ import {
   TrendingUp,
   Wifi,
   WifiOff,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -90,7 +91,17 @@ interface Song {
   is_active: boolean;
 }
 
-type Tab = 'overview' | 'banner' | 'songs' | 'rooms';
+interface FeedbackItem {
+  id: string;
+  category: 'feedback' | 'bug' | 'song_request';
+  message: string;
+  guest_name?: string | null;
+  room_code?: string | null;
+  status: 'unread' | 'read' | 'resolved';
+  created_at: string;
+}
+
+type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks';
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 function MetricCard({
@@ -927,6 +938,158 @@ function RoomsTab({
   );
 }
 
+// ─── Panel: Feedbacks & Reports ────────────────────────────────────────────────
+function FeedbacksTab() {
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'feedback' | 'bug' | 'song_request'>('all');
+
+  const fetchFeedbacks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/feedbacks');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setFeedbacks(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to load feedbacks:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFeedbacks();
+    const interval = setInterval(fetchFeedbacks, 8000);
+    return () => clearInterval(interval);
+  }, [fetchFeedbacks]);
+
+  const updateStatus = async (id: string, status: string) => {
+    setFeedbacks((prev) => prev.map((f) => (f.id === id ? { ...f, status: status as any } : f)));
+    try {
+      await fetch('/api/admin/feedbacks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+    } catch {
+      fetchFeedbacks();
+    }
+  };
+
+  const filtered = feedbacks.filter((f) => (filter === 'all' ? true : f.category === filter));
+
+  return (
+    <div
+      className="p-5 rounded-2xl flex flex-col h-[calc(100vh-380px)] min-h-[380px] overflow-hidden"
+      style={{ background: 'rgba(18, 18, 28, 0.8)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+    >
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 shrink-0">
+        <div className="flex items-center gap-2">
+          <MessageSquare size={16} className="text-indigo-400" />
+          <h2 className="text-sm font-bold text-white">
+            User Feedbacks &amp; Reports ({feedbacks.length})
+          </h2>
+        </div>
+
+        {/* Filter buttons */}
+        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+          {(['all', 'feedback', 'bug', 'song_request'] as const).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilter(cat)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${
+                filter === cat
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {cat === 'all' ? 'All' : cat === 'song_request' ? 'Song Requests' : cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center text-slate-500 text-xs">
+          Loading feedbacks...
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
+          <MessageSquare size={24} className="text-slate-600" />
+          <p>No feedbacks or reports found yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+          {filtered.map((item) => (
+            <div
+              key={item.id}
+              className="p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 transition-all"
+              style={{
+                background: item.status === 'unread' ? 'rgba(99, 102, 241, 0.04)' : 'rgba(255, 255, 255, 0.02)',
+                border: `1px solid ${item.status === 'unread' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255, 255, 255, 0.05)'}`,
+              }}
+            >
+              <div className="space-y-1.5 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                      item.category === 'bug'
+                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                        : item.category === 'song_request'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                    }`}
+                  >
+                    {item.category === 'song_request' ? '🎵 Song Request' : item.category === 'bug' ? '🐛 Bug Report' : '💬 Feedback'}
+                  </span>
+
+                  {item.guest_name && (
+                    <span className="text-xs font-semibold text-white">
+                      {item.guest_name}
+                    </span>
+                  )}
+
+                  {item.room_code && (
+                    <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                      Room: {item.room_code}
+                    </span>
+                  )}
+
+                  <span className="text-[10px] text-slate-500 ml-auto">
+                    {new Date(item.created_at).toLocaleString()}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                  {item.message}
+                </p>
+              </div>
+
+              {/* Status Action Buttons */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {item.status !== 'resolved' ? (
+                  <button
+                    onClick={() => updateStatus(item.id, 'resolved')}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all flex items-center gap-1"
+                  >
+                    <CheckCircle size={12} />
+                    <span>Resolve</span>
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                    ✓ Resolved
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -1076,6 +1239,7 @@ export default function AdminDashboardPage() {
     { id: 'rooms', label: 'Room Control', icon: Tv },
     { id: 'banner', label: 'Announcement', icon: Radio },
     { id: 'songs', label: 'Song Catalog', icon: Music2 },
+    { id: 'feedbacks', label: 'Feedbacks & Reports', icon: MessageSquare },
   ];
 
   return (
@@ -1189,6 +1353,7 @@ export default function AdminDashboardPage() {
         {activeTab === 'songs' && (
           <SongsTab songs={songs} totalCount={totalSongsCount} onRefresh={fetchData} />
         )}
+        {activeTab === 'feedbacks' && <FeedbacksTab />}
       </div>
     </div>
   );

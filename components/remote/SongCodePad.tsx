@@ -151,20 +151,16 @@ export function SongCodePad({ roomCode, sessionId, guestName, onReserved }: Song
 
       {(status === 'found' || status === 'reserving' || status === 'success' || status === 'error') && song && (
         <div
-          className="flex items-center gap-3 p-4 rounded-xl"
-          style={{
-            background: 'rgba(99, 102, 241, 0.08)',
-            border: '1px solid rgba(99, 102, 241, 0.2)',
-          }}
+          className="flex items-center gap-3 p-4 rounded-xl bg-zinc-900 border border-zinc-800"
         >
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(99, 102, 241, 0.15)' }}>
-            <Music2 size={18} className="text-indigo-400" />
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-zinc-800 border border-zinc-700">
+            <Music2 size={18} className="text-teal-400" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-bold text-white truncate">{song.title}</p>
-            <p className="text-sm text-slate-400 truncate">{song.artist}</p>
+            <p className="text-sm text-zinc-400 truncate">{song.artist}</p>
           </div>
-          <span className="text-xs font-mono text-slate-600">#{song.code}</span>
+          <span className="text-xs font-mono text-zinc-500">#{song.code}</span>
         </div>
       )}
 

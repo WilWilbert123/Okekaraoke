@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
@@ -14,6 +14,7 @@ import { RemoteQueue } from '@/components/remote/RemoteQueue';
 import { NameModal } from '@/components/remote/NameModal';
 import { EmojiReactions } from '@/components/remote/EmojiReactions';
 import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
+import { SettingsModal } from '@/components/remote/SettingsModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -45,6 +46,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [sessionId, setSessionId] = useState<string>('');
   const [instanceId, setInstanceId] = useState<string>('');
   const [showScanModal, setShowScanModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const { isInstallable, installApp } = usePWAInstall();
 
   // Remember last room code for app shortcuts & quick rejoining
@@ -219,8 +221,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   if (loading) {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-4">
-        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-400 font-medium text-sm">CONNECTING...</p>
+        <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+        <p className="text-zinc-400 font-medium text-sm">CONNECTING...</p>
       </div>
     );
   }
@@ -245,6 +247,21 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       {/* Name entry modal */}
       <NameModal open={showNameModal} onConfirm={handleNameConfirm} />
 
+      {/* Settings Modal */}
+      <SettingsModal
+        open={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        guestName={guestName}
+        onUpdateName={(name) => {
+          setGuestName(name);
+          updateGuestSession({ guest_name: name });
+          registerDevice(name);
+        }}
+        roomCode={roomCode}
+        isInstallable={isInstallable}
+        onInstallApp={installApp}
+      />
+
       {/* Header */}
       <header
         className="px-4 py-3 shrink-0"
@@ -258,7 +275,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-7 h-7 object-contain drop-shadow" />
             <span className="text-sm font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-              <span style={{ background: 'linear-gradient(135deg, #a78bfa, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OKE</span>
+              <span className="text-teal-400">OKE</span>
               <span className="text-white">KARAOKE</span>
             </span>
           </div>
@@ -267,7 +284,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             {isInstallable && (
               <button
                 onClick={installApp}
-                className="px-2 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
+                className="px-2 py-1 rounded-md bg-white hover:bg-zinc-200 text-black text-[10px] font-extrabold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
               >
                 <Download size={11} />
                 <span>INSTALL APP</span>
@@ -284,12 +301,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
                 <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
               </div>
             )}
+
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white flex items-center justify-center transition-all active:scale-95"
+              title="Settings & Support"
+            >
+              <Settings size={15} />
+            </button>
           </div>
         </div>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">ROOM</span>
+            <span className="text-xs text-zinc-500 font-medium">ROOM</span>
             <span
               className="text-base font-black text-white tracking-widest"
               style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '0.12em' }}
@@ -298,7 +323,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </span>
             <button
               onClick={() => setShowScanModal(true)}
-              className="ml-1 px-2 py-0.5 rounded-lg bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all"
+              className="ml-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all"
               title="Scan TV / Switch Room"
             >
               <QrCode size={12} />
@@ -317,20 +342,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
                   onChange={(e) => setEditNameValue(e.target.value)}
                   onKeyDown={handleEditKeyDown}
                   maxLength={30}
-                  className="text-right text-sm text-white bg-transparent border-b border-indigo-500 outline-none w-28"
+                  className="text-right text-sm text-white bg-transparent border-b border-teal-400 outline-none w-28"
                   aria-label="Edit your name"
                 />
                 <button onClick={saveEditName} aria-label="Save name" className="text-green-400 active:scale-90 transition-transform">
                   <Check size={14} />
                 </button>
-                <button onClick={cancelEditName} aria-label="Cancel" className="text-slate-500 active:scale-90 transition-transform">
+                <button onClick={cancelEditName} aria-label="Cancel" className="text-zinc-500 active:scale-90 transition-transform">
                   <X size={14} />
                 </button>
               </>
             ) : (
               <>
                 <span
-                  className="text-sm font-semibold text-slate-300 cursor-pointer"
+                  className="text-sm font-semibold text-zinc-300 cursor-pointer hover:text-white"
                   onClick={startEditName}
                 >
                   {guestName || 'Your name'}
@@ -338,7 +363,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
                 <button
                   onClick={startEditName}
                   aria-label="Edit name"
-                  className="text-slate-600 hover:text-indigo-400 transition-colors active:scale-90"
+                  className="text-zinc-500 hover:text-white transition-colors active:scale-90"
                 >
                   <Pencil size={12} />
                 </button>
@@ -350,11 +375,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         {/* Now playing mini */}
         {currentSong && (
           <div
-            className="mt-2 px-3 py-1.5 rounded-lg flex items-center gap-2"
-            style={{ background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99, 102, 241, 0.15)' }}
+            className="mt-2 px-3 py-1.5 rounded-lg flex items-center gap-2 bg-zinc-900 border border-zinc-800"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse shrink-0" />
-            <p className="text-xs text-slate-400 truncate">
+            <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse shrink-0" />
+            <p className="text-xs text-zinc-400 truncate">
               NOW: <span className="text-white font-medium">{currentSong.song.title}</span>
               {' · '}{currentSong.song.artist}
             </p>
@@ -417,14 +441,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Bottom Navigation Bar */}
       <nav
-        className="shrink-0 flex items-center justify-around py-1.5 px-2 z-30"
-        style={{
-          background: 'rgba(5, 5, 12, 0.96)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.4)',
-        }}
+        className="shrink-0 flex items-center justify-around py-1.5 px-2 z-30 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80"
         role="tablist"
       >
         {[
@@ -443,14 +460,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           >
             <div
               className={`p-1 rounded-xl transition-all ${
-                tab === id ? 'bg-indigo-600/30 text-indigo-400 scale-105' : 'text-slate-500'
+                tab === id ? 'bg-white text-black font-extrabold scale-105 shadow' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Icon size={19} />
+              <Icon size={18} />
             </div>
             <span
               className={`text-[11px] font-bold ${
-                tab === id ? 'text-indigo-300 font-black' : 'text-slate-400'
+                tab === id ? 'text-white font-black' : 'text-zinc-400'
               }`}
             >
               {label} {count !== undefined ? `(${count})` : ''}

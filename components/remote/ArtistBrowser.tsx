@@ -178,31 +178,31 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
             >
               <button
                 onClick={() => { setSelectedArtist(null); setSongs([]); }}
-                className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 transition-colors text-sm font-semibold"
+                className="flex items-center gap-1.5 text-teal-400 hover:text-teal-300 transition-colors text-sm font-semibold"
                 aria-label="Back to artists"
               >
                 <ChevronLeft size={18} />
                 Artists
               </button>
-              <div className="h-4 w-px bg-slate-700" />
+              <div className="h-4 w-px bg-zinc-800" />
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-white text-sm truncate">{selectedArtist.name}</p>
-                <p className="text-xs text-slate-500">{selectedArtist.count} song{selectedArtist.count !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-zinc-500">{selectedArtist.count} song{selectedArtist.count !== 1 ? 's' : ''}</p>
               </div>
             </div>
 
             {/* Songs */}
             <div className="flex-1 overflow-y-auto px-4 pb-6 pt-3 space-y-2">
               {loadingSongs && (
-                <div className="flex items-center justify-center gap-2 py-12 text-slate-500">
-                  <Loader2 size={18} className="animate-spin" />
+                <div className="flex items-center justify-center gap-2 py-12 text-zinc-500">
+                  <Loader2 size={18} className="animate-spin text-teal-400" />
                   <span className="text-sm">Loading songs...</span>
                 </div>
               )}
               {!loadingSongs && songs.length === 0 && (
                 <div className="text-center py-12">
-                  <Music2 size={36} className="text-slate-700 mx-auto mb-3" />
-                  <p className="text-slate-500 text-sm">No songs found</p>
+                  <Music2 size={36} className="text-zinc-700 mx-auto mb-3" />
+                  <p className="text-zinc-500 text-sm">No songs found</p>
                 </div>
               )}
               {!loadingSongs && songs.map((song) => (
@@ -216,7 +216,7 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm truncate">{song.title}</p>
-                    <span className="text-xs text-slate-600 font-mono">#{song.code}</span>
+                    <span className="text-xs text-zinc-500 font-mono">#{song.code}</span>
                   </div>
 
                   {song._status === 'error' && song._message && (
@@ -230,19 +230,28 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
                     id={`artist-reserve-${song.id}`}
                     onClick={() => handleReserve(song)}
                     disabled={song._status === 'reserving' || song._status === 'success'}
-                    className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50"
-                    style={{
-                      background: song._status === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.15)',
-                      border: `1px solid ${song._status === 'success' ? 'rgba(34,197,94,0.3)' : 'rgba(99,102,241,0.3)'}`,
-                    }}
+                    className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${
+                      song._status === 'success'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
+                    }`}
                     aria-label={`Reserve ${song.title}`}
                   >
                     {song._status === 'reserving' ? (
-                      <Loader2 size={14} className="text-indigo-400 animate-spin" />
+                      <>
+                        <Loader2 size={13} className="animate-spin text-black" />
+                        <span>...</span>
+                      </>
                     ) : song._status === 'success' ? (
-                      <CheckCircle size={14} className="text-green-400" />
+                      <>
+                        <CheckCircle size={13} className="text-green-400" />
+                        <span>ADDED</span>
+                      </>
                     ) : (
-                      <Plus size={14} className="text-indigo-400" />
+                      <>
+                        <Plus size={14} className="stroke-[3]" />
+                        <span>RESERVE</span>
+                      </>
                     )}
                   </button>
                 </div>
@@ -312,7 +321,7 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
                 <div
                   className="px-4 py-1 text-xs font-black tracking-widest"
                   style={{
-                    color: jumpLetter === letter ? '#a78bfa' : '#475569',
+                    color: jumpLetter === letter ? '#2dd4bf' : '#475569',
                     background: 'var(--color-bg)',
                     transition: 'color 0.3s',
                     position: 'sticky',
@@ -331,13 +340,13 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
                     onClick={() => loadSongs(artist)}
                     className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left"
                     style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(99,102,241,0.06)'; }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(45,212,191,0.06)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   >
                     {/* Avatar circle */}
                     <div
                       className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shrink-0"
-                      style={{ background: 'rgba(99,102,241,0.12)', color: '#a78bfa' }}
+                      style={{ background: 'rgba(45,212,191,0.12)', color: '#2dd4bf' }}
                     >
                       {artist.name[0]?.toUpperCase()}
                     </div>
@@ -371,7 +380,7 @@ export function ArtistBrowser({ roomCode, sessionId, guestName, onReserved }: Ar
                     padding: '2px 0',
                     width: '100%',
                     color: activeLetters.has(letter)
-                      ? jumpLetter === letter ? '#a78bfa' : '#64748b'
+                      ? jumpLetter === letter ? '#2dd4bf' : '#64748b'
                       : '#1e293b',
                     cursor: activeLetters.has(letter) ? 'pointer' : 'default',
                   }}

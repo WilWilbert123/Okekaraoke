@@ -7,13 +7,13 @@
   --color-surface: #0d0d14;
   --color-surface-2: #13131e;
   --color-surface-3: #1a1a2e;
-  --color-border: rgba(99, 102, 241, 0.15);
+  --color-border: rgba(45, 212, 191, 0.15);
   --color-border-subtle: rgba(255, 255, 255, 0.06);
 
-  --color-primary: #6366f1;
-  --color-primary-glow: rgba(99, 102, 241, 0.3);
-  --color-secondary: #a78bfa;
-  --color-accent: #38bdf8;
+  --color-primary: #2dd4bf;
+  --color-primary-glow: rgba(45, 212, 191, 0.3);
+  --color-secondary: #2dd4bf;
+  --color-accent: #2dd4bf;
 
   --color-text: #f1f5f9;
   --color-text-muted: #94a3b8;

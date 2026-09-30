@@ -225,8 +225,8 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
         className="px-4 py-2.5 shrink-0 flex items-center gap-2"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        <MessageCircle size={14} className="text-indigo-400" />
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <MessageCircle size={14} className="text-teal-400" />
+        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
           Room Chat
         </span>
 
@@ -235,14 +235,14 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
           onClick={() => setShowUserModal(true)}
           className="ml-auto text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
           style={{
-            background: 'rgba(34, 197, 94, 0.12)',
-            color: '#4ade80',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
+            background: 'rgba(45, 212, 191, 0.12)',
+            color: '#2dd4bf',
+            border: '1px solid rgba(45, 212, 191, 0.3)',
           }}
           title="Click to view online room members"
         >
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
-          <Users size={12} className="text-green-400" />
+          <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse inline-block" />
+          <Users size={12} className="text-teal-400" />
           <span>{userCount} {userCount === 1 ? 'User' : 'Users'}</span>
         </button>
       </div>
@@ -252,13 +252,12 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 py-16 text-center">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center"
-              style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)' }}
+              className="w-14 h-14 rounded-2xl flex items-center justify-center bg-zinc-900 border border-zinc-800"
             >
-              <MessageCircle size={28} className="text-indigo-500" />
+              <MessageCircle size={28} className="text-teal-400" />
             </div>
-            <p className="text-sm font-bold text-slate-400">No messages yet</p>
-            <p className="text-xs text-slate-600 max-w-[200px]">
+            <p className="text-sm font-bold text-zinc-300">No messages yet</p>
+            <p className="text-xs text-zinc-500 max-w-[200px]">
               Say hello to everyone in Room {roomCode}! Only people in this room can see your messages.
             </p>
           </div>
@@ -275,20 +274,15 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
               <div className={`flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : ''}`}>
                 {!isMe && (
                   <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0"
-                    style={{
-                      background: `hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 60%, 20%)`,
-                      border: `1px solid hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 60%, 35%)`,
-                      color: `hsl(${Math.abs((msg.sender_name || 'G').charCodeAt(0) * 47) % 360}, 80%, 70%)`,
-                    }}
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 bg-zinc-800 border border-zinc-700 text-zinc-300"
                   >
                     {(msg.sender_name || 'G').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-[10px] text-slate-600 font-medium">
+                <span className="text-[10px] text-zinc-400 font-medium">
                   {isMe ? 'You' : msg.sender_name}
                 </span>
-                <span className="text-[10px] text-slate-700">{formatTime(msg.sent_at)}</span>
+                <span className="text-[10px] text-zinc-600">{formatTime(msg.sent_at)}</span>
               </div>
 
               {/* Bubble */}
@@ -297,14 +291,15 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
                 style={
                   isMe
                     ? {
-                        background: 'linear-gradient(135deg, #6366f1, #7c3aed)',
-                        color: '#ffffff',
+                        background: '#ffffff',
+                        color: '#000000',
+                        fontWeight: 600,
                         borderBottomRightRadius: '6px',
                       }
                     : {
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        color: '#e2e8f0',
+                        background: '#18181b',
+                        border: '1px solid #27272a',
+                        color: '#f4f4f5',
                         borderBottomLeftRadius: '6px',
                       }
                 }
@@ -319,11 +314,7 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
 
       {/* Input bar */}
       <div
-        className="px-4 py-3 shrink-0"
-        style={{
-          background: 'rgba(5, 5, 8, 0.95)',
-          borderTop: '1px solid var(--color-border)',
-        }}
+        className="px-4 py-3 shrink-0 bg-zinc-950 border-t border-zinc-800"
       >
         <div className="flex items-center gap-2">
           <input
@@ -333,56 +324,51 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
             onKeyDown={handleKeyDown}
             placeholder={`Message room ${roomCode}...`}
             maxLength={200}
-            className="flex-1 px-4 py-2.5 rounded-2xl text-sm text-white outline-none transition-all placeholder-slate-600"
-            style={{
-              background: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border)',
-            }}
+            className="flex-1 px-4 py-2.5 rounded-2xl text-sm text-white outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800"
             onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(99,102,241,0.5)';
+              e.target.style.borderColor = 'rgba(45, 212, 191, 0.6)';
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = 'var(--color-border)';
+              e.target.style.borderColor = '#27272a';
             }}
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim() || sending}
-            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all active:scale-95 disabled:opacity-30"
-            style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}
+            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-teal-400 hover:bg-teal-300 text-black font-bold transition-all active:scale-95 disabled:opacity-30"
             aria-label="Send message"
           >
-            <Send size={15} className="text-white" />
+            <Send size={15} className="text-black" />
           </button>
         </div>
-        <p className="text-[10px] text-slate-700 mt-1.5 text-center">
+        <p className="text-[10px] text-zinc-500 mt-1.5 text-center">
           Only users in this room can see messages
         </p>
       </div>
 
       {/* Online Users Modal */}
       {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div
-            className="relative w-full max-w-xs bg-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 text-left"
+            className="relative w-full max-w-xs bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 text-left"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-white/10">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-2">
-                <Users size={18} className="text-green-400" />
+                <Users size={18} className="text-teal-400" />
                 <span className="text-sm font-black text-white font-mono tracking-wider">
                   ROOM MEMBERS ({userCount})
                 </span>
               </div>
               <button
                 onClick={() => setShowUserModal(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 text-xs font-bold"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 text-xs font-bold"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-slate-400">
-              Active users connected to Room <span className="text-indigo-400 font-bold">{roomCode}</span>:
+            <p className="text-xs text-zinc-400">
+              Active users connected to Room <span className="text-teal-400 font-bold">{roomCode}</span>:
             </p>
 
             <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
@@ -391,21 +377,20 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
                 return (
                   <div
                     key={user.session_id || idx}
-                    className="flex items-center justify-between p-2.5 rounded-xl text-xs"
-                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                    className="flex items-center justify-between p-2.5 rounded-xl text-xs bg-zinc-900 border border-zinc-800"
                   >
                     <div className="flex items-center gap-2 truncate">
-                      <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
-                      <span className="font-bold text-slate-200 truncate">
+                      <div className="w-2 h-2 rounded-full bg-teal-400 animate-pulse shrink-0" />
+                      <span className="font-bold text-zinc-200 truncate">
                         {user.name || 'Guest Remote'}
                       </span>
                       {isCurrent && (
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
                           YOU
                         </span>
                       )}
                     </div>
-                    <span className="text-[10px] font-semibold text-green-400 shrink-0">
+                    <span className="text-[10px] font-semibold text-teal-400 shrink-0">
                       ONLINE
                     </span>
                   </div>
@@ -415,7 +400,7 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
 
             <button
               onClick={() => setShowUserModal(false)}
-              className="w-full py-2.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white transition-colors text-center mt-1"
+              className="w-full py-2.5 rounded-xl font-bold text-xs bg-white text-black hover:bg-zinc-200 transition-colors text-center mt-1"
             >
               Close
             </button>
