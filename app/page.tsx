@@ -135,7 +135,7 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-5xl font-black tracking-tight mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
-            <span style={{ background: 'linear-gradient(135deg, #a78bfa 0%, #6366f1 50%, #38bdf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+            <span className="text-indigo-400">
               OKE
             </span>
             <span className="text-white">KARAOKE</span>
@@ -151,7 +151,7 @@ export default function LandingPage() {
             <p className="text-xs text-slate-400 mt-1">Karaoke display</p>
           </div>
           <div className="glass rounded-xl p-4 text-center">
-            <Smartphone size={24} className="text-violet-400 mx-auto mb-2" />
+            <Smartphone size={24} className="text-indigo-400 mx-auto mb-2" />
             <p className="text-sm font-medium text-slate-200">Phone Remote</p>
             <p className="text-xs text-slate-400 mt-1">Search &amp; reserve</p>
           </div>
@@ -170,23 +170,22 @@ export default function LandingPage() {
           id="create-room-btn"
           onClick={handleCreate}
           disabled={creating || joining}
-          className="w-full py-4 px-6 rounded-xl font-bold text-white text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full py-4 px-6 rounded-xl font-black text-black text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 hover:bg-slate-100 active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
           style={{
-            background: creating
-              ? 'rgba(99, 102, 241, 0.5)'
-              : 'linear-gradient(135deg, #6366f1 0%, #7c3aed 100%)',
-            boxShadow: creating ? 'none' : '0 4px 20px rgba(99, 102, 241, 0.4)',
+            background: creating ? '#e2e8f0' : '#ffffff',
+            boxShadow: creating ? 'none' : '0 4px 25px rgba(255, 255, 255, 0.3)',
+            color: '#000000',
           }}
         >
           {creating ? (
             <>
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              CREATING OKEKARAOKE...
+              <div className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+              <span className="text-black font-black">CREATING OKEKARAOKE...</span>
             </>
           ) : (
             <>
-              <Music2 size={20} />
-              CREATE OKEKARAOKE
+              <Music2 size={20} className="text-black stroke-[2.5]" />
+              <span className="text-black font-black">CREATE OKEKARAOKE</span>
             </>
           )}
         </button>

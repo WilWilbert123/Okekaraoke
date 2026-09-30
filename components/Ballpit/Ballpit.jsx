@@ -79,14 +79,22 @@ class x {
         } else {
             console.error('Three: Missing canvas or id parameter');
         }
+        if (!this.canvas) return;
         this.canvas.style.display = 'block';
         const e = {
             canvas: this.canvas,
             powerPreference: 'high-performance',
+            failIfMajorPerformanceCaveat: false,
             ...(this.#e.rendererOptions ?? {})
         };
-        this.renderer = new s(e);
-        this.renderer.outputColorSpace = n;
+        try {
+            this.renderer = new s(e);
+            if (this.renderer) {
+                this.renderer.outputColorSpace = n;
+            }
+        } catch (err) {
+            console.warn('Three.js WebGLRenderer init failed/suppressed:', err);
+        }
     }
     #g() {
         if (!(this.#e.size instanceof Object)) {
@@ -171,6 +179,7 @@ class x {
         }
     }
     #b() {
+        if (!this.renderer) return;
         this.renderer.setSize(this.size.width, this.size.height);
         this.#t?.setSize(this.size.width, this.size.height);
         let e = window.devicePixelRatio;
@@ -211,7 +220,9 @@ class x {
         }
     }
     #i() {
-        this.renderer.render(this.scene, this.camera);
+        if (this.renderer) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
     clear() {
         this.scene.traverse(e => {
@@ -234,8 +245,10 @@ class x {
         this.#c.dispose();
         this.clear();
         this.#t?.dispose();
-        this.renderer.dispose();
-        this.renderer.forceContextLoss();
+        if (this.renderer) {
+            this.renderer.dispose();
+            this.renderer.forceContextLoss();
+        }
         this.isDisposed = true;
     }
 }
