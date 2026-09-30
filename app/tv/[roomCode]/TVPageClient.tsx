@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Smartphone, RotateCw } from 'lucide-react';
+import { Smartphone, RotateCw, X, Maximize2 } from 'lucide-react';
 import { TVHeader } from '@/components/tv/TVHeader';
 import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
@@ -14,6 +14,7 @@ import { YouTubePlayer } from '@/components/tv/YouTubePlayer';
 import { NowPlaying } from '@/components/tv/NowPlaying';
 import { QRPanel } from '@/components/tv/QRPanel';
 import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
+import { SongCountdownModal } from '@/components/tv/SongCountdownModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -26,6 +27,8 @@ interface TVPageClientProps {
 export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [instanceState, setInstanceState] = useState<InstanceState | null>(null);
   const [currentSong, setCurrentSong] = useState<EnrichedQueueItem | null>(null);
+  const [countdownSong, setCountdownSong] = useState<EnrichedQueueItem | null>(null);
+  const lastCountdownSongIdRef = useRef<string | null>(null);
   const [queue, setQueue] = useState<EnrichedQueueItem[]>([]);
   const queueRef = useRef<EnrichedQueueItem[]>([]);
   useEffect(() => { queueRef.current = queue; }, [queue]);
@@ -52,6 +55,8 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [bannerSettings, setBannerSettings] = useState<{ banner_enabled: boolean; banner_text: string; banner_image_url?: string; banner_speed?: number }>({ banner_enabled: false, banner_text: '' });
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
+  const [dismissMobileBanner, setDismissMobileBanner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<string | null>(null);
@@ -144,6 +149,17 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       setInstanceState(state);
       setCurrentSong(state.current_song);
       currentSongRef.current = state.current_song;
+
+      if (state.current_song) {
+        if (state.current_song.queue_item_id !== lastCountdownSongIdRef.current) {
+          lastCountdownSongIdRef.current = state.current_song.queue_item_id;
+          setCountdownSong(state.current_song);
+        }
+      } else {
+        lastCountdownSongIdRef.current = null;
+        setCountdownSong(null);
+      }
+
       setQueue(state.queue);
       setError(null);
       setConnectionStatus('connected');
@@ -254,36 +270,39 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       return;
     }
 
-    if (currentSongRef.current) {
-      const completed = {
-        title: currentSongRef.current.song.title,
-        artist: currentSongRef.current.song.artist,
-        guestName: currentSongRef.current.guest_name,
-      };
-      const next = queueRef.current.length > 0 ? {
-        title: queueRef.current[0].song.title,
-        artist: queueRef.current[0].song.artist,
-        guestName: queueRef.current[0].guest_name,
-      } : null;
+    const songItem = currentSongRef.current || queueRef.current.find(i => i.queue_item_id === completedQueueItemId);
 
-      setScoreModalData({
-        completedSong: completed,
-        nextSong: next,
-        completedQueueItemId,
-      });
-    } else {
-      handleSongEnded(completedQueueItemId);
-    }
-  }, [handleSongEnded]);
+    const completed = {
+      title: songItem?.song.title ?? 'Karaoke Performance',
+      artist: songItem?.song.artist ?? 'OKEKARAOKE',
+      guestName: songItem?.guest_name ?? 'Singer',
+    };
+
+    const remainingQueue = queueRef.current.filter(i => i.queue_item_id !== completedQueueItemId);
+    const next = remainingQueue.length > 0 ? {
+      title: remainingQueue[0].song.title,
+      artist: remainingQueue[0].song.artist,
+      guestName: remainingQueue[0].guest_name,
+    } : null;
+
+    setScoreModalData({
+      completedSong: completed,
+      nextSong: next,
+      completedQueueItemId,
+    });
+  }, []);
 
   const handleScoreModalComplete = useCallback(() => {
+    let queueItemId: string | null = null;
     setScoreModalData((prev) => {
       if (prev) {
-        const queueItemId = prev.completedQueueItemId;
-        handleSongEnded(queueItemId);
+        queueItemId = prev.completedQueueItemId;
       }
       return null;
     });
+    if (queueItemId) {
+      handleSongEnded(queueItemId);
+    }
   }, [handleSongEnded]);
 
   // Realtime subscriptions
@@ -353,37 +372,74 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     };
   }, []);
 
-  // Fullscreen & Mobile Landscape Lock
+  // Fullscreen & Mobile Landscape Lock with cross-browser & pseudo-fullscreen fallback
   const handleFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-        setIsFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    } catch {
-      // Fullscreen not supported
-    }
-  }, []);
+    const docEl = document.documentElement as any;
+    const doc = document as any;
+    const isNativeFS = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
 
-  const handleMobileLandscapeFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
+    if (!isNativeFS && !isPseudoFullscreen) {
+      try {
+        if (docEl.requestFullscreen) {
+          await docEl.requestFullscreen();
+        } else if (docEl.webkitRequestFullscreen) {
+          await docEl.webkitRequestFullscreen();
+        } else if (docEl.mozRequestFullScreen) {
+          await docEl.mozRequestFullScreen();
+        } else if (docEl.msRequestFullscreen) {
+          await docEl.msRequestFullscreen();
+        } else {
+          setIsPseudoFullscreen(true);
         }
-      }
-      if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).lock) {
-        try {
-          await (screen.orientation as any).lock('landscape');
-        } catch {}
+      } catch {
+        setIsPseudoFullscreen(true);
       }
       setIsFullscreen(true);
-    } catch (err) {
-      console.log('Mobile landscape fullscreen request error:', err);
+    } else {
+      if (isNativeFS) {
+        try {
+          if (doc.exitFullscreen) {
+            await doc.exitFullscreen();
+          } else if (doc.webkitExitFullscreen) {
+            await doc.webkitExitFullscreen();
+          } else if (doc.mozCancelFullScreen) {
+            await doc.mozCancelFullScreen();
+          } else if (doc.msExitFullscreen) {
+            await doc.msExitFullscreen();
+          }
+        } catch {}
+      }
+      setIsPseudoFullscreen(false);
+      setIsFullscreen(false);
     }
+  }, [isPseudoFullscreen]);
+
+  const handleMobileLandscapeFullscreen = useCallback(async () => {
+    const docEl = document.documentElement as any;
+    try {
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen();
+      } else if (docEl.webkitRequestFullscreen) {
+        await docEl.webkitRequestFullscreen();
+      } else if (docEl.mozRequestFullScreen) {
+        await docEl.mozRequestFullScreen();
+      } else if (docEl.msRequestFullscreen) {
+        await docEl.msRequestFullscreen();
+      } else {
+        setIsPseudoFullscreen(true);
+      }
+    } catch {
+      setIsPseudoFullscreen(true);
+    }
+
+    if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).lock) {
+      try {
+        await (screen.orientation as any).lock('landscape');
+      } catch (err) {
+        console.log('Orientation lock unavailable:', err);
+      }
+    }
+    setIsFullscreen(true);
   }, []);
 
   // TV Remote & Keyboard Controls (Press 'F' for Fullscreen, D-Pad support)
@@ -398,10 +454,22 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   }, [handleFullscreen]);
 
   useEffect(() => {
-    const handleChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const handleChange = () => {
+      const doc = document as any;
+      const nativeFS = !!(doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement);
+      setIsFullscreen(nativeFS || isPseudoFullscreen);
+    };
     document.addEventListener('fullscreenchange', handleChange);
-    return () => document.removeEventListener('fullscreenchange', handleChange);
-  }, []);
+    document.addEventListener('webkitfullscreenchange', handleChange);
+    document.addEventListener('mozfullscreenchange', handleChange);
+    document.addEventListener('MSFullscreenChange', handleChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleChange);
+      document.removeEventListener('webkitfullscreenchange', handleChange);
+      document.removeEventListener('mozfullscreenchange', handleChange);
+      document.removeEventListener('MSFullscreenChange', handleChange);
+    };
+  }, [isPseudoFullscreen]);
 
   // Error state
   if (error) {
@@ -440,7 +508,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
   return (
     <div
-      className="relative w-full h-full"
+      className={isPseudoFullscreen ? "fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black overflow-hidden" : "relative w-full h-full"}
       style={{ height: '100dvh', background: '#000', overflow: 'hidden' }}
     >
       {/* LAYER 0: Fullscreen YouTube Video Player (Corner-to-Corner) */}
@@ -455,21 +523,26 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         />
       </div>
 
-      {/* LAYER 1: Floating Header & Up Next Bar (Top) */}
+      {/* LAYER 1: Single Clean Header Bar */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-auto">
         <TVBanner bannerEnabled={bannerSettings.banner_enabled} bannerText={bannerSettings.banner_text} bannerImageUrl={bannerSettings.banner_image_url} bannerSpeed={bannerSettings.banner_speed} />
         <TVHeader
           roomCode={roomCode}
           connectionStatus={connectionStatus}
-          onFullscreen={handleFullscreen}
-          isFullscreen={isFullscreen}
+          queue={queue}
         />
-        {queue.length > 0 && (
-          <div style={{ background: 'rgba(5, 5, 12, 0.65)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255, 255, 255, 0.06)' }}>
-            <TVQueue queue={queue} />
-          </div>
-        )}
       </div>
+
+      {/* Floating Top Right Corner Fullscreen Toggle Button */}
+      <button
+        id="tv-fullscreen-btn"
+        onClick={handleFullscreen}
+        className="absolute top-16 right-6 z-30 p-2.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-teal-500/30 backdrop-blur-xl text-teal-400 hover:text-teal-300 transition-all active:scale-95 shadow-xl flex items-center justify-center pointer-events-auto"
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        <Maximize2 size={18} />
+      </button>
 
       {/* LAYER 2: Floating Corner Widgets (Transparent center for song lyrics) */}
       <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">
@@ -491,26 +564,50 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         />
       )}
 
+      {/* LAYER 3.5: 5-Second Song Countdown Screen Overlay for YouTube Pre-Buffering & Auto-Play */}
+      {countdownSong && (
+        <SongCountdownModal
+          song={{
+            title: countdownSong.song.title,
+            artist: countdownSong.song.artist,
+            guestName: countdownSong.guest_name,
+            code: countdownSong.song.code,
+          }}
+          onComplete={() => setCountdownSong(null)}
+        />
+      )}
+
       {/* LAYER 4: Mobile Portrait TV Mode Overlay Banner — ONLY shown when viewing TV mode on mobile devices in portrait orientation */}
-      {isMobileDevice && isPortrait && (
-        <div className="fixed inset-x-4 top-20 z-40 p-4 rounded-2xl bg-indigo-950/95 border border-indigo-500/80 backdrop-blur-xl text-white shadow-2xl flex items-center justify-between gap-3 animate-bounce">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600/40 border border-indigo-400/50 flex items-center justify-center text-indigo-300 shrink-0">
-              <Smartphone size={20} className="rotate-90" />
+      {isMobileDevice && isPortrait && !dismissMobileBanner && (
+        <div className="fixed inset-x-4 top-20 z-40 p-3.5 rounded-2xl bg-zinc-900/95 border border-teal-500/50 backdrop-blur-xl text-white shadow-2xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-400 shrink-0">
+              <Smartphone size={18} className="rotate-90" />
             </div>
             <div>
-              <p className="text-xs font-black text-indigo-200 uppercase tracking-wider">Mobile TV Screen Mode</p>
-              <p className="text-xs text-slate-300 font-medium">Rotate to landscape or connect to TV!</p>
+              <p className="text-[11px] font-black text-teal-300 uppercase tracking-wider">Mobile TV Screen Mode</p>
+              <p className="text-[10px] text-zinc-300 font-medium">Rotate to landscape or connect to TV!</p>
             </div>
           </div>
 
-          <button
-            onClick={handleMobileLandscapeFullscreen}
-            className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shrink-0 shadow-lg active:scale-95"
-          >
-            <RotateCw size={14} />
-            <span>Go Landscape</span>
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleMobileLandscapeFullscreen}
+              className="px-3 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-[11px] uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all shadow-md"
+            >
+              <RotateCw size={13} />
+              <span>Go Landscape</span>
+            </button>
+
+            <button
+              onClick={() => setDismissMobileBanner(true)}
+              className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              aria-label="Hide banner"
+              title="Hide banner"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
     </div>

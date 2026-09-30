@@ -45,6 +45,8 @@ interface YTPlayer {
   pauseVideo(): void;
   stopVideo(): void;
   getPlayerState(): number;
+  getDuration(): number;
+  getCurrentTime(): number;
   destroy(): void;
   mute(): void;
   unMute(): void;
@@ -128,10 +130,10 @@ export function YouTubePlayer({
       playerVars: {
         autoplay: autoplay ? 1 : 0,
         mute: 1,
-        controls: 1,
+        controls: 0,
         rel: 0,
         modestbranding: 1,
-        fs: 1,
+        fs: 0,
         playsinline: 1,
         enablejsapi: 1,
         origin: window.location.origin,
@@ -141,6 +143,7 @@ export function YouTubePlayer({
           setPlayerReady(true);
           if (videoId) {
             currentVideoIdRef.current = videoId;
+            currentQueueItemIdRef.current = queueItemId;
             try {
               playerRef.current?.mute();
               playerRef.current?.loadVideoById(videoId);
@@ -173,8 +176,9 @@ export function YouTubePlayer({
               break;
             case YTState.ENDED:
               playerStatus = 'ended';
-              if (currentQueueItemIdRef.current && currentVideoIdRef.current) {
-                onEndedRef.current(currentQueueItemIdRef.current);
+              const targetId = currentQueueItemIdRef.current || queueItemId;
+              if (targetId) {
+                onEndedRef.current(targetId);
               }
               break;
             case -1:
@@ -262,13 +266,48 @@ export function YouTubePlayer({
     }
   }, [videoId, queueItemId, playerReady]);
 
-  // Keep queueItemId ref current when it changes alongside the same videoId
+  // Keep queueItemId ref current whenever prop changes
   useEffect(() => {
-    // Only sync if the videoId hasn't changed (the main effect handles that case)
-    if (queueItemId && currentVideoIdRef.current === videoId) {
+    if (queueItemId) {
       currentQueueItemIdRef.current = queueItemId;
     }
-  }, [queueItemId, videoId]);
+  }, [queueItemId]);
+
+  // Autoplay & End-of-Video Watchdog: Ensures video starts playing if stuck AND auto-advances when video finishes
+  useEffect(() => {
+    if (!videoId || !playerReady) return;
+
+    let endedTriggered = false;
+
+    const interval = setInterval(() => {
+      if (!playerRef.current) return;
+      try {
+        const state = playerRef.current.getPlayerState?.();
+
+        // 1. Detect video completion via player current time vs duration
+        if (typeof playerRef.current.getDuration === 'function' && typeof playerRef.current.getCurrentTime === 'function') {
+          const duration = playerRef.current.getDuration();
+          const currentTime = playerRef.current.getCurrentTime();
+
+          if (duration > 0 && currentTime >= duration - 1.2 && !endedTriggered) {
+            endedTriggered = true;
+            const targetId = currentQueueItemIdRef.current || queueItemId;
+            if (targetId) {
+              onEndedRef.current(targetId);
+            }
+          }
+        }
+
+        // 2. Force play & unmute if player stuck in cued (5), paused (2), or unstarted (-1)
+        if (state === 5 || state === 2 || state === -1) {
+          playerRef.current.playVideo();
+          try { playerRef.current.unMute(); } catch {}
+        }
+      } catch {}
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [videoId, queueItemId, playerReady]);
 
   return (
     <div className={`relative w-full h-full bg-black ${className}`}>

@@ -1,18 +1,19 @@
 'use client';
 
 // ============================================================
-// OKEKARAOKE — TV Header Component
-// Shows brand, room code, and connection status
+// OKEKARAOKE — Minimal Clean TV Header Component
+// Shows brand & clean white inline UP NEXT ticker
 // ============================================================
 
-import { Wifi, WifiOff, RefreshCw, Fullscreen, Mic2 } from 'lucide-react';
-import type { ConnectionStatus } from '@/lib/types';
+import { useState } from 'react';
+import { Wifi, WifiOff, RefreshCw, ChevronRight } from 'lucide-react';
+import type { ConnectionStatus, EnrichedQueueItem } from '@/lib/types';
+import { FullQueueModal } from './FullQueueModal';
 
 interface TVHeaderProps {
-  roomCode: string;
+  roomCode?: string;
   connectionStatus: ConnectionStatus;
-  onFullscreen: () => void;
-  isFullscreen: boolean;
+  queue?: EnrichedQueueItem[];
 }
 
 const statusConfig = {
@@ -21,75 +22,82 @@ const statusConfig = {
   offline: { icon: WifiOff, label: 'OFFLINE', color: '#ef4444' },
 };
 
-export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscreen }: TVHeaderProps) {
+export function TVHeader({ connectionStatus, queue = [] }: TVHeaderProps) {
+  const [showFullQueueModal, setShowFullQueueModal] = useState(false);
   const { icon: StatusIcon, label: statusLabel, color: statusColor } = statusConfig[connectionStatus];
 
+  const visibleQueue = queue.slice(0, 5);
+  const overflowCount = Math.max(0, queue.length - 5);
+
   return (
-    <header
-      className="flex items-center justify-between px-6 py-2.5 shrink-0"
-      style={{
-        background: 'linear-gradient(to bottom, rgba(5, 5, 12, 0.85) 0%, rgba(5, 5, 12, 0.4) 100%)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-      }}
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-9 h-9 object-contain drop-shadow" />
-        <span
-          className="text-lg font-black tracking-tight"
-          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-        >
-          <span className="text-teal-400">OKE</span>
-          <span className="text-white">KARAOKE</span>
-        </span>
-      </div>
+    <>
+      <header className="flex items-center justify-between px-6 py-2.5 shrink-0 gap-4 bg-gradient-to-b from-black/90 via-black/50 to-transparent">
+        {/* Left: Brand */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-8 h-8 object-contain drop-shadow" />
+          <span
+            className="text-base font-black tracking-tight"
+            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+          >
+            <span className="text-teal-400">OKE</span>
+            <span className="text-white">KARAOKE</span>
+          </span>
+        </div>
 
-      {/* Room Code */}
-      <div
-        className="flex items-center gap-2 px-4 py-1.5 rounded-full"
-        style={{
-          background: 'rgba(45, 212, 191, 0.1)',
-          border: '1px solid rgba(45, 212, 191, 0.3)',
-        }}
-      >
-        <span className="text-xs font-bold text-slate-400 tracking-widest">ROOM</span>
-        <span
-          className="text-xl font-black text-white tracking-widest"
-          style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '0.15em' }}
-          aria-label={`Room code: ${roomCode}`}
-        >
-          {roomCode}
-        </span>
-      </div>
-
-      {/* Status + Controls */}
-      <div className="flex items-center gap-4">
-        {connectionStatus !== 'connected' && (
-          <div className="flex items-center gap-2">
-            <StatusIcon
-              size={14}
-              style={{ color: statusColor }}
-              className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
-            />
-            <span className="text-xs font-bold" style={{ color: statusColor }}>
-              {statusLabel}
+        {/* Center: Minimal Clean White Up Next Ticker (No background box/blur/border) */}
+        {queue.length > 0 && (
+          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-0.5 px-2 text-white text-xs shrink font-medium">
+            <span className="font-bold text-white/80 uppercase tracking-wider shrink-0">
+              up next:
             </span>
+
+            <div className="flex items-center gap-3 overflow-x-auto no-scrollbar shrink text-white">
+              {visibleQueue.map((item, index) => (
+                <div key={item.queue_item_id} className="flex items-center gap-1 shrink-0">
+                  <span className="font-bold text-white">{index + 1}:</span>
+                  <span className="text-white truncate max-w-[160px]" title={item.song.title}>
+                    {item.song.title}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {overflowCount > 0 && (
+              <button
+                onClick={() => setShowFullQueueModal(true)}
+                className="shrink-0 flex items-center gap-0.5 font-bold text-xs text-white/90 hover:text-teal-400 transition-colors"
+              >
+                +{overflowCount} MORE
+                <ChevronRight size={14} />
+              </button>
+            )}
           </div>
         )}
 
-        <button
-          id="tv-fullscreen-btn"
-          onClick={onFullscreen}
-          className="p-2 rounded-lg transition-colors hover:bg-white/10 text-slate-400 hover:text-white"
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          <Fullscreen size={18} />
-        </button>
-      </div>
-    </header>
+        {/* Right: Connection Status (if reconnecting/offline) */}
+        <div className="flex items-center gap-3 shrink-0">
+          {connectionStatus !== 'connected' && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60">
+              <StatusIcon
+                size={12}
+                style={{ color: statusColor }}
+                className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
+              />
+              <span className="text-[10px] font-bold" style={{ color: statusColor }}>
+                {statusLabel}
+              </span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {showFullQueueModal && (
+        <FullQueueModal
+          queue={queue}
+          onClose={() => setShowFullQueueModal(false)}
+        />
+      )}
+    </>
   );
 }
