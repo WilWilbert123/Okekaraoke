@@ -244,7 +244,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       >
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <Mic2 size={16} className="text-indigo-400" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-7 h-7 object-contain drop-shadow" />
             <span className="text-sm font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               <span style={{ background: 'linear-gradient(135deg, #a78bfa, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>OKE</span>
               <span className="text-white">KARAOKE</span>

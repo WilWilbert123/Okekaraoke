@@ -113,11 +113,14 @@ export default function LandingPage() {
 
       <div className="relative z-10 w-full max-w-md">
         {/* Logo & Brand */}
-        <div className="text-center mb-12">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="p-3 rounded-2xl" style={{ background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-              <Mic2 size={32} className="text-indigo-400" />
-            </div>
+        <div className="text-center mb-10">
+          <div className="flex items-center justify-center mb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/okekaraokelogo.png"
+              alt="OKEKARAOKE Logo"
+              className="w-44 h-44 md:w-52 md:h-52 object-contain drop-shadow-[0_0_35px_rgba(99,102,241,0.4)]"
+            />
           </div>
 
           <h1 className="text-5xl font-black tracking-tight mb-3" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>

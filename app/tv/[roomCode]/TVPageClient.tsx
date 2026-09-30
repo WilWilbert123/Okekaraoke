@@ -56,31 +56,45 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     if (advancingRef.current) return;
     if (currentSongRef.current) return; // already playing
 
-    // Wait up to 3s for session to be registered in the devices table
+    // Ensure session ID is initialized
     let sessionId = sessionRef.current;
     if (!sessionId) {
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 100));
-        sessionId = sessionRef.current;
-        if (sessionId) break;
-      }
+      const session = getOrCreateGuestSession();
+      sessionRef.current = session.session_id;
+      sessionId = session.session_id;
     }
-    if (!sessionId) return;
+
+    // Pre-register TV device to ensure authorization
+    await fetch('/api/instances/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        room_code: roomCode,
+        guest_session_id: sessionId,
+        device_type: 'tv',
+        guest_name: 'TV Screen',
+      }),
+    }).catch(() => {});
 
     advancingRef.current = true;
     try {
-      const res = await fetch('/api/queue/next', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room_code: roomCode,
-          session_id: sessionId,
-          completed_queue_item_id: null,
-        }),
-      });
-      const json = await res.json();
-      if (json.success && json.data?.next_queue_item_id) {
-        fetchStateRef.current();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (currentSongRef.current) break;
+        const res = await fetch('/api/queue/next', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            session_id: sessionId,
+            completed_queue_item_id: null,
+          }),
+        });
+        const json = await res.json();
+        if (json.success && json.data?.next_queue_item_id) {
+          fetchStateRef.current();
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 400));
       }
     } catch (err) {
       console.error('Auto-start failed:', err);
@@ -355,18 +369,14 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         )}
       </div>
 
-      {/* LAYER 2: Floating Glass Bottom Bar (Now Playing + QR Code Card) */}
-      <div
-        className="absolute bottom-0 left-0 right-0 z-20 flex items-center justify-between gap-4 px-6 py-3 pointer-events-auto"
-        style={{
-          background: 'linear-gradient(to top, rgba(5, 5, 12, 0.95) 0%, rgba(5, 5, 12, 0.5) 75%, transparent 100%)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
-        }}
-      >
-        <NowPlaying currentSong={currentSong} />
-        <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
+      {/* LAYER 2: Floating Corner Widgets (Transparent center for song lyrics) */}
+      <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">
+        <div className="pointer-events-auto">
+          <NowPlaying currentSong={currentSong} />
+        </div>
+        <div className="pointer-events-auto">
+          <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
+        </div>
       </div>
     </div>
   );

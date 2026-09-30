@@ -45,6 +45,12 @@ export async function POST(request: NextRequest) {
       return apiError('ROOM_NOT_FOUND', 'This OKEKARAOKE room does not exist or is no longer active.', 404);
     }
 
+    // Extract location info
+    const { extractLocationFromRequest } = await import('@/lib/utils/location');
+    const loc = extractLocationFromRequest(request);
+    const clientCity = body.city || loc.city;
+    const clientCountry = body.country || loc.country;
+
     // Upsert device record (handles reconnects)
     const { error: deviceError } = await supabase
       .from('devices')
@@ -54,6 +60,9 @@ export async function POST(request: NextRequest) {
         session_id: guest_session_id,
         device_name: guest_name ?? `${device_type} device`,
         is_online: true,
+        city: clientCity,
+        country: clientCountry,
+        ip_address: loc.ip,
         last_seen_at: new Date().toISOString(),
       }, {
         onConflict: 'instance_id,session_id',

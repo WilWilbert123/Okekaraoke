@@ -18,7 +18,16 @@ export function NowPlaying({ currentSong }: NowPlayingProps) {
   }
 
   return (
-    <div className="flex items-center gap-4 py-1 flex-1 min-w-0">
+    <div
+      className="flex items-center gap-3.5 px-4 py-2.5 rounded-2xl max-w-sm md:max-w-md"
+      style={{
+        background: 'rgba(5, 5, 12, 0.55)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.4)',
+      }}
+    >
       {/* Playing equalizer indicator */}
       <div className="flex items-center gap-2 shrink-0">
         <div className="flex gap-0.5 items-end h-6">
