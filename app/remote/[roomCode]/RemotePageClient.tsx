@@ -252,14 +252,16 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <StatusIcon
-              size={12}
-              style={{ color: statusColor }}
-              className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
-            />
-            <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
-          </div>
+          {connectionStatus !== 'connected' && (
+            <div className="flex items-center gap-1.5">
+              <StatusIcon
+                size={12}
+                style={{ color: statusColor }}
+                className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
+              />
+              <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between">
