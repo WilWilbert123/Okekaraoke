@@ -12,6 +12,7 @@ import { TVQueue } from '@/components/tv/TVQueue';
 import { YouTubePlayer } from '@/components/tv/YouTubePlayer';
 import { NowPlaying } from '@/components/tv/NowPlaying';
 import { QRPanel } from '@/components/tv/QRPanel';
+import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -25,6 +26,15 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const [instanceState, setInstanceState] = useState<InstanceState | null>(null);
   const [currentSong, setCurrentSong] = useState<EnrichedQueueItem | null>(null);
   const [queue, setQueue] = useState<EnrichedQueueItem[]>([]);
+  const queueRef = useRef<EnrichedQueueItem[]>([]);
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+
+  const [scoreModalData, setScoreModalData] = useState<{
+    completedSong: { title: string; artist: string; guestName?: string | null };
+    nextSong?: { title: string; artist: string; guestName?: string | null } | null;
+    completedQueueItemId: string;
+  } | null>(null);
+
   const [playerState, setPlayerState] = useState<PlayerState>({ status: 'idle', video_id: null, queue_item_id: null });
   const handlePlayerStateChange = useCallback((newState: PlayerState) => {
     setPlayerState((prev) => {
@@ -236,6 +246,45 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     }
   }, [roomCode, fetchState]);
 
+  // Score popup trigger: when song finishes playing, pop up score modal before advancing
+  const triggerSongEndedScore = useCallback((completedQueueItemId: string) => {
+    if (skippedByRemoteRef.current.has(completedQueueItemId)) {
+      skippedByRemoteRef.current.delete(completedQueueItemId);
+      return;
+    }
+
+    if (currentSongRef.current) {
+      const completed = {
+        title: currentSongRef.current.song.title,
+        artist: currentSongRef.current.song.artist,
+        guestName: currentSongRef.current.guest_name,
+      };
+      const next = queueRef.current.length > 0 ? {
+        title: queueRef.current[0].song.title,
+        artist: queueRef.current[0].song.artist,
+        guestName: queueRef.current[0].guest_name,
+      } : null;
+
+      setScoreModalData({
+        completedSong: completed,
+        nextSong: next,
+        completedQueueItemId,
+      });
+    } else {
+      handleSongEnded(completedQueueItemId);
+    }
+  }, [handleSongEnded]);
+
+  const handleScoreModalComplete = useCallback(() => {
+    setScoreModalData((prev) => {
+      if (prev) {
+        const queueItemId = prev.completedQueueItemId;
+        handleSongEnded(queueItemId);
+      }
+      return null;
+    });
+  }, [handleSongEnded]);
+
   // Realtime subscriptions
   const realtimeHandlers = useRef({
     queue_added: () => {
@@ -247,6 +296,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     queue_removed: () => fetchStateRef.current(),
     queue_updated: () => fetchStateRef.current(),
     song_started: (payload: any) => {
+      setScoreModalData(null);
       // The previously-playing song was stopped by a remote — mark it so
       // handleSongEnded ignores the YouTube player's onEnded for that song.
       if (payload?.skipped_queue_item_id) {
@@ -260,11 +310,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       setConnectionStatus('connected');
     },
     song_finished: () => {
+      setScoreModalData(null);
       setCurrentSong(null);
       currentSongRef.current = null;
       fetchStateRef.current();
     },
     song_skipped: (payload: any) => {
+      setScoreModalData(null);
       if (payload?.skipped_queue_item_id) {
         skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
       }
@@ -346,7 +398,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         <YouTubePlayer
           videoId={currentVideoId}
           queueItemId={currentQueueItemId}
-          onEnded={handleSongEnded}
+          onEnded={triggerSongEndedScore}
           onStateChange={handlePlayerStateChange}
           autoplay={instanceState?.settings.autoplay ?? true}
           className="w-full h-full"
@@ -378,6 +430,16 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
         </div>
       </div>
+
+      {/* LAYER 3: Authentic Videoke/Karaoke Score Screen Popup Modal */}
+      {scoreModalData && (
+        <KaraokeScoreModal
+          completedSong={scoreModalData.completedSong}
+          nextSong={scoreModalData.nextSong}
+          onCountdownComplete={handleScoreModalComplete}
+          onSkip={handleScoreModalComplete}
+        />
+      )}
     </div>
   );
 }
