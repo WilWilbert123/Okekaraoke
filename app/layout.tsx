@@ -9,9 +9,9 @@ export const metadata: Metadata = {
   applicationName: 'OKEKARAOKE',
   manifest: '/manifest.json',
   icons: {
-    icon: '/okekaraokelogo.png',
-    shortcut: '/okekaraokelogo.png',
-    apple: '/okekaraokelogo.png',
+    icon: '/icon.png',
+    shortcut: '/icon.png',
+    apple: '/icon.png',
   },
   appleWebApp: {
     capable: true,
@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     title: 'OKEKARAOKE',
     description: 'TV-first karaoke system controlled from your phone.',
     type: 'website',
-    images: [{ url: '/okekaraokelogo.png' }],
+    images: [{ url: '/icon.png' }],
   },
 };
 
@@ -44,9 +44,9 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="apple-touch-icon" href="/okekaraokelogo.png" />
-        <link rel="icon" type="image/png" href="/okekaraokelogo.png" />
-        <link rel="shortcut icon" href="/okekaraokelogo.png" />
+        <link rel="apple-touch-icon" href="/icon.png" />
+        <link rel="icon" type="image/png" href="/icon.png" />
+        <link rel="shortcut icon" href="/icon.png" />
       </head>
       <body className="antialiased">
         {children}

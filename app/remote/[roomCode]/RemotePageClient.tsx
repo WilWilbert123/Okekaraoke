@@ -284,10 +284,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             {isInstallable && (
               <button
                 onClick={installApp}
-                className="px-2 py-1 rounded-md bg-white hover:bg-zinc-200 text-black text-[10px] font-extrabold flex items-center gap-1 active:scale-95 transition-all shadow-sm"
+                className="px-2.5 py-1 rounded-lg bg-teal-400 hover:bg-teal-300 text-black text-[11px] font-black flex items-center gap-1 active:scale-95 transition-all shadow-md shrink-0"
               >
-                <Download size={11} />
-                <span>INSTALL APP</span>
+                <Download size={12} />
+                <span>Install App</span>
               </button>
             )}
 

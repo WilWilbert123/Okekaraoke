@@ -211,20 +211,6 @@ export function SettingsModal({
             </div>
           </div>
 
-          {/* 4. App Shortcuts & Footer */}
-          {isInstallable && onInstallApp && (
-            <button
-              onClick={onInstallApp}
-              className="w-full py-2 px-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-200 text-[11px] font-bold flex items-center justify-between transition-all active:scale-95"
-            >
-              <div className="flex items-center gap-1.5">
-                <Smartphone size={14} className="text-zinc-300" />
-                <span>Install Mobile App</span>
-              </div>
-              <span className="text-[9px] bg-white text-black px-1.5 py-0.5 rounded-full font-extrabold">PWA</span>
-            </button>
-          )}
-
           <div className="text-center text-[10px] text-zinc-500 font-medium pt-0.5">
             Crafted by <span className="text-zinc-400">Wilbert Gamis</span>
           </div>

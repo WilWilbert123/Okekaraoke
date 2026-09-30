@@ -265,7 +265,7 @@ export default function LandingPage() {
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
               >
                 <Download size={14} className="text-indigo-600" />
-                <span>{isInstallable ? 'INSTALL OKEKARAOKE APP' : 'ADD TO HOME SCREEN / INSTALL APP'}</span>
+                <span>Install App</span>
               </button>
             </div>
           )}

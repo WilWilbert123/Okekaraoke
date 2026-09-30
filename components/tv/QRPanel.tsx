@@ -18,33 +18,36 @@ export function QRPanel({ roomCode, appUrl }: QRPanelProps) {
 
   return (
     <div
-      className="flex items-center gap-3 p-2 rounded-2xl shrink-0 transition-all"
+      className="flex items-center gap-3 p-2.5 rounded-2xl shrink-0 transition-all bg-zinc-950/85 border border-zinc-800 shadow-2xl"
       style={{
-        background: 'rgba(15, 15, 25, 0.75)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
       }}
     >
       <div
-        className="shrink-0 p-2 rounded-xl"
-        style={{ background: '#ffffff' }}
+        className="shrink-0 p-1.5 rounded-xl bg-white flex items-center justify-center shadow-md"
         aria-label={`QR code to join room ${roomCode}`}
       >
         <QRCodeSVG
           value={remoteUrl}
-          size={72}
+          size={62}
           level="H"
           bgColor="#ffffff"
-          fgColor="#0a0a12"
+          fgColor="#000000"
           includeMargin={false}
         />
       </div>
 
-      <div className="hidden sm:flex flex-col justify-center pr-2">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">SCAN TO REMOTE</span>
-        <span className="text-xs font-black text-indigo-300 tracking-wider font-mono">ROOM {roomCode}</span>
+      <div className="flex flex-col justify-center pr-2">
+        <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider">
+          SCAN TO REMOTE
+        </span>
+        <div className="flex items-center gap-1 mt-0.5">
+          <span className="text-[10px] font-bold text-zinc-500 font-mono">ROOM</span>
+          <span className="text-sm font-black text-teal-400 font-mono tracking-widest" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            {roomCode}
+          </span>
+        </div>
       </div>
     </div>
   );
