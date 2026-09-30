@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Award, Music2, Sparkles, ChevronRight, Play } from 'lucide-react';
+import { Music2, Sparkles, Play } from 'lucide-react';
 
 interface KaraokeScoreModalProps {
   completedSong: {
@@ -61,25 +61,48 @@ export default function KaraokeScoreModal({
   onCountdownComplete,
   onSkip,
 }: KaraokeScoreModalProps) {
-  const [targetScore] = useState(() => Math.floor(Math.random() * 13) + 88); // 88 to 100
+  // Deterministic realistic score seed based on song title & artist (88 - 99 range)
+  const [targetScore] = useState(() => {
+    const seedStr = `${completedSong.title}-${completedSong.artist}`;
+    let hash = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+      hash |= 0;
+    }
+    return 88 + (Math.abs(hash) % 12); // 88 to 99
+  });
+
+  const [phase, setPhase] = useState<'analyzing' | 'rolling' | 'revealed'>('analyzing');
   const [displayScore, setDisplayScore] = useState(0);
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(6);
   const hasFinishedRef = useRef(false);
 
-  // Score Rollup Animation
+  // Phase 1: Analyzing Vocals (1.2s suspense)
   useEffect(() => {
-    let start = 0;
-    const duration = 2000; // 2 seconds rollup
+    const analyzeTimer = setTimeout(() => {
+      setPhase('rolling');
+    }, 1200);
+
+    return () => clearTimeout(analyzeTimer);
+  }, []);
+
+  // Phase 2: Rapid Score Rollup Animation
+  useEffect(() => {
+    if (phase !== 'rolling') return;
+
+    let current = 40; // Start rollup from 40 for suspense!
+    const duration = 1600; // 1.6s rollup
     const stepTime = 30;
-    const increment = targetScore / (duration / stepTime);
+    const increment = (targetScore - 40) / (duration / stepTime);
 
     const timer = setInterval(() => {
-      start += increment;
-      if (start >= targetScore) {
+      current += increment;
+      if (current >= targetScore) {
         setDisplayScore(targetScore);
+        setPhase('revealed');
         clearInterval(timer);
 
-        // Play audio chime when score completes
+        // Play victory chime when score is revealed
         try {
           const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
           if (AudioCtx) {
@@ -101,15 +124,17 @@ export default function KaraokeScoreModal({
         } catch {}
 
       } else {
-        setDisplayScore(Math.floor(start));
+        setDisplayScore(Math.floor(current));
       }
     }, stepTime);
 
     return () => clearInterval(timer);
-  }, [targetScore]);
+  }, [phase, targetScore]);
 
-  // 5-Second Countdown Timer
+  // Phase 3: 6-Second Countdown Timer (starts when revealed)
   useEffect(() => {
+    if (phase !== 'revealed') return;
+
     const timer = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
@@ -125,19 +150,19 @@ export default function KaraokeScoreModal({
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [onCountdownComplete]);
+  }, [phase, onCountdownComplete]);
 
   const grade = getGradeInfo(targetScore);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 backdrop-blur-2xl animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-2xl animate-fadeIn">
       {/* Background glowing ambient radial */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-3xl animate-pulse" />
       </div>
 
       {/* Main Score Card Modal */}
-      <div className={`relative z-10 w-full max-w-2xl bg-slate-900/90 border border-slate-700/80 p-8 sm:p-10 rounded-3xl text-center text-white ${grade.glow} transition-all duration-500 flex flex-col items-center`}>
+      <div className={`relative z-10 w-full max-w-2xl bg-slate-900/90 border border-slate-700/80 p-8 sm:p-10 rounded-3xl text-center text-white ${phase === 'revealed' ? grade.glow : 'shadow-2xl'} transition-all duration-500 flex flex-col items-center`}>
         
         {/* Top Header Badge */}
         <div className="flex items-center justify-center gap-2 mb-4 px-4 py-1.5 rounded-full bg-slate-800/90 border border-slate-700 text-xs sm:text-sm font-bold tracking-widest text-slate-300 uppercase">
@@ -164,20 +189,43 @@ export default function KaraokeScoreModal({
           </p>
         </div>
 
-        {/* Big Animated Score Display */}
-        <div className="relative my-2 flex flex-col items-center justify-center">
-          <div className="text-7xl sm:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-slate-100 to-slate-400 drop-shadow-[0_10px_30px_rgba(255,255,255,0.3)]">
-            {displayScore}
-          </div>
-          <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-slate-400 mt-1">
-            SCORE / 100
-          </span>
+        {/* Big Animated Score Display / Vocal Analysis */}
+        <div className="relative my-4 min-h-[140px] flex flex-col items-center justify-center">
+          {phase === 'analyzing' ? (
+            <div className="flex flex-col items-center gap-3 py-4 animate-fadeIn">
+              <div className="flex items-center gap-1.5 h-10">
+                <span className="w-2 bg-indigo-500 h-6 rounded-full animate-pulse" />
+                <span className="w-2 bg-purple-500 h-10 rounded-full animate-bounce delay-100" />
+                <span className="w-2 bg-pink-500 h-8 rounded-full animate-pulse delay-200" />
+                <span className="w-2 bg-amber-400 h-10 rounded-full animate-bounce delay-300" />
+                <span className="w-2 bg-emerald-400 h-6 rounded-full animate-pulse delay-400" />
+              </div>
+              <p className="text-sm font-bold tracking-wider uppercase text-indigo-400 animate-pulse">
+                ANALYZING VOCAL ACCURACY &amp; PITCH...
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center animate-fadeIn">
+              <div className="text-7xl sm:text-9xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-slate-100 to-slate-400 drop-shadow-[0_10px_30px_rgba(255,255,255,0.4)]">
+                {displayScore}
+              </div>
+              <span className="text-xs sm:text-sm font-extrabold uppercase tracking-widest text-indigo-400 mt-2">
+                VOCAL PERFORMANCE SCORE
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Grade Banner */}
-        <div className={`mt-4 mb-8 px-6 py-2.5 rounded-2xl bg-gradient-to-r ${grade.badgeColor} border font-black text-lg sm:text-2xl tracking-wide shadow-lg uppercase animate-bounce`}>
-          {grade.title}
-        </div>
+        {phase === 'revealed' ? (
+          <div className={`mt-2 mb-8 px-6 py-2.5 rounded-2xl bg-gradient-to-r ${grade.badgeColor} border font-black text-lg sm:text-2xl tracking-wide shadow-lg uppercase animate-bounce`}>
+            {grade.title}
+          </div>
+        ) : (
+          <div className="mt-2 mb-8 px-6 py-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/60 font-bold text-sm text-slate-400 tracking-wider uppercase">
+            {phase === 'analyzing' ? 'CALCULATING GRADE...' : 'CALCULATING FINAL RESULT...'}
+          </div>
+        )}
 
         {/* Next Song Preview or Queue Finished */}
         <div className="w-full bg-slate-800/80 border border-slate-700/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
