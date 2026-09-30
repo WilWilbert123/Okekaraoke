@@ -16,13 +16,22 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();
 
-    // 1. Mark stale devices (last seen > 45s ago) as offline
+    // 1. Mark stale devices (last seen > 45s ago) as offline, and delete offline devices older than 2 hours
     const cutoff = new Date(Date.now() - 45000).toISOString();
+    const purgeCutoff = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+
     await supabase
       .from('devices')
       .update({ is_online: false })
       .lt('last_seen_at', cutoff)
       .eq('is_online', true);
+
+    // Auto-clean stale offline devices
+    await supabase
+      .from('devices')
+      .delete()
+      .lt('last_seen_at', purgeCutoff)
+      .eq('is_online', false);
 
     // 2. Count Active Rooms
     const { count: activeRooms } = await supabase
@@ -33,7 +42,8 @@ export async function GET(request: NextRequest) {
     // 3. Count Online Devices & Fetch connected devices
     const { data: onlineDevices } = await supabase
       .from('devices')
-      .select('id, instance_id, device_type, device_name, is_online, last_seen_at, city, country, ip_address, created_at, instances(room_code)')
+      .select('id, instance_id, device_type, device_name, is_online, last_seen_at, city, country, ip_address, created_at, instances!inner(room_code, status)')
+      .eq('instances.status', 'active')
       .order('last_seen_at', { ascending: false });
 
     // 4. Count Total Songs

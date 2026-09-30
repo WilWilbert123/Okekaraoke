@@ -317,17 +317,12 @@ export function YouTubePlayer({
       {!videoId && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-slate-950 text-white z-10">
           <div className="relative flex flex-col items-center text-center px-6 max-w-md">
-            {/* Ambient decorative glow ring */}
-            <div
-              className="w-24 h-24 rounded-full flex items-center justify-center mb-6 shadow-2xl"
-              style={{
-                background: 'radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, rgba(124, 58, 237, 0.1) 70%)',
-                border: '1px solid rgba(124, 58, 237, 0.4)',
-                boxShadow: '0 0 40px rgba(99, 102, 241, 0.2)',
-              }}
-            >
-              <span className="text-4xl animate-bounce">🎤</span>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/okekaraokelogo.png"
+              alt="OKEKARAOKE Logo"
+              className="w-28 h-28 md:w-36 md:h-36 object-contain mb-6 animate-bounce filter drop-shadow-[0_10px_25px_rgba(99,102,241,0.5)]"
+            />
 
             <p className="text-3xl font-black tracking-tight text-slate-100 mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               NO SONGS IN QUEUE
