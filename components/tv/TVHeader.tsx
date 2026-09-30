@@ -42,9 +42,7 @@ export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscree
           className="text-lg font-black tracking-tight"
           style={{ fontFamily: 'Space Grotesk, sans-serif' }}
         >
-          <span style={{ background: 'linear-gradient(135deg, #a78bfa, #6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-            OKE
-          </span>
+          <span className="text-teal-400">OKE</span>
           <span className="text-white">KARAOKE</span>
         </span>
       </div>
@@ -53,8 +51,8 @@ export function TVHeader({ roomCode, connectionStatus, onFullscreen, isFullscree
       <div
         className="flex items-center gap-2 px-4 py-1.5 rounded-full"
         style={{
-          background: 'rgba(99, 102, 241, 0.1)',
-          border: '1px solid rgba(99, 102, 241, 0.3)',
+          background: 'rgba(45, 212, 191, 0.1)',
+          border: '1px solid rgba(45, 212, 191, 0.3)',
         }}
       >
         <span className="text-xs font-bold text-slate-400 tracking-widest">ROOM</span>

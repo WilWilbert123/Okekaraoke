@@ -102,11 +102,11 @@ export function NameModal({ open, onConfirm }: NameModalProps) {
             className="w-full px-4 py-3 rounded-2xl text-white text-sm outline-none transition-all"
             style={{
               background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(99,102,241,0.35)',
-              caretColor: '#a78bfa',
+              border: '1px solid rgba(45,212,191,0.35)',
+              caretColor: '#2dd4bf',
             }}
-            onFocus={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.7)'; }}
-            onBlur={(e) => { e.target.style.borderColor = 'rgba(99,102,241,0.35)'; }}
+            onFocus={(e) => { e.target.style.borderColor = 'rgba(45,212,191,0.7)'; }}
+            onBlur={(e) => { e.target.style.borderColor = 'rgba(45,212,191,0.35)'; }}
           />
 
           {/* Suggested name chip */}
@@ -114,9 +114,9 @@ export function NameModal({ open, onConfirm }: NameModalProps) {
             onClick={() => setValue(suggested)}
             className="self-start flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all active:scale-95"
             style={{
-              background: 'rgba(99,102,241,0.1)',
-              border: '1px solid rgba(99,102,241,0.2)',
-              color: '#a78bfa',
+              background: 'rgba(45,212,191,0.1)',
+              border: '1px solid rgba(45,212,191,0.25)',
+              color: '#2dd4bf',
             }}
           >
             <Shuffle size={11} />

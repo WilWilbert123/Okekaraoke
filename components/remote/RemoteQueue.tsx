@@ -126,21 +126,21 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
 
       {/* Start Next Song Bar — shown when TV is stopped/idle but songs are waiting */}
       {!currentSong && queue.length > 0 && (
-        <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-2">
+        <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 mb-2">
           <div>
-            <p className="text-xs font-bold text-indigo-300">TV is currently stopped</p>
-            <p className="text-[11px] text-slate-400">{queue.length} song(s) waiting in queue</p>
+            <p className="text-xs font-bold text-teal-400">TV is currently stopped</p>
+            <p className="text-[11px] text-zinc-400">{queue.length} song(s) waiting in queue</p>
           </div>
           <button
             onClick={handlePlayNextSong}
             disabled={startingNext}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 active:scale-95 disabled:opacity-50 transition-all shadow-md"
+            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-zinc-200 text-black flex items-center gap-1.5 active:scale-95 disabled:opacity-50 transition-all shadow-md"
           >
             {startingNext ? (
-              <Loader2 size={12} className="animate-spin text-white" />
+              <Loader2 size={12} className="animate-spin text-black" />
             ) : (
               <>
-                <Play size={12} className="fill-white text-white" />
+                <Play size={12} className="fill-black text-black" />
                 <span>PLAY NEXT SONG</span>
               </>
             )}
@@ -218,7 +218,7 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
                 ? 'rgba(99, 102, 241, 0.08)'
                 : 'rgba(255, 255, 255, 0.02)',
               border: `1px solid ${isMyItem
-                ? 'rgba(99, 102, 241, 0.2)'
+                ? 'rgba(45, 212, 191, 0.25)'
                 : 'rgba(255, 255, 255, 0.05)'}`,
             }}
           >
@@ -226,8 +226,8 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
             <div
               className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
               style={{
-                background: isMyItem ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.04)',
-                color: isMyItem ? '#a78bfa' : '#475569',
+                background: isMyItem ? 'rgba(45, 212, 191, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                color: isMyItem ? '#2dd4bf' : '#475569',
               }}
             >
               {index + 1}

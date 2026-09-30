@@ -107,12 +107,12 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl text-white">
+      <div className="relative w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-6 shadow-2xl text-white">
         
         {/* Close button */}
         <button
           onClick={() => { stopCamera(); onClose(); }}
-          className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 text-slate-400 hover:text-white transition-colors"
+          className="absolute top-4 right-4 p-2 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
           aria-label="Close modal"
         >
           <X size={18} />
@@ -120,14 +120,14 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
 
         {/* Modal Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-teal-400">
             <QrCode size={20} />
           </div>
           <div>
             <h3 className="text-lg font-black text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               SCAN TV / SWITCH ROOM
             </h3>
-            <p className="text-xs text-slate-400">Connect your phone remote to a TV screen</p>
+            <p className="text-xs text-zinc-400">Connect your phone remote to a TV screen</p>
           </div>
         </div>
 
@@ -141,12 +141,12 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
         {/* Camera QR Scanner Area */}
         <div className="mb-5">
           {isScanning ? (
-            <div className="relative rounded-2xl overflow-hidden border-2 border-indigo-500 bg-black aspect-video flex items-center justify-center">
+            <div className="relative rounded-2xl overflow-hidden border-2 border-teal-500 bg-black aspect-video flex items-center justify-center">
               <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <div className="absolute inset-0 border-2 border-dashed border-indigo-400/80 m-8 rounded-xl pointer-events-none animate-pulse" />
+              <div className="absolute inset-0 border-2 border-dashed border-teal-400/80 m-8 rounded-xl pointer-events-none animate-pulse" />
               <button
                 onClick={stopCamera}
-                className="absolute bottom-3 px-3 py-1.5 rounded-lg bg-black/70 text-xs font-semibold text-white border border-slate-700"
+                className="absolute bottom-3 px-3 py-1.5 rounded-lg bg-black/80 text-xs font-semibold text-white border border-zinc-700"
               >
                 Cancel Scanner
               </button>
@@ -154,7 +154,7 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
           ) : (
             <button
               onClick={startCamera}
-              className="w-full py-4 px-4 rounded-2xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 flex items-center justify-center gap-2 text-sm font-bold text-indigo-400 transition-all active:scale-[0.99]"
+              className="w-full py-4 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center gap-2 text-sm font-bold text-teal-400 transition-all active:scale-[0.99]"
             >
               <Camera size={18} />
               <span>OPEN CAMERA QR SCANNER</span>
@@ -168,10 +168,10 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
             <button
               onClick={() => handleJoinCode(lastRoom)}
               disabled={joining}
-              className="w-full p-3 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 border border-indigo-700/50 flex items-center justify-between text-xs text-indigo-300 font-medium transition-all"
+              className="w-full p-3 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 flex items-center justify-between text-xs text-zinc-300 font-medium transition-all"
             >
               <div className="flex items-center gap-2">
-                <History size={14} className="text-indigo-400" />
+                <History size={14} className="text-teal-400" />
                 <span>Rejoin Last Room: <strong className="text-white font-bold tracking-wider">{lastRoom}</strong></span>
               </div>
               <ArrowRight size={14} />
@@ -188,25 +188,25 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
           className="space-y-3"
         >
           <div className="relative">
-            <Wifi size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Wifi size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
               type="text"
               value={newCode}
               onChange={(e) => setNewCode(e.target.value.toUpperCase())}
               placeholder="ENTER NEW ROOM CODE"
               maxLength={8}
-              className="w-full pl-10 pr-4 py-3.5 rounded-2xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500 font-bold tracking-widest text-center text-sm focus:border-indigo-500 outline-none"
+              className="w-full pl-10 pr-4 py-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 font-bold tracking-widest text-center text-sm focus:border-teal-500 outline-none"
             />
           </div>
 
           <button
             type="submit"
             disabled={joining || newCode.length < 4}
-            className="w-full py-3.5 px-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+            className="w-full py-3.5 px-4 rounded-2xl bg-white hover:bg-zinc-200 text-black font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-40"
           >
             {joining ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
                 <span>SWITCHING ROOM...</span>
               </>
             ) : (

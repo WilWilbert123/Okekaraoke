@@ -16,16 +16,17 @@ export function TVBanner({ bannerEnabled, bannerText, bannerImageUrl, bannerSpee
   if (!bannerEnabled) return null;
 
   const content = (
-    <div className="inline-flex items-center gap-4 px-12 shrink-0">
+    <div className="inline-flex items-center gap-4 px-24 md:px-36 shrink-0">
       {bannerImageUrl && (
+        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={bannerImageUrl}
           alt="Banner AD"
-          className="h-7 object-contain rounded shadow-sm shrink-0"
+          className="h-9 md:h-10 object-contain rounded-lg shadow-md shrink-0 bg-white/10 p-0.5"
         />
       )}
       {bannerText && (
-        <span className="text-xs font-bold text-slate-200 tracking-wide shrink-0">
+        <span className="text-sm font-extrabold text-white tracking-wider shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
           {bannerText}
         </span>
       )}
@@ -34,13 +35,11 @@ export function TVBanner({ bannerEnabled, bannerText, bannerImageUrl, bannerSpee
 
   return (
     <div
-      className="relative w-full overflow-hidden z-30 shrink-0 flex items-center"
+      className="relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800"
       style={{
-        height: bannerImageUrl ? '48px' : '36px',
-        background: 'rgba(15, 15, 25, 0.85)',
+        height: bannerImageUrl ? '56px' : '38px',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
-        borderBottom: '1px solid rgba(99, 102, 241, 0.3)',
       }}
     >
       {/* Running Ticker Content */}
@@ -51,6 +50,7 @@ export function TVBanner({ bannerEnabled, bannerText, bannerImageUrl, bannerSpee
             animation: `marquee ${bannerSpeed}s linear infinite`,
           }}
         >
+          {content}
           {content}
           {content}
           {content}

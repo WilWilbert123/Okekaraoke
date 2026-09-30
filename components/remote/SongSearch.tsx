@@ -47,13 +47,13 @@ const CATEGORY_FILTERS = [
 ];
 
 function renderSongTypeIcon(type?: string | null) {
-  if (!type) return <Mic size={11} className="text-indigo-400 shrink-0" />;
+  if (!type) return <Mic size={11} className="text-teal-400 shrink-0" />;
   const t = type.toLowerCase();
-  if (t.includes('piano')) return <Headphones size={11} className="text-indigo-400 shrink-0" />;
-  if (t.includes('acoustic') || t.includes('guitar')) return <Disc size={11} className="text-indigo-400 shrink-0" />;
-  if (t.includes('band') || t.includes('drum') || t.includes('rock')) return <Flame size={11} className="text-indigo-400 shrink-0" />;
-  if (t.includes('instrumental')) return <Volume2 size={11} className="text-indigo-400 shrink-0" />;
-  return <Mic size={11} className="text-indigo-400 shrink-0" />;
+  if (t.includes('piano')) return <Headphones size={11} className="text-teal-400 shrink-0" />;
+  if (t.includes('acoustic') || t.includes('guitar')) return <Disc size={11} className="text-teal-400 shrink-0" />;
+  if (t.includes('band') || t.includes('drum') || t.includes('rock')) return <Flame size={11} className="text-teal-400 shrink-0" />;
+  if (t.includes('instrumental')) return <Volume2 size={11} className="text-teal-400 shrink-0" />;
+  return <Mic size={11} className="text-teal-400 shrink-0" />;
 }
 
 export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongSearchProps) {
@@ -228,12 +228,13 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${isActive
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                    : 'bg-slate-800/80 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
+                  isActive
+                    ? 'bg-white text-black font-extrabold shadow'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
+                }`}
               >
-                <IconComponent size={13} className={isActive ? 'text-white' : 'text-slate-400'} />
+                <IconComponent size={13} className={isActive ? 'text-black' : 'text-zinc-400'} />
                 <span>{filter.label}</span>
               </button>
             );
@@ -245,8 +246,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
       <div className="flex-1 overflow-y-auto px-4 pb-4">
         {/* Header label */}
         <div className="flex items-center justify-between py-2 mb-1">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-
+          <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
             {searched
               ? `Search Results (${filteredList.length})`
               : activeFilter !== 'all'
@@ -254,25 +254,25 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                 : `Available Karaoke Catalog (${filteredList.length})`}
           </span>
           {!searched && catalog.length > 0 && (
-            <span className="text-[10px] text-indigo-400 font-semibold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20 flex items-center gap-1">
-              <Mic size={10} className="text-indigo-400" />
+            <span className="text-[10px] text-teal-400 font-semibold bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20 flex items-center gap-1">
+              <Mic size={10} className="text-teal-400" />
               <span>Ready to Reserve</span>
             </span>
           )}
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-12 text-slate-400">
-            <Loader2 size={18} className="animate-spin text-indigo-400" />
+          <div className="flex items-center justify-center gap-2 py-12 text-zinc-400">
+            <Loader2 size={18} className="animate-spin text-teal-400" />
             <span className="text-sm">Loading songs...</span>
           </div>
         )}
 
         {!loading && filteredList.length === 0 && (
           <div className="text-center py-12 px-4">
-            <Music2 size={40} className="text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-400 font-medium">NO KARAOKE SONGS FOUND</p>
-            <p className="text-xs text-slate-500 mt-1">
+            <Music2 size={40} className="text-zinc-700 mx-auto mb-3" />
+            <p className="text-zinc-400 font-medium">NO KARAOKE SONGS FOUND</p>
+            <p className="text-xs text-zinc-500 mt-1">
               {searched
                 ? 'Try searching with different keywords or artist names'
                 : 'No songs match this category filter'}
@@ -287,35 +287,31 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
               return (
                 <div
                   key={song.id}
-                  className="flex items-center gap-3 p-3 rounded-xl transition-all"
+                  className="flex items-center gap-3 p-3 rounded-xl transition-all bg-zinc-900 border border-zinc-800"
                   style={{
-                    background:
+                    borderColor:
                       songStatus.status === 'success'
-                        ? 'rgba(34, 197, 94, 0.06)'
-                        : 'var(--color-surface)',
-                    border: `1px solid ${songStatus.status === 'success'
-                        ? 'rgba(34, 197, 94, 0.2)'
-                        : 'var(--color-border-subtle)'
-                      }`,
+                        ? 'rgba(34, 197, 94, 0.4)'
+                        : 'rgba(255, 255, 255, 0.08)',
                   }}
                 >
                   {/* Song Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm truncate">{song.title}</p>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">{song.artist}</p>
+                    <p className="text-xs text-zinc-400 truncate mt-0.5">{song.artist}</p>
 
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-200 border border-zinc-700 flex items-center gap-1 shrink-0">
                         {renderSongTypeIcon(song.song_type)}
                         <span>{song.song_type || 'Karaoke'}</span>
                       </span>
 
                       {song.code && song.code !== 'YT' && (
-                        <span className="text-xs text-slate-400 font-mono">#{song.code}</span>
+                        <span className="text-xs text-zinc-400 font-mono">#{song.code}</span>
                       )}
 
                       {song.category && (song.category as string) !== 'YouTube' && (
-                        <span className="text-xs text-slate-400">· {song.category}</span>
+                        <span className="text-xs text-zinc-400">· {song.category}</span>
                       )}
                     </div>
                   </div>
@@ -335,25 +331,28 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                     id={`reserve-btn-${song.id}`}
                     onClick={() => handleReserve(song)}
                     disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-                    className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50"
-                    style={{
-                      background:
-                        songStatus.status === 'success'
-                          ? 'rgba(34, 197, 94, 0.15)'
-                          : 'rgba(99, 102, 241, 0.15)',
-                      border: `1px solid ${songStatus.status === 'success'
-                          ? 'rgba(34, 197, 94, 0.3)'
-                          : 'rgba(99, 102, 241, 0.3)'
-                        }`,
-                    }}
+                    className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${
+                      songStatus.status === 'success'
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                        : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
+                    }`}
                     aria-label={`Reserve ${song.title}`}
                   >
                     {songStatus.status === 'reserving' ? (
-                      <Loader2 size={14} className="text-indigo-400 animate-spin" />
+                      <>
+                        <Loader2 size={13} className="animate-spin text-black" />
+                        <span>...</span>
+                      </>
                     ) : songStatus.status === 'success' ? (
-                      <CheckCircle size={14} className="text-green-400" />
+                      <>
+                        <CheckCircle size={13} className="text-green-400" />
+                        <span>ADDED</span>
+                      </>
                     ) : (
-                      <Plus size={14} className="text-indigo-400" />
+                      <>
+                        <Plus size={14} className="stroke-[3]" />
+                        <span>RESERVE</span>
+                      </>
                     )}
                   </button>
                 </div>
