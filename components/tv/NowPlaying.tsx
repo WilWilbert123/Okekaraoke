@@ -20,7 +20,7 @@ export function NowPlaying({ currentSong }: NowPlayingProps) {
   let displayTitle = currentSong.song.title;
   let displayArtist = currentSong.song.artist;
 
-  // Auto-swap check if artist and title were reversed in legacy database entries
+
   if (
     displayTitle &&
     displayArtist &&
