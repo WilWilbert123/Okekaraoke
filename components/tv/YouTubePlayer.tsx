@@ -161,176 +161,53 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
   useEffect(() => { currentQueueItemIdRef.current = queueItemId; }, [queueItemId]);
 
-  const initPlayer = useCallback(async () => {
-    if (!containerRef.current) return;
-
-    await loadYouTubeAPI();
-
-    if (playerRef.current) return; // Already initialized
-
-    const playerId = `yt-player-${Date.now()}`;
-    containerRef.current.id = playerId;
-
-    playerRef.current = new window.YT.Player(playerId, {
-      width: '100%',
-      height: '100%',
-      videoId: videoId ?? undefined,
-      playerVars: {
-        autoplay: autoplay ? 1 : 0,
-        mute: 1,
-        controls: 0,
-        rel: 0,
-        modestbranding: 1,
-        fs: 0,
-        playsinline: 1,
-        enablejsapi: 1,
-        origin: window.location.origin,
-      },
-      events: {
-        onReady: () => {
-          setPlayerReady(true);
-          if (videoId) {
-            currentVideoIdRef.current = videoId;
-            currentQueueItemIdRef.current = queueItemId;
-            hasStartedPlayingRef.current = false;
-            try {
-              playerRef.current?.mute();
-              playerRef.current?.loadVideoById(videoId);
-              playerRef.current?.playVideo();
-            } catch (e) {
-              console.warn('onReady load video error:', e);
-            }
-          }
-        },
-        onStateChange: (event) => {
-          const YTState = window.YT.PlayerState;
-
-          if (event.data === YTState.PLAYING) {
-            hasStartedPlayingRef.current = true;
-            try {
-              playerRef.current?.unMute();
-            } catch {}
-          }
-
-          let playerStatus: PlayerState['status'] = 'idle';
-          switch (event.data) {
-            case YTState.PLAYING:
-              playerStatus = 'playing';
-              break;
-            case YTState.PAUSED:
-              playerStatus = 'paused';
-              break;
-            case YTState.BUFFERING:
-              playerStatus = 'buffering';
-              break;
-            case YTState.ENDED:
-              playerStatus = 'ended';
-              const targetId = currentQueueItemIdRef.current || queueItemId;
-              if (targetId) {
-                onEndedRef.current(targetId);
-              }
-              break;
-            case -1:
-              playerStatus = 'loading';
-              break;
-          }
-
-          onStateChangeRef.current?.({
-            status: playerStatus,
-            video_id: currentVideoIdRef.current,
-            queue_item_id: currentQueueItemIdRef.current,
-          });
-        },
-        onError: (event) => {
-          if (event.data === 101 || event.data === 150) {
-            setEmbedBlocked(true);
-          }
-          onStateChangeRef.current?.({
-            status: 'error',
-            video_id: currentVideoIdRef.current,
-            queue_item_id: currentQueueItemIdRef.current,
-          });
-        },
-      },
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Global user interaction listener to unmute whenever TV page is clicked or key pressed
-  useEffect(() => {
-    const handleGesture = () => {
-      if (playerRef.current) {
-        try {
-          playerRef.current.unMute();
-          const state = playerRef.current.getPlayerState?.();
-          if (state === 2 || state === 5 || state === -1) {
-            playerRef.current.playVideo();
-          }
-        } catch {}
-      }
-    };
-    window.addEventListener('pointerdown', handleGesture, { passive: true });
-    window.addEventListener('keydown', handleGesture, { passive: true });
-    return () => {
-      window.removeEventListener('pointerdown', handleGesture);
-      window.removeEventListener('keydown', handleGesture);
-    };
-  }, []);
-
-  // Load/Recreate player whenever videoId changes
+  // Load/Recreate/Update player whenever videoId changes
   useEffect(() => {
     let isCancelled = false;
 
     const syncPlayer = async () => {
-      if (videoId) {
+      if (!videoId) {
+        currentVideoIdRef.current = null;
+        currentQueueItemIdRef.current = null;
+        hasStartedPlayingRef.current = false;
+        if (playerRef.current) {
+          try { playerRef.current.stopVideo(); } catch {}
+        }
+        return;
+      }
+
+      await loadYouTubeAPI();
+      if (isCancelled) return;
+
+      setEmbedBlocked(false);
+
+      // If player already exists, load the new videoId smoothly
+      if (playerRef.current && typeof playerRef.current.loadVideoById === 'function') {
         if (currentVideoIdRef.current !== videoId) {
           currentVideoIdRef.current = videoId;
           currentQueueItemIdRef.current = queueItemId;
           hasStartedPlayingRef.current = false;
-          setEmbedBlocked(false);
-          return;
+          try {
+            playerRef.current.mute();
+            playerRef.current.loadVideoById(videoId);
+            playerRef.current.playVideo();
+          } catch (e) {
+            console.warn('Error loading video by ID:', e);
+          }
+        } else {
+          // Same videoId, ensure it's playing
+          try {
+            playerRef.current.mute();
+            playerRef.current.playVideo();
+          } catch {}
         }
-
-        await loadYouTubeAPI();
-        if (isCancelled) return;
-
-      // If player already exists for THIS video, just ensure it's playing
-      if (playerRef.current && currentVideoIdRef.current === videoId) {
-        try {
-          playerRef.current.mute();
-          playerRef.current.playVideo();
-
-          // Retry un-mute & play after 400ms if player hasn't started playing yet
-          setTimeout(() => {
-            if (playerRef.current && !hasStartedPlayingRef.current) {
-              try {
-                playerRef.current.playVideo();
-                playerRef.current.unMute();
-              } catch {}
-            }
-          }, 400);
-        } catch (e) {
-          console.warn('Error playing video:', e);
-        }
-      }
-    } else {
-      if (currentVideoIdRef.current !== null) {
-        currentVideoIdRef.current = null;
-        currentQueueItemIdRef.current = null;
-        hasStartedPlayingRef.current = false;
-        try {
-          playerRef.current?.stopVideo();
-        } catch {}
         return;
       }
 
-      // Destroy previous player instance to ensure clean native iframe creation
-      if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch {}
-        playerRef.current = null;
-      }
-
+      // Player does not exist yet — Create new native YT.Player instance
       currentVideoIdRef.current = videoId;
-      setEmbedBlocked(false);
+      currentQueueItemIdRef.current = queueItemId;
+      hasStartedPlayingRef.current = false;
       setPlayerReady(false);
 
       if (!containerRef.current) return;
@@ -347,7 +224,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       playerRef.current = new window.YT.Player(playerId, {
         width: '100%',
         height: '100%',
-        videoId: videoId || undefined,
+        videoId: videoId,
         playerVars: {
           autoplay: autoplay ? 1 : 0,
           mute: 1,
@@ -380,6 +257,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             switch (event.data) {
               case YTState.PLAYING:
                 playerStatus = 'playing';
+                hasStartedPlayingRef.current = true;
                 try {
                   playerRef.current?.unMute();
                 } catch {}
@@ -388,12 +266,6 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.CUED:
               case -1: // UNSTARTED
                 playerStatus = 'paused';
-                if (currentVideoIdRef.current) {
-                  try {
-                    playerRef.current?.mute();
-                    playerRef.current?.playVideo();
-                  } catch {}
-                }
                 break;
               case YTState.BUFFERING:
                 playerStatus = 'buffering';
@@ -426,10 +298,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           },
         },
       });
-    }
-  };
+    };
 
-  syncPlayer();
+    syncPlayer();
 
     return () => {
       isCancelled = true;
