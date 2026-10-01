@@ -59,26 +59,44 @@ const readyCallbacks: Array<() => void> = [];
 
 function loadYouTubeAPI(): Promise<void> {
   return new Promise((resolve) => {
-    if (apiReady && window.YT?.Player) {
+    if (typeof window !== 'undefined' && window.YT?.Player) {
+      apiReady = true;
       resolve();
       return;
     }
 
     readyCallbacks.push(resolve);
 
-    if (!apiLoading) {
-      apiLoading = true;
-
-      window.onYouTubeIframeAPIReady = () => {
+    const checkReady = () => {
+      if (typeof window !== 'undefined' && window.YT?.Player) {
         apiReady = true;
         readyCallbacks.forEach((cb) => cb());
         readyCallbacks.length = 0;
+      } else {
+        setTimeout(checkReady, 50);
+      }
+    };
+
+    if (!apiLoading) {
+      apiLoading = true;
+
+      const prevOnReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (prevOnReady) {
+          try { prevOnReady(); } catch {}
+        }
+        checkReady();
       };
 
-      const script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
-      script.async = true;
-      document.head.appendChild(script);
+      const existingScript = document.querySelector('script[src*="youtube.com/iframe_api"]');
+      if (!existingScript) {
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        script.async = true;
+        document.head.appendChild(script);
+      } else {
+        checkReady();
+      }
     }
   });
 }
@@ -323,6 +341,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       mountNode.style.width = '100%';
       mountNode.style.height = '100%';
       containerRef.current.appendChild(mountNode);
+
+      if (!window.YT || !window.YT.Player) return;
 
       playerRef.current = new window.YT.Player(playerId, {
         width: '100%',
