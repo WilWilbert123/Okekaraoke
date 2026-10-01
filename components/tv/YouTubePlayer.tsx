@@ -191,6 +191,14 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             playerRef.current.mute();
             playerRef.current.loadVideoById(videoId);
             playerRef.current.playVideo();
+            setTimeout(() => {
+              try {
+                if (!hasStartedPlayingRef.current && playerRef.current) {
+                  playerRef.current.mute();
+                  playerRef.current.playVideo();
+                }
+              } catch {}
+            }, 250);
           } catch (e) {
             console.warn('Error loading video by ID:', e);
           }
@@ -266,9 +274,21 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.CUED:
               case -1: // UNSTARTED
                 playerStatus = 'paused';
+                if (!hasStartedPlayingRef.current) {
+                  try {
+                    event.target.mute();
+                    event.target.playVideo();
+                  } catch {}
+                }
                 break;
               case YTState.BUFFERING:
                 playerStatus = 'buffering';
+                if (!hasStartedPlayingRef.current) {
+                  try {
+                    event.target.mute();
+                    event.target.playVideo();
+                  } catch {}
+                }
                 break;
               case YTState.ENDED:
                 playerStatus = 'ended';
@@ -355,7 +375,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           }
         }
       } catch {}
-    }, 500);
+    }, 250);
 
     return () => clearInterval(interval);
   }, [videoId, queueItemId, playerReady]);
