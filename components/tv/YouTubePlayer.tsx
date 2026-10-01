@@ -262,17 +262,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   useEffect(() => {
     let isCancelled = false;
 
-    if (videoId) {
-      if (currentVideoIdRef.current !== videoId) {
-        currentVideoIdRef.current = videoId;
-        currentQueueItemIdRef.current = queueItemId;
-        hasStartedPlayingRef.current = false;
-        setEmbedBlocked(false);
-        return;
-      }
+    const syncPlayer = async () => {
+      if (videoId) {
+        if (currentVideoIdRef.current !== videoId) {
+          currentVideoIdRef.current = videoId;
+          currentQueueItemIdRef.current = queueItemId;
+          hasStartedPlayingRef.current = false;
+          setEmbedBlocked(false);
+          return;
+        }
 
-      await loadYouTubeAPI();
-      if (isCancelled) return;
+        await loadYouTubeAPI();
+        if (isCancelled) return;
 
       // If player already exists for THIS video, just ensure it's playing
       if (playerRef.current && currentVideoIdRef.current === videoId) {
@@ -299,7 +300,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         currentQueueItemIdRef.current = null;
         hasStartedPlayingRef.current = false;
         try {
-          playerRef.current.stopVideo();
+          playerRef.current?.stopVideo();
         } catch {}
         return;
       }
@@ -326,7 +327,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       playerRef.current = new window.YT.Player(playerId, {
         width: '100%',
         height: '100%',
-        videoId: videoId,
+        videoId: videoId || undefined,
         playerVars: {
           autoplay: autoplay ? 1 : 0,
           mute: 1,
@@ -406,8 +407,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         },
       });
     }
+  };
 
-    syncPlayer();
+  syncPlayer();
 
     return () => {
       isCancelled = true;
