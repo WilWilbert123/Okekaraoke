@@ -418,6 +418,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             reservations={myReservations}
             sessionId={sessionId}
             roomCode={roomCode}
+            guestName={guestName}
             onCancelled={() => fetchState()}
             allowCancel={instanceState?.settings.allow_cancel ?? true}
           />

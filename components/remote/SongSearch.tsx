@@ -22,8 +22,10 @@ import {
   Headphones,
   Disc,
   Volume2,
+  Star,
 } from 'lucide-react';
 import type { Song } from '@/lib/types';
+import { getFavoriteSongs, isSongFavorited, toggleFavoriteSong } from '@/lib/utils/favorites';
 
 interface SongSearchProps {
   roomCode: string;
@@ -64,7 +66,15 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
   const [loading, setLoading] = useState(true);
   const [searched, setSearched] = useState(false);
   const [reserveStatus, setReserveStatus] = useState<Record<string, { status: 'idle' | 'reserving' | 'success' | 'error'; message?: string }>>({});
+  const [favTrigger, setFavTrigger] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync favorites live across components
+  useEffect(() => {
+    const handleFavUpdate = () => setFavTrigger((prev) => prev + 1);
+    window.addEventListener('okekaraoke_favorites_updated', handleFavUpdate);
+    return () => window.removeEventListener('okekaraoke_favorites_updated', handleFavUpdate);
+  }, []);
 
   // Fetch initial database catalog on mount
   const fetchCatalog = useCallback(async () => {
@@ -174,7 +184,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
   const [micError, setMicError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Microphone Voice Search Handler (Web Speech API with iOS & Android permission support)
+  // Microphone Voice Search Handler
   const startVoiceSearch = useCallback(() => {
     setMicError(null);
     if (typeof window === 'undefined') return;
@@ -232,7 +242,6 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
         setIsListening(false);
       };
 
-      // Request browser audio permission first if available
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ audio: true })
           .then(() => {
@@ -334,7 +343,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
           </div>
         </div>
 
-        {/* Mic Error / Permission Toast Banner */}
+        {/* Mic Error Banner */}
         {micError && (
           <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs flex items-center gap-2 animate-fadeIn">
             <AlertCircle size={14} className="text-red-400 shrink-0" />
@@ -342,7 +351,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
           </div>
         )}
 
-        {/* Quick Category Filter Pills with Lucide Icons */}
+        {/* Category Pills */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {CATEGORY_FILTERS.map((filter) => {
             const isActive = activeFilter === filter.id;
@@ -375,7 +384,6 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                 ? `${activeFilter.toUpperCase()} KARAOKE (${filteredList.length})`
                 : `Available Karaoke (${filteredList.length})`}
           </span>
-
         </div>
 
         {loading && (
@@ -401,6 +409,8 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
           <div className="space-y-2">
             {filteredList.map((song) => {
               const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
+              const isFav = isSongFavorited(song);
+
               return (
                 <div
                   key={song.id}
@@ -412,6 +422,23 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                         : 'rgba(255, 255, 255, 0.08)',
                   }}
                 >
+                  {/* Star Favorite Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleFavoriteSong(song);
+                      setFavTrigger((prev) => prev + 1);
+                    }}
+                    className="p-1.5 rounded-lg transition-all active:scale-90 hover:bg-zinc-800 shrink-0"
+                    title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={isFav ? `Remove ${song.title} from favorites` : `Add ${song.title} to favorites`}
+                  >
+                    <Star
+                      size={18}
+                      className={isFav ? 'fill-yellow-400 text-yellow-400 drop-shadow' : 'text-zinc-500 hover:text-yellow-400'}
+                    />
+                  </button>
+
                   {/* Song Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-white text-sm truncate">{song.title}</p>
@@ -480,3 +507,4 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     </div>
   );
 }
+

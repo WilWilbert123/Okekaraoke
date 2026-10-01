@@ -341,9 +341,6 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
             <Send size={15} className="text-black" />
           </button>
         </div>
-        <p className="text-[10px] text-zinc-500 mt-1.5 text-center">
-          Only users in this room can see messages
-        </p>
       </div>
 
       {/* Online Users Modal */}
