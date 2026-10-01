@@ -54,10 +54,10 @@ export async function DELETE(request: NextRequest) {
         .update({ status: 'closed', updated_at: new Date().toISOString() })
         .in('id', idleIds);
 
-      // 5. Mark devices as offline
+      // 5. Delete all device records associated with terminated idle rooms
       await supabase
         .from('devices')
-        .update({ is_online: false })
+        .delete()
         .in('instance_id', idleIds);
 
       // Broadcast kill event
@@ -112,10 +112,10 @@ export async function DELETE(request: NextRequest) {
       console.error('Failed to update instance status to closed:', updateError);
     }
 
-    // 4. Mark all connected devices offline for this room
+    // 4. Delete all device records associated with this room
     await supabase
       .from('devices')
-      .update({ is_online: false })
+      .delete()
       .eq('instance_id', instance.id);
 
     // 5. Broadcast kill signal

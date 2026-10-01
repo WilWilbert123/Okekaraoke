@@ -33,6 +33,20 @@ export async function GET(request: NextRequest) {
       .lt('last_seen_at', purgeCutoff)
       .eq('is_online', false);
 
+    // Auto-clean devices belonging to closed/terminated rooms
+    const { data: closedInstances } = await supabase
+      .from('instances')
+      .select('id')
+      .eq('status', 'closed');
+
+    if (closedInstances && closedInstances.length > 0) {
+      const closedIds = closedInstances.map((i) => i.id);
+      await supabase
+        .from('devices')
+        .delete()
+        .in('instance_id', closedIds);
+    }
+
     // 2. Count Active Rooms
     const { count: activeRooms } = await supabase
       .from('instances')
