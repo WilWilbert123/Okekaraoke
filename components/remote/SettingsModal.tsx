@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, X, Coffee, MessageSquare, Send, CheckCircle, ExternalLink, User } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -27,12 +27,19 @@ export function SettingsModal({
   const [editingName, setEditingName] = useState(guestName);
   const [nameSaved, setNameSaved] = useState(false);
 
+  // Sync editingName when guestName prop changes or modal opens
+  useEffect(() => {
+    setEditingName(guestName);
+  }, [guestName, open]);
+
   if (!open) return null;
 
   const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedback.trim()) return;
     setSending(true);
+
+    const displayName = guestName?.trim() || editingName?.trim() || 'Anonymous';
 
     try {
       await fetch('/api/feedback', {
@@ -41,7 +48,7 @@ export function SettingsModal({
         body: JSON.stringify({
           category: feedbackCategory,
           message: feedback.trim(),
-          guest_name: guestName,
+          guest_name: displayName,
           room_code: roomCode,
         }),
       });
@@ -162,6 +169,10 @@ export function SettingsModal({
                   rows={2}
                   className="w-full p-2 rounded-[8px] bg-zinc-950 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-teal-500 transition-all resize-none"
                 />
+
+                <div className="flex items-center justify-between text-[10px] text-zinc-400 px-0.5">
+                  <span>Sending as: <strong className="text-teal-400">{guestName || editingName || 'Anonymous'}</strong></span>
+                </div>
 
                 <button
                   type="submit"
