@@ -36,6 +36,8 @@ import {
   Pin,
   Layout,
   Sparkles,
+  Database,
+  FileText,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -109,7 +111,7 @@ interface FeedbackItem {
   created_at: string;
 }
 
-type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks';
+type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks' | 'logs';
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 function MetricCard({
@@ -709,6 +711,7 @@ function BannerTab({
 function AdminShoutoutMonitor() {
   const [shoutouts, setShoutouts] = useState<Array<{ id: string; room_code: string; guest_name: string; message: string; created_at?: string; sent_at?: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   const fetchShoutouts = useCallback(async () => {
     try {
@@ -725,6 +728,28 @@ function AdminShoutoutMonitor() {
       setLoading(false);
     }
   }, []);
+
+  const handleDeleteShoutout = async (id: string) => {
+    setShoutouts((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await fetch(`/api/admin/shoutouts?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error deleting shoutout:', e);
+    }
+  };
+
+  const handleClearAllShoutouts = async () => {
+    if (!window.confirm('Are you sure you want to delete ALL shoutouts from Supabase?')) return;
+    setClearing(true);
+    setShoutouts([]);
+    try {
+      await fetch('/api/admin/shoutouts?all=true', { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error clearing all shoutouts:', e);
+    } finally {
+      setClearing(false);
+    }
+  };
 
   useEffect(() => {
     fetchShoutouts();
@@ -743,14 +768,27 @@ function AdminShoutoutMonitor() {
             <p className="text-[10px] text-slate-400">Real-time broadcast log across all active TV rooms</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={fetchShoutouts}
-          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-          <span>Refresh</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchShoutouts}
+            className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+          {shoutouts.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAllShoutouts}
+              disabled={clearing}
+              className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20 transition-all text-[11px] font-bold flex items-center gap-1"
+            >
+              <Trash2 size={12} />
+              <span>{clearing ? 'Clearing...' : 'Clear All Shoutouts'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {shoutouts.length > 0 ? (
@@ -767,9 +805,19 @@ function AdminShoutoutMonitor() {
                 <span className="font-bold text-teal-300 shrink-0">{so.guest_name}:</span>
                 <span className="text-zinc-200 truncate font-medium">"{so.message}"</span>
               </div>
-              <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                {so.created_at ? new Date(so.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {so.created_at ? new Date(so.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteShoutout(so.id)}
+                  className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                  title="Delete shoutout"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -1419,6 +1467,241 @@ function FeedbacksTab() {
   );
 }
 
+// ─── Panel: System Logs & Supabase Table Manager ────────────────────────────
+function SystemLogsTab() {
+  const [logs, setLogs] = useState<Array<{
+    id: string;
+    room_code: string;
+    action: string;
+    guest_session_id: string;
+    metadata?: any;
+    created_at: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [purgingTable, setPurgingTable] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/logs');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setLogs(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching reservation logs:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleDeleteSingleLog = async (id: string) => {
+    setLogs((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await fetch(`/api/admin/logs?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error deleting log item:', e);
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all reservation logs?')) return;
+    setLogs([]);
+    try {
+      await fetch('/api/admin/logs?all=true', { method: 'DELETE' });
+      setToastMessage('Reservation audit logs cleared successfully!');
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (e) {
+      console.error('Error clearing reservation logs:', e);
+    }
+  };
+
+  const handlePurgeTable = async (tableName: string, label: string) => {
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to PURGE ALL DATA from table '${label}' (${tableName}) in Supabase? This action cannot be undone.`)) return;
+    setPurgingTable(tableName);
+    try {
+      const res = await fetch('/api/admin/tables/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: tableName }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setToastMessage(`Successfully cleared table '${label}'!`);
+        if (tableName === 'reservation_logs') setLogs([]);
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(`Failed to clear table: ${json.error?.message || 'Unknown error'}`);
+      }
+    } catch (e) {
+      console.error('Error purging table:', e);
+      alert('Network error while clearing table.');
+    } finally {
+      setPurgingTable(null);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
+
+  const TABLES_TO_MANAGE = [
+    { id: 'reservation_logs', name: 'Reservation Audit Logs', desc: 'System log of song reservations, skips, and queue actions', icon: FileText },
+    { id: 'room_shoutouts', name: 'Live TV Shoutouts', desc: 'Real-time room shoutouts sent from remote phones', icon: Megaphone },
+    { id: 'room_chats', name: 'Room Guest Chats', desc: 'Guest chat messages sent in TV room channels', icon: MessageSquare },
+    { id: 'feedbacks', name: 'Feedback & Bug Reports', desc: 'User feedback, bug reports, and song requests', icon: AlertTriangle },
+    { id: 'queue_items', name: 'Active Song Queues', desc: 'Current song reservation queues across all active rooms', icon: Music2 },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+          <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Supabase Table Maintenance Purge Tools */}
+      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database size={18} className="text-indigo-400" />
+            <div>
+              <h2 className="text-sm font-bold text-white">Supabase Database Tables Manager</h2>
+              <p className="text-xs text-slate-400">Directly clear database tables from the admin backend</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+          {TABLES_TO_MANAGE.map((item) => {
+            const IconComp = item.icon;
+            const isPurging = purgingTable === item.id;
+            return (
+              <div
+                key={item.id}
+                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-3"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+                    <IconComp size={15} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white">{item.name}</h3>
+                    <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{item.desc}</p>
+                    <span className="text-[9px] font-mono text-slate-500 mt-1 inline-block">Table: {item.id}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handlePurgeTable(item.id, item.name)}
+                  disabled={isPurging}
+                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Trash2 size={12} className={isPurging ? 'animate-spin' : ''} />
+                  <span>{isPurging ? 'Clearing Table...' : `Clear ${item.name}`}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Live Reservation Logs Table Monitor */}
+      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText size={18} className="text-indigo-400" />
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>Reservation Audit Logs (reservation_logs)</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </h2>
+              <p className="text-xs text-slate-400">Live reservation history & activity events ({logs.length} logs)</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={fetchLogs}
+              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-xs font-bold flex items-center gap-1"
+            >
+              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
+
+            {logs.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllLogs}
+                className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold flex items-center gap-1 transition-all"
+              >
+                <Trash2 size={12} />
+                <span>Clear Audit Logs</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {logs.length > 0 ? (
+          <div className="max-h-[380px] overflow-y-auto custom-scrollbar space-y-2 pr-1">
+            {logs.map((log) => (
+              <div
+                key={log.id}
+                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      Room: {log.room_code}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-teal-500/10 text-teal-300 border border-teal-500/20">
+                      {log.action}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {new Date(log.created_at).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-slate-300 text-xs font-mono truncate">
+                    <span className="text-slate-500 text-[10px]">Session:</span>
+                    <span className="truncate max-w-[200px]">{log.guest_session_id}</span>
+                    {log.metadata?.title && (
+                      <span className="text-indigo-300 font-bold truncate">
+                        — "{log.metadata.title}"
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSingleLog(log.id)}
+                  className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                  title="Delete log item"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 italic text-center py-6 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
+            No reservation audit logs stored yet.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -1569,6 +1852,7 @@ export default function AdminDashboardPage() {
     { id: 'banner', label: 'Announcement', icon: Radio },
     { id: 'songs', label: 'Song Catalog', icon: Music2 },
     { id: 'feedbacks', label: 'Feedbacks & Reports', icon: MessageSquare },
+    { id: 'logs', label: 'System Logs & Tables', icon: Database },
   ];
 
   return (
@@ -1683,6 +1967,7 @@ export default function AdminDashboardPage() {
           <SongsTab songs={songs} totalCount={totalSongsCount} onRefresh={fetchData} />
         )}
         {activeTab === 'feedbacks' && <FeedbacksTab />}
+        {activeTab === 'logs' && <SystemLogsTab />}
       </div>
     </div>
   );

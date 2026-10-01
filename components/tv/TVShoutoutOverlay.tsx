@@ -44,13 +44,13 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
   if (activeList.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden flex flex-col items-center justify-end pb-8 px-4">
+    <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden">
       {activeList.map((item) => (
         <div
           key={item.id}
-          className="animate-shoutout-float pointer-events-auto flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/80 border border-teal-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-white mb-2"
+          className="animate-shoutout-float pointer-events-auto absolute bottom-6 left-1/2 flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/75 backdrop-blur-md shadow-[0_8px_25px_rgba(0,0,0,0.6)] text-white"
         >
-          <div className="w-6 h-6 rounded-full bg-teal-500/20 border border-teal-400/50 flex items-center justify-center text-teal-300 shrink-0">
+          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-teal-300 shrink-0">
             <Megaphone size={12} className="animate-pulse" />
           </div>
 
@@ -65,23 +65,23 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
         @keyframes shoutoutFloat {
           0% {
             opacity: 0;
-            transform: translateY(50px) scale(0.9);
+            transform: translate(-50%, 40px) scale(0.95);
           }
-          10% {
+          6% {
             opacity: 1;
-            transform: translateY(0px) scale(1);
+            transform: translate(-50%, 0px) scale(1);
           }
-          85% {
+          92% {
             opacity: 1;
-            transform: translateY(-70vh) scale(1);
+            transform: translate(-50%, -95vh) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translateY(-88vh) scale(0.92);
+            transform: translate(-50%, -105vh) scale(0.95);
           }
         }
         .animate-shoutout-float {
-          animation: shoutoutFloat 14s linear forwards;
+          animation: shoutoutFloat 15s linear forwards;
         }
       `}</style>
     </div>

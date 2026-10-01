@@ -238,15 +238,15 @@ body {
     left: 4%;
   }
   25% {
-    top: 15%;
-    left: calc(100% - 22rem);
+    top: 12%;
+    left: calc(100% - 15rem);
   }
   50% {
-    top: calc(100% - 18rem);
-    left: calc(100% - 22rem);
+    top: calc(100% - 16rem);
+    left: calc(100% - 15rem);
   }
   75% {
-    top: calc(100% - 18rem);
+    top: calc(100% - 16rem);
     left: 4%;
   }
   100% {

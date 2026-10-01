@@ -216,44 +216,44 @@ export function TVBanner({
 
     return (
       <div className="fixed z-40 pointer-events-auto animate-slow-bounce transition-all">
-        <div className="relative w-[260px] sm:w-[290px] p-3.5 rounded-2xl bg-zinc-950/90 border border-indigo-500/40 backdrop-blur-xl shadow-[0_10px_30px_rgba(99,102,241,0.35)] text-white flex flex-col items-center text-center">
+        <div className="relative w-[180px] sm:w-[210px] aspect-square p-3 rounded-2xl bg-black/40 border border-white/20 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.5)] text-white flex flex-col justify-between items-center text-center">
           <button
             onClick={() => setDismissedPopup(true)}
-            className="absolute top-2.5 right-2.5 p-1 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all active:scale-95"
+            className="absolute top-2 right-2 p-1 rounded-full bg-black/40 hover:bg-black/70 text-zinc-300 hover:text-white transition-all active:scale-95 z-10"
             aria-label="Dismiss banner"
           >
-            <X size={14} />
+            <X size={12} />
           </button>
 
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Sparkles size={14} className="text-indigo-400" />
-            <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">ANNOUNCEMENT</span>
+          <div className="flex items-center gap-1 mb-1">
+            <Sparkles size={12} className="text-indigo-400" />
+            <span className="text-[9px] font-black text-indigo-200 uppercase tracking-widest">ANNOUNCEMENT</span>
           </div>
 
           {currentImage && (
-            <div className="relative w-full h-24 sm:h-28 rounded-xl overflow-hidden my-1.5 bg-black/60 border border-white/10 shadow-inner">
+            <div className="relative w-full flex-1 max-h-[110px] sm:max-h-[130px] rounded-xl overflow-hidden my-1 bg-transparent flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={currentImage}
                 alt="Ad Banner"
-                className="w-full h-full object-contain"
+                className="w-full h-full object-contain rounded-xl"
               />
             </div>
           )}
 
           {bannerText && (
-            <p className="text-xs font-bold text-zinc-100 line-clamp-3 leading-snug my-1">
+            <p className="text-[11px] font-bold text-zinc-100 line-clamp-2 leading-tight px-0.5">
               {bannerText}
             </p>
           )}
 
           {imagesList.length > 1 && (
-            <div className="flex items-center gap-1 mt-1.5">
+            <div className="flex items-center gap-1 mt-1">
               {imagesList.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? 'bg-indigo-400 w-3.5' : 'bg-white/30 w-1.5'}`}
+                  className={`h-1 rounded-full transition-all ${idx === activeImageIndex ? 'bg-indigo-400 w-3' : 'bg-white/40 w-1'}`}
                 />
               ))}
             </div>
