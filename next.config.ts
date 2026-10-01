@@ -14,6 +14,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: '/manifest.json',
+        destination: '/manifest.webmanifest',
+      },
+    ];
+  },
   // Security headers
   async headers() {
     return [
