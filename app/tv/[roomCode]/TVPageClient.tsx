@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Smartphone, RotateCw, X, Maximize2 } from 'lucide-react';
+import { Smartphone, RotateCw, X, Maximize2, Minimize2 } from 'lucide-react';
 import { TVHeader } from '@/components/tv/TVHeader';
 import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
@@ -512,6 +512,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
   const currentVideoId = currentSong?.song.youtube_video_id ?? null;
   const currentQueueItemId = currentSong?.queue_item_id ?? null;
+  const hideQR = isFullscreen || (isMobileDevice && !isPortrait);
 
   return (
     <div
@@ -544,16 +545,21 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       <button
         id="tv-fullscreen-btn"
         onClick={handleFullscreen}
-        className="absolute top-16 right-6 z-30 p-2.5 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/90 border border-teal-500/30 backdrop-blur-xl text-teal-400 hover:text-teal-300 transition-all active:scale-95 shadow-xl flex items-center justify-center pointer-events-auto"
+        className="absolute top-11 sm:top-16 right-3 z-30 p-2 text-white hover:text-white/80 transition-all active:scale-95 flex items-center justify-center pointer-events-auto drop-shadow"
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
         title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
       >
-        <Maximize2 size={18} />
+        {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
       </button>
 
-      {/* LAYER 2: Floating Bottom Right QR Code */}
-      <div className="absolute bottom-3 right-3 z-20 pointer-events-auto">
-        <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
+      {/* LAYER 2: Floating Corner Widgets (Transparent center for song lyrics) */}
+      <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">
+        <div className="pointer-events-auto">
+          <NowPlaying currentSong={currentSong} />
+        </div>
+        <div className={`pointer-events-auto transition-all duration-300 ${hideQR ? 'opacity-0 pointer-events-none invisible scale-95' : 'opacity-100 visible scale-100'}`}>
+          <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
+        </div>
       </div>
 
       {/* LAYER 3: Authentic Videoke/Karaoke Score Screen Popup Modal */}
@@ -581,33 +587,33 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       {/* LAYER 4: Mobile Portrait TV Mode Overlay Banner — ONLY shown when viewing TV mode on mobile devices in portrait orientation */}
       {isMobileDevice && isPortrait && !dismissMobileBanner && (
-        <div className="fixed inset-x-4 top-20 z-40 p-3.5 rounded-2xl bg-zinc-900/95 border border-teal-500/50 backdrop-blur-xl text-white shadow-2xl flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-400 shrink-0">
-              <Smartphone size={18} className="rotate-90" />
+        <div className="fixed inset-x-3 top-11 sm:top-20 z-40 p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-zinc-900/95 border border-teal-500/50 backdrop-blur-xl text-white shadow-2xl flex items-center justify-between gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-400 shrink-0">
+              <Smartphone size={15} className="rotate-90" />
             </div>
             <div>
-              <p className="text-[11px] font-black text-teal-300 uppercase tracking-wider">Mobile TV Screen Mode</p>
-              <p className="text-[10px] text-zinc-300 font-medium">Rotate to landscape or connect to TV!</p>
+              <p className="text-[10px] sm:text-[11px] font-black text-teal-300 uppercase tracking-wider">Mobile TV Screen Mode</p>
+              <p className="text-[9px] sm:text-[10px] text-zinc-300 font-medium">Rotate to landscape or connect to TV!</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={handleMobileLandscapeFullscreen}
-              className="px-3 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-[11px] uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all shadow-md"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-[10px] sm:text-[11px] uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all shadow-md"
             >
-              <RotateCw size={13} />
+              <RotateCw size={12} />
               <span>Go Landscape</span>
             </button>
 
             <button
               onClick={() => setDismissMobileBanner(true)}
-              className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
               aria-label="Hide banner"
               title="Hide banner"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
         </div>

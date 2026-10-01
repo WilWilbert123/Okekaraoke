@@ -16,17 +16,17 @@ export function TVBanner({ bannerEnabled, bannerText, bannerImageUrl, bannerSpee
   if (!bannerEnabled) return null;
 
   const content = (
-    <div className="inline-flex items-center gap-4 px-24 md:px-36 shrink-0">
+    <div className="inline-flex items-center gap-2.5 sm:gap-4 px-6 sm:px-24 md:px-36 shrink-0">
       {bannerImageUrl && (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={bannerImageUrl}
           alt="Banner AD"
-          className="h-9 md:h-10 object-contain rounded-lg shadow-md shrink-0 bg-white/10 p-0.5"
+          className="h-4 sm:h-7 md:h-10 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
         />
       )}
       {bannerText && (
-        <span className="text-sm font-extrabold text-white tracking-wider shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+        <span className="text-[11px] sm:text-xs md:text-sm font-extrabold text-white tracking-wider shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
           {bannerText}
         </span>
       )}
@@ -35,9 +35,10 @@ export function TVBanner({ bannerEnabled, bannerText, bannerImageUrl, bannerSpee
 
   return (
     <div
-      className="relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800"
+      className={`relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800 transition-all ${
+        bannerImageUrl ? 'h-7 sm:h-11 md:h-14' : 'h-6 sm:h-8 md:h-9.5'
+      }`}
       style={{
-        height: bannerImageUrl ? '56px' : '38px',
         backdropFilter: 'blur(12px)',
         WebkitBackdropFilter: 'blur(12px)',
       }}
