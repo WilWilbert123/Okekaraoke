@@ -62,21 +62,26 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const { sender_name, sender_session_id, text } = body;
+    const { id, sender_name, sender_session_id, text } = body;
 
     if (!text || typeof text !== 'string' || !text.trim()) {
       return apiError('MISSING_FIELDS', 'Message text is required.', 400);
     }
 
     const supabase = createAdminClient();
+    const insertData: Record<string, any> = {
+      room_code: normalizedCode,
+      sender_name: sender_name?.trim() || 'Guest',
+      sender_session_id: sender_session_id || 'unknown',
+      text: text.trim(),
+    };
+    if (id && typeof id === 'string' && id.trim()) {
+      insertData.id = id.trim();
+    }
+
     const { data, error } = await supabase
       .from('room_chats')
-      .insert({
-        room_code: normalizedCode,
-        sender_name: sender_name?.trim() || 'Guest',
-        sender_session_id: sender_session_id || 'unknown',
-        text: text.trim(),
-      })
+      .insert(insertData)
       .select('id, sender_name, sender_session_id, text, created_at')
       .single();
 

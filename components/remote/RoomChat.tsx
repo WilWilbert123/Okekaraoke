@@ -36,6 +36,31 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// Helper to filter out duplicate IDs or duplicate content sent within 5s window
+function deduplicateMessages(msgs: ChatMessage[]): ChatMessage[] {
+  const map = new Map<string, ChatMessage>();
+  const seenFingerprints = new Set<string>();
+  const result: ChatMessage[] = [];
+
+  for (const m of msgs) {
+    if (!m || !m.text) continue;
+
+    // 1. Check ID uniqueness
+    if (map.has(m.id)) continue;
+    map.set(m.id, m);
+
+    // 2. Content fingerprint (sender_session_id + text + timestamp rounded to 5 seconds)
+    const timeBucket = Math.floor((m.sent_at || 0) / 5000);
+    const fingerprint = `${m.sender_session_id}_${m.text.trim()}_${timeBucket}`;
+    if (seenFingerprints.has(fingerprint)) continue;
+    seenFingerprints.add(fingerprint);
+
+    result.push(m);
+  }
+
+  return result.sort((a, b) => a.sent_at - b.sent_at);
+}
+
 export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOnlineUsers }: RoomChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -52,7 +77,8 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const saveToLocalStorage = useCallback((msgs: ChatMessage[]) => {
     try {
       if (typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, JSON.stringify(msgs.slice(-150)));
+        const clean = deduplicateMessages(msgs);
+        localStorage.setItem(storageKey, JSON.stringify(clean.slice(-150)));
       }
     } catch (e) {
       console.warn('Failed to save chat to localStorage:', e);
@@ -70,7 +96,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
         if (cached) {
           const parsed = JSON.parse(cached) as ChatMessage[];
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setMessages(parsed);
+            setMessages(deduplicateMessages(parsed));
           }
         }
       }
@@ -86,12 +112,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
         const json = await res.json();
         if (json.success && Array.isArray(json.messages) && isMounted) {
           setMessages((prev) => {
-            const map = new Map<string, ChatMessage>();
-            // Add previous local messages
-            prev.forEach((m) => map.set(m.id, m));
-            // Add server messages (takes precedence if available)
-            json.messages.forEach((m: ChatMessage) => map.set(m.id, m));
-            const merged = Array.from(map.values()).sort((a, b) => a.sent_at - b.sent_at);
+            const merged = deduplicateMessages([...prev, ...json.messages]);
             saveToLocalStorage(merged);
             return merged;
           });
@@ -124,10 +145,9 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
       .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
         const msg = payload as ChatMessage;
         setMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
-          const updated = [...prev, msg].sort((a, b) => a.sent_at - b.sent_at);
-          saveToLocalStorage(updated);
-          return updated;
+          const merged = deduplicateMessages([...prev, msg]);
+          saveToLocalStorage(merged);
+          return merged;
         });
       })
       .on('presence', { event: 'sync' }, () => {
@@ -174,10 +194,12 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
     if (!text || sending) return;
 
     const displayName = guestName?.trim() || 'Guest';
-    const tempId = `${sessionId}-${Date.now()}`;
+    const msgId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${sessionId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
     const newMsg: ChatMessage = {
-      id: tempId,
+      id: msgId,
       sender_name: displayName,
       sender_session_id: sessionId,
       text,
@@ -189,9 +211,9 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
     // Optimistically update local state & localStorage
     setMessages((prev) => {
-      const updated = [...prev, newMsg].sort((a, b) => a.sent_at - b.sent_at);
-      saveToLocalStorage(updated);
-      return updated;
+      const merged = deduplicateMessages([...prev, newMsg]);
+      saveToLocalStorage(merged);
+      return merged;
     });
 
     try {
@@ -204,11 +226,12 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
         });
       }
 
-      // Persist message to database via API
+      // Persist message to database via API using the same msgId
       await fetch(`/api/instances/${roomCode}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: msgId,
           sender_name: displayName,
           sender_session_id: sessionId,
           text,
