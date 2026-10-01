@@ -6,6 +6,7 @@ import { Mic2, Tv2, Smartphone, Music2, ChevronRight, Wifi, Download, History, Q
 import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import Ballpit from '@/components/Ballpit/Ballpit';
+import { IntroSplash } from '@/components/IntroSplash';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -114,6 +115,9 @@ export default function LandingPage() {
 
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Animated Intro Splash Screen */}
+      <IntroSplash />
+
       {/* 3D Interactive Auto-Floating Ballpit Background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <Ballpit
