@@ -332,29 +332,25 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     queue_removed: () => fetchStateRef.current(),
     queue_updated: () => fetchStateRef.current(),
     song_started: (payload: any) => {
-      setScoreModalData(null);
-      // The previously-playing song was stopped by a remote — mark it so
-      // handleSongEnded ignores the YouTube player's onEnded for that song.
       if (payload?.skipped_queue_item_id) {
         skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
+        setScoreModalData(null);
       } else if (currentSongRef.current?.queue_item_id) {
-        // Fallback: if a new song started and we had one playing, the old one
-        // was externally advanced — prevent double-advance.
         skippedByRemoteRef.current.add(currentSongRef.current.queue_item_id);
       }
       fetchStateRef.current();
       setConnectionStatus('connected');
     },
     song_finished: () => {
-      setScoreModalData(null);
+      // Keep score modal active for full 10s countdown even when queue becomes empty
       setCurrentSong(null);
       currentSongRef.current = null;
       fetchStateRef.current();
     },
     song_skipped: (payload: any) => {
-      setScoreModalData(null);
       if (payload?.skipped_queue_item_id) {
         skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
+        setScoreModalData(null);
       }
       fetchStateRef.current();
     },

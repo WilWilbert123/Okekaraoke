@@ -76,7 +76,7 @@ export default function KaraokeScoreModal({
 
   const [phase, setPhase] = useState<'rolling' | 'celebration'>('rolling');
   const [displayScore, setDisplayScore] = useState(1);
-  const [celebrationSeconds, setCelebrationSeconds] = useState(8); // 8s hold after 2s roll = 10s exact
+  const [celebrationSeconds, setCelebrationSeconds] = useState(10); // 10 full seconds hold
   const hasFinishedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
