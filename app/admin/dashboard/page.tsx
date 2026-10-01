@@ -182,6 +182,32 @@ function TabButton({
 
 // ─── Panel: Live Overview ─────────────────────────────────────────────────────
 function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
+  const [deviceList, setDeviceList] = useState(analytics?.online_devices_list || []);
+
+  useEffect(() => {
+    if (analytics?.online_devices_list) {
+      setDeviceList(analytics.online_devices_list);
+    }
+  }, [analytics?.online_devices_list]);
+
+  const handleDeleteDevice = async (id: string) => {
+    setDeviceList((prev) => prev.filter((d) => d.id !== id));
+    try {
+      await fetch(`/api/admin/devices?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error deleting device:', e);
+    }
+  };
+
+  const handleClearOfflineDevices = async () => {
+    setDeviceList((prev) => prev.filter((d) => d.is_online));
+    try {
+      await fetch('/api/admin/devices?clear_offline=true', { method: 'DELETE' });
+    } catch (e) {
+      console.error('Error clearing offline devices:', e);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-380px)] min-h-[350px]">
       {/* Active TV Rooms */}
@@ -206,61 +232,64 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
           <p className="text-xs text-slate-500 py-8 text-center my-auto">No active TV rooms right now.</p>
         ) : (
           <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-            {analytics.active_rooms_list.map((room) => (
-              <div
-                key={room.id}
-                className="p-3.5 rounded-xl flex items-center justify-between transition-all"
-                style={{
-                  background: room.is_online ? 'rgba(34, 197, 94, 0.03)' : 'rgba(255, 255, 255, 0.02)',
-                  border: `1px solid ${room.is_online ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.04)'}`,
-                }}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                    <span className="text-sm font-black text-white font-mono tracking-wider">
-                      ROOM {room.room_code}
-                    </span>
+            {analytics.active_rooms_list.map((room) => {
+              const isRoomLive = room.is_online && room.user_count > 0;
+              return (
+                <div
+                  key={room.id}
+                  className="p-3.5 rounded-xl flex items-center justify-between transition-all"
+                  style={{
+                    background: isRoomLive ? 'rgba(34, 197, 94, 0.03)' : 'rgba(255, 255, 255, 0.02)',
+                    border: `1px solid ${isRoomLive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(255, 255, 255, 0.04)'}`,
+                  }}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${isRoomLive ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`} />
+                      <span className="text-sm font-black text-white font-mono tracking-wider">
+                        ROOM {room.room_code}
+                      </span>
+                    </div>
+
+                    {/* Realtime User Count breakdown */}
+                    <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+                      <Users size={12} className="text-indigo-400" />
+                      <span>
+                        {room.user_count} {room.user_count === 1 ? 'User' : 'Users'} connected
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        ({room.tv_count} TV, {room.remote_count} Remote{room.remote_count !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+
+                    {/* Location info */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                      <Globe size={11} className="text-slate-500" />
+                      <span>
+                        {room.city}, {room.country}
+                      </span>
+                      <span className="text-slate-600">·</span>
+                      <Clock size={10} className="text-slate-600" />
+                      <span className="text-slate-500">
+                        {new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Realtime User Count breakdown */}
-                  <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
-                    <Users size={12} className="text-indigo-400" />
-                    <span>
-                      {room.user_count} {room.user_count === 1 ? 'User' : 'Users'} connected
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      ({room.tv_count} TV, {room.remote_count} Remote{room.remote_count !== 1 ? 's' : ''})
-                    </span>
-                  </div>
-
-                  {/* Location info */}
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                    <Globe size={11} className="text-slate-500" />
-                    <span>
-                      {room.city}, {room.country}
-                    </span>
-                    <span className="text-slate-600">·</span>
-                    <Clock size={10} className="text-slate-600" />
-                    <span className="text-slate-500">
-                      {new Date(room.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        isRoomLive
+                          ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}
+                    >
+                      {isRoomLive ? '● LIVE ONLINE' : 'IDLE / OFFLINE'}
                     </span>
                   </div>
                 </div>
-
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      room.is_online && room.user_count > 0
-                        ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}
-                  >
-                    {room.is_online && room.user_count > 0 ? '● LIVE ONLINE' : 'IDLE / OFFLINE'}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -274,20 +303,33 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
           <div className="flex items-center gap-2">
             <Smartphone size={15} className="text-indigo-400" />
             <h2 className="text-sm font-bold text-white">
-              Connected Devices ({analytics?.online_devices_list.length ?? 0})
+              Connected Devices ({deviceList.length})
             </h2>
           </div>
-          <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-indigo-400 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
-            REALTIME
-          </span>
+          <div className="flex items-center gap-2">
+            {deviceList.some((d) => !d.is_online) && (
+              <button
+                type="button"
+                onClick={handleClearOfflineDevices}
+                className="px-2 py-0.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/20 text-[10px] font-bold flex items-center gap-1 transition-all"
+                title="Clear offline devices"
+              >
+                <Trash2 size={10} />
+                <span>Clear Offline</span>
+              </button>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-indigo-400 px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/25">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+              REALTIME
+            </span>
+          </div>
         </div>
 
-        {!analytics?.online_devices_list.length ? (
+        {!deviceList.length ? (
           <p className="text-xs text-slate-500 py-8 text-center my-auto">No devices currently connected.</p>
         ) : (
           <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-            {analytics.online_devices_list.map((dev) => (
+            {deviceList.map((dev) => (
               <div
                 key={dev.id}
                 className="p-3.5 rounded-xl flex items-center justify-between transition-all"
@@ -336,6 +378,14 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 uppercase">
                     {dev.device_type}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteDevice(dev.id)}
+                    className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    title="Delete device record"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               </div>
             ))}
