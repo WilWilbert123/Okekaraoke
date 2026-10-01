@@ -2,8 +2,8 @@
 
 // ============================================================
 // OKEKARAOKE — TV Screen Floating Shoutout Overlay
-// Displays real-time room shoutouts floating from bottom to top & fading out
-// Small text with semi-transparent black background pill
+// Displays real-time room shoutouts floating from bottom to top on left side
+// Text-only white bold with text shadow legibility (no card background)
 // ============================================================
 
 import { useState, useEffect } from 'react';
@@ -48,42 +48,46 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
       {activeList.map((item) => (
         <div
           key={item.id}
-          className="animate-shoutout-float pointer-events-auto absolute bottom-6 left-1/2 flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/75 backdrop-blur-md shadow-[0_8px_25px_rgba(0,0,0,0.6)] text-white"
+          className="animate-shoutout-float-left pointer-events-none absolute bottom-12 left-6 sm:left-10 flex items-center gap-2.5 text-white"
         >
-          <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-teal-300 shrink-0">
-            <Megaphone size={12} className="animate-pulse" />
-          </div>
+          <Megaphone size={20} className="text-teal-400 shrink-0 animate-bounce drop-shadow-[0_2px_8px_rgba(0,0,0,1)]" />
 
-          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold truncate max-w-[85vw] sm:max-w-md">
-            <span className="text-teal-300 font-extrabold shrink-0">{item.guest_name}:</span>
-            <span className="text-zinc-100 font-medium tracking-wide truncate">"{item.message}"</span>
+          <div
+            className="text-sm sm:text-base md:text-lg font-black tracking-wide leading-snug max-w-[70vw] sm:max-w-lg break-words"
+            style={{
+              textShadow: '0 2px 10px rgba(0,0,0,1), 0 0 6px rgba(0,0,0,1), 0 0 2px rgba(0,0,0,1)',
+            }}
+          >
+            <span className="text-teal-300 font-extrabold mr-1.5">{item.guest_name}:</span>
+            <span className="text-white font-black">"{item.message}"</span>
           </div>
         </div>
       ))}
 
       <style>{`
-        @keyframes shoutoutFloat {
+        @keyframes shoutoutFloatLeft {
           0% {
             opacity: 0;
-            transform: translate(-50%, 40px) scale(0.95);
+            transform: translate(0px, 40px) scale(0.95);
           }
           6% {
             opacity: 1;
-            transform: translate(-50%, 0px) scale(1);
+            transform: translate(0px, 0px) scale(1);
           }
           92% {
             opacity: 1;
-            transform: translate(-50%, -95vh) scale(1);
+            transform: translate(0px, -90vh) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translate(-50%, -105vh) scale(0.95);
+            transform: translate(0px, -100vh) scale(0.95);
           }
         }
-        .animate-shoutout-float {
-          animation: shoutoutFloat 15s linear forwards;
+        .animate-shoutout-float-left {
+          animation: shoutoutFloatLeft 15s linear forwards;
         }
       `}</style>
     </div>
   );
 }
+
