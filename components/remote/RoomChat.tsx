@@ -18,22 +18,28 @@ interface ChatMessage {
   sent_at: number; // unix ms
 }
 
+export interface OnlineUser {
+  session_id: string;
+  name: string;
+  device_type?: string;
+  online_at?: string;
+}
+
 interface RoomChatProps {
   roomCode: string;
   sessionId: string;
   guestName: string;
+  onlineUsers?: OnlineUser[];
 }
 
 function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
+export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOnlineUsers }: RoomChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
-  const [joined, setJoined] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<Array<{ name?: string; session_id?: string; device_type?: string }>>([]);
   const [showUserModal, setShowUserModal] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -102,7 +108,9 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     };
   }, [roomCode, storageKey, saveToLocalStorage]);
 
-  // ── 2. Subscribe to room broadcast & presence channel ──────────────
+  const [localOnlineUsers, setLocalOnlineUsers] = useState<OnlineUser[]>([]);
+
+  // ── 2. Subscribe to room broadcast chat channel ──────────────
   useEffect(() => {
     const channelName = `okekaraoke:chat:${roomCode}`;
 
@@ -124,17 +132,22 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
-        const activeList: Array<{ name?: string; session_id?: string; device_type?: string }> = [];
+        const activeList: OnlineUser[] = [];
         Object.values(state).forEach((presences: any) => {
           presences.forEach((p: any) => {
-            if (p.name || p.session_id) activeList.push(p);
+            if (p.name || p.session_id) {
+              activeList.push({
+                session_id: p.session_id || p.name,
+                name: p.name || 'Guest Remote',
+                device_type: p.device_type || 'remote',
+              });
+            }
           });
         });
-        setOnlineUsers(activeList);
+        setLocalOnlineUsers(activeList);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          setJoined(true);
           await channel.track({
             session_id: sessionId,
             name: guestName || 'Guest Remote',
@@ -147,7 +160,6 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     return () => {
       channel.unsubscribe();
       channelRef.current = null;
-      setJoined(false);
     };
   }, [roomCode, supabase, sessionId, guestName, saveToLocalStorage]);
 
@@ -216,7 +228,13 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
     }
   };
 
-  const userCount = Math.max(1, onlineUsers.length);
+  const activeOnlineUsers = (parentOnlineUsers && parentOnlineUsers.length > 0)
+    ? parentOnlineUsers
+    : (localOnlineUsers && localOnlineUsers.length > 0)
+      ? localOnlineUsers
+      : [{ session_id: sessionId, name: guestName || 'You (Guest)', device_type: 'remote' }];
+
+  const userCount = Math.max(1, activeOnlineUsers.length);
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
@@ -369,7 +387,7 @@ export function RoomChat({ roomCode, sessionId, guestName }: RoomChatProps) {
             </p>
 
             <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar">
-              {(onlineUsers.length > 0 ? onlineUsers : [{ name: guestName || 'You (Guest)', session_id: sessionId }]).map((user, idx) => {
+              {activeOnlineUsers.map((user, idx) => {
                 const isCurrent = user.session_id === sessionId;
                 return (
                   <div
