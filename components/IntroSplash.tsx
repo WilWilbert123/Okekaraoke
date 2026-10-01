@@ -42,16 +42,16 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
       sessionStorage.setItem('okekaraoke_intro_played', '1');
     }
 
-    // Start smooth fade out after 2.3 seconds
+    // Start smooth fade out after 3.2 seconds
     const fadeTimer = setTimeout(() => {
       setFadingOut(true);
-    }, 2300);
+    }, 3200);
 
-    // Unmount component after fade completes (2.8 seconds total)
+    // Unmount component after fade completes (4.0 seconds total)
     const hideTimer = setTimeout(() => {
       setVisible(false);
       onComplete?.();
-    }, 2800);
+    }, 4000);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -63,7 +63,7 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-zinc-950 transition-all duration-700 ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-zinc-950 transition-all duration-800 ease-in-out ${
         fadingOut ? 'opacity-0 pointer-events-none scale-105 backdrop-blur-0' : 'opacity-100 backdrop-blur-2xl'
       }`}
       style={{
@@ -74,12 +74,12 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
         {/* Falling Icon from top with spring motion */}
         <div className="relative animate-fall-down">
           {/* Ambient Glow behind icon */}
-          <div className="absolute inset-0 rounded-full bg-teal-400/20 blur-2xl scale-150 animate-pulse" />
+          <div className="absolute inset-0 rounded-full bg-teal-400/25 blur-3xl scale-150 animate-pulse" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/icon.png"
             alt="OKEKARAOKE"
-            className="w-20 h-20 md:w-28 md:h-28 object-contain filter drop-shadow-[0_12px_30px_rgba(45,212,191,0.4)] relative z-10"
+            className="w-20 h-20 md:w-28 md:h-28 object-contain filter drop-shadow-[0_12px_30px_rgba(45,212,191,0.5)] relative z-10"
           />
         </div>
 
@@ -91,8 +91,8 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
               className="text-2xl sm:text-3xl md:text-5xl font-black inline-block animate-slide-left-stagger opacity-0"
               style={{
                 color: item.color,
-                animationDelay: `${400 + idx * 70}ms`,
-                textShadow: item.color === '#2dd4bf' ? '0 0 16px rgba(45,212,191,0.4)' : 'none',
+                animationDelay: `${550 + idx * 90}ms`,
+                textShadow: item.color === '#2dd4bf' ? '0 0 18px rgba(45,212,191,0.5)' : 'none',
               }}
             >
               {item.char}
@@ -100,7 +100,7 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
           ))}
         </div>
 
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-[0.25em] animate-fade-in-delayed opacity-0 mt-1">
+        <p className="text-xs sm:text-sm font-semibold text-zinc-400 uppercase tracking-[0.3em] animate-fade-in-delayed opacity-0 mt-1">
           Karaoke System
         </p>
       </div>
@@ -109,15 +109,15 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
       <style jsx global>{`
         @keyframes fallDown {
           0% {
-            transform: translateY(-140px) scale(0.6);
+            transform: translateY(-160px) scale(0.5);
             opacity: 0;
           }
           60% {
-            transform: translateY(12px) scale(1.08);
+            transform: translateY(10px) scale(1.06);
             opacity: 1;
           }
           80% {
-            transform: translateY(-4px) scale(0.98);
+            transform: translateY(-3px) scale(0.98);
           }
           100% {
             transform: translateY(0) scale(1);
@@ -127,7 +127,7 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
 
         @keyframes slideLeftStagger {
           0% {
-            transform: translateX(-40px) scale(0.8);
+            transform: translateX(-50px) scale(0.85);
             opacity: 0;
           }
           100% {
@@ -139,24 +139,24 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
         @keyframes fadeInDelayed {
           0% {
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(12px);
           }
           100% {
-            opacity: 0.7;
+            opacity: 0.8;
             transform: translateY(0);
           }
         }
 
         .animate-fall-down {
-          animation: fallDown 900ms cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          animation: fallDown 1100ms cubic-bezier(0.175, 0.885, 0.32, 1.25) forwards;
         }
 
         .animate-slide-left-stagger {
-          animation: slideLeftStagger 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+          animation: slideLeftStagger 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         .animate-fade-in-delayed {
-          animation: fadeInDelayed 600ms ease-out 1200ms forwards;
+          animation: fadeInDelayed 800ms ease-out 1900ms forwards;
         }
       `}</style>
     </div>

@@ -114,7 +114,7 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
+    <main className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-6 sm:py-12 relative overflow-hidden">
       {/* Animated Intro Splash Screen */}
       <IntroSplash />
 
@@ -139,16 +139,16 @@ export default function LandingPage() {
       </div>
 
       {/* Outer Content Container */}
-      <div className="relative z-10 w-full max-w-md flex flex-col items-center animate-fadeIn">
+      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md flex flex-col items-center animate-fadeIn">
 
-        <div className="flex items-center justify-center gap-3.5 mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
+        <div className="flex items-center justify-center gap-2.5 sm:gap-3.5 mb-4 sm:mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
 
           <img
             src="/okekaraokelogo.png"
             alt="OKEKARAOKE Logo"
-            className="w-12 h-12 md:w-16 md:h-16 object-contain"
+            className="w-10 h-10 sm:w-14 sm:h-14 md:w-16 md:h-16 object-contain"
           />
-          <h1 className="text-3xl md:text-4xl font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.03em' }}>
             <span className="text-teal-400">
               OKE
             </span>
@@ -157,25 +157,25 @@ export default function LandingPage() {
         </div>
 
         {/* White Frosted Card Container */}
-        <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 p-6 sm:p-8 rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900">
+        <div className="w-full bg-white/95 backdrop-blur-xl border border-slate-200/80 p-4 sm:p-8 rounded-2xl sm:rounded-3xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] text-slate-900">
 
           {/* How it works */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-              <Tv2 size={24} className="text-slate-900 mx-auto mb-1.5" />
-              <p className="text-sm font-bold text-slate-900">TV Screen</p>
-              <p className="text-xs text-slate-500 mt-0.5">Karaoke display</p>
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4 sm:mb-6">
+            <div className="bg-slate-100/90 border border-slate-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl text-center">
+              <Tv2 className="w-5 h-5 sm:w-6 sm:h-6 text-slate-900 mx-auto mb-1 sm:mb-1.5" />
+              <p className="text-xs sm:text-sm font-bold text-slate-900">TV Screen</p>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Karaoke display</p>
             </div>
-            <div className="bg-slate-100/90 border border-slate-200 p-4 rounded-2xl text-center">
-              <Smartphone size={24} className="text-slate-900 mx-auto mb-1.5" />
-              <p className="text-sm font-bold text-slate-900">Phone Remote</p>
-              <p className="text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
+            <div className="bg-slate-100/90 border border-slate-200 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl text-center">
+              <Smartphone className="w-5 h-5 sm:w-6 sm:h-6 text-slate-900 mx-auto mb-1 sm:mb-1.5" />
+              <p className="text-xs sm:text-sm font-bold text-slate-900">Phone Remote</p>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Search &amp; reserve</p>
             </div>
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="mb-4 p-3 rounded-xl text-sm text-red-700 bg-red-50 border border-red-200 animate-fade-in">
+            <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 rounded-xl text-xs sm:text-sm text-red-700 bg-red-50 border border-red-200 animate-fade-in">
               {error}
             </div>
           )}
@@ -185,51 +185,51 @@ export default function LandingPage() {
             id="create-room-btn"
             onClick={handleCreate}
             disabled={creating || joining}
-            className="w-full py-4 px-6 rounded-2xl font-black text-white text-base md:text-lg mb-4 transition-all duration-200 flex items-center justify-center gap-2 bg-slate-900 hover:bg-black active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
+            className="w-full py-3 sm:py-4 px-4 sm:px-6 rounded-xl sm:rounded-2xl font-black text-white text-sm sm:text-base md:text-lg mb-3 sm:mb-4 transition-all duration-200 flex items-center justify-center gap-2 bg-slate-900 hover:bg-black active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed shadow-lg"
           >
             {creating ? (
               <>
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 <span className="text-white font-black">CREATING OKEKARAOKE...</span>
               </>
             ) : (
               <>
-                <Music2 size={20} className="text-white stroke-[2.5]" />
+                <Music2 className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
                 <span className="text-white font-black">CREATE OKEKARAOKE</span>
               </>
             )}
           </button>
 
           {/* Divider */}
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
             <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">or join a room</span>
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-slate-400">or join a room</span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
           {/* Rejoin Last Room Button if available */}
           {lastRoom && (
-            <div className="mb-4">
+            <div className="mb-3 sm:mb-4">
               <button
                 onClick={() => {
                   setJoinCode(lastRoom);
                   router.push(`/remote/${lastRoom}`);
                 }}
-                className="w-full py-3 px-4 rounded-2xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all flex items-center justify-between"
+                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-900 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-between"
               >
                 <div className="flex items-center gap-2">
-                  <History size={16} className="text-indigo-600" />
+                  <History size={15} className="text-indigo-600" />
                   <span>Rejoin Last Room: <strong className="text-indigo-900 font-extrabold tracking-wider">{lastRoom}</strong></span>
                 </div>
-                <ChevronRight size={16} className="text-indigo-600" />
+                <ChevronRight size={15} className="text-indigo-600" />
               </button>
             </div>
           )}
 
-          {/* Join Room Form */}
-          <form onSubmit={handleJoin} className="space-y-3">
-            <div className="relative">
-              <Wifi size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          {/* Join Room Form (Inline Input + Integrated Button) */}
+          <form onSubmit={handleJoin}>
+            <div className="relative flex items-center">
+              <Wifi className="w-4 h-4 sm:w-5 sm:h-5 absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
               <input
                 id="join-code-input"
                 type="text"
@@ -237,36 +237,35 @@ export default function LandingPage() {
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="ENTER ROOM CODE"
                 maxLength={8}
-                className="w-full pl-11 pr-4 py-4 rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-center text-base md:text-lg transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
+                className="w-full pl-10 sm:pl-11 pr-24 sm:pr-28 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-xs sm:text-sm md:text-base transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none"
               />
+              <button
+                id="join-room-btn"
+                type="submit"
+                disabled={creating || joining || joinCode.length < 4}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-white text-xs sm:text-sm transition-all duration-200 flex items-center gap-1 sm:gap-1.5 bg-black hover:bg-slate-900 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+              >
+                {joining ? (
+                  <>
+                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>JOINING</span>
+                  </>
+                ) : (
+                  <>
+                    <span>JOIN ROOM</span>
+                    <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  </>
+                )}
+              </button>
             </div>
-
-            <button
-              id="join-room-btn"
-              type="submit"
-              disabled={creating || joining || joinCode.length < 4}
-              className="w-full py-4 px-6 rounded-2xl font-bold text-white text-base md:text-lg transition-all duration-200 flex items-center justify-center gap-2 bg-black hover:bg-slate-900 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
-            >
-              {joining ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  JOINING...
-                </>
-              ) : (
-                <>
-                  JOIN ROOM
-                  <ChevronRight size={20} />
-                </>
-              )}
-            </button>
           </form>
 
           {/* PWA Mobile App Installation Prompt */}
           {!isStandalone && (
-            <div className="mt-4 pt-3 border-t border-slate-200/80 text-center">
+            <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-slate-200/80 text-center">
               <button
                 onClick={installApp}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
+                className="w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95"
               >
                 <Download size={14} className="text-indigo-600" />
                 <span>Install App</span>
@@ -275,7 +274,7 @@ export default function LandingPage() {
           )}
 
           {/* Footer */}
-          <p className="text-center text-xs text-slate-400 mt-6 font-medium">
+          <p className="text-center text-[11px] sm:text-xs text-slate-400 mt-4 sm:mt-6 font-medium">
             © {new Date().getFullYear()} <span className="text-slate-600 font-semibold">Wilbert Gamis</span> · All Rights Reserved
           </p>
         </div>
