@@ -11,12 +11,12 @@ import { createClient } from '@/lib/supabase/client';
 
 // ── Clean SVG reaction catalogue ────────────────────────────────
 export const REACTION_ITEMS = [
-  { id: 'fire',   icon: Flame,       label: 'Fire',    color: '#f97316', bg: 'rgba(249, 115, 22, 0.2)',  border: 'rgba(249, 115, 22, 0.4)' },
-  { id: 'haha',   icon: Smile,       label: 'Haha',    color: '#eab308', bg: 'rgba(234, 179, 8, 0.2)',   border: 'rgba(234, 179, 8, 0.4)' },
-  { id: 'sad',    icon: Frown,       label: 'Sad',     color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.2)',  border: 'rgba(56, 189, 248, 0.4)' },
-  { id: 'wow',    icon: Sparkles,    label: 'Wow',     color: '#a855f7', bg: 'rgba(168, 85, 247, 0.2)',  border: 'rgba(168, 85, 247, 0.4)' },
-  { id: 'cheers', icon: PartyPopper, label: 'Cheers',  color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.2)',  border: 'rgba(245, 158, 11, 0.4)' },
-  { id: 'love',   icon: Heart,       label: 'Love',    color: '#ec4899', bg: 'rgba(236, 72, 153, 0.2)',  border: 'rgba(236, 72, 153, 0.4)' },
+  { id: 'fire',   icon: Flame,       label: 'Fire',    color: '#f97316' },
+  { id: 'haha',   icon: Smile,       label: 'Haha',    color: '#eab308' },
+  { id: 'sad',    icon: Frown,       label: 'Sad',     color: '#38bdf8' },
+  { id: 'wow',    icon: Sparkles,    label: 'Wow',     color: '#a855f7' },
+  { id: 'cheers', icon: PartyPopper, label: 'Cheers',  color: '#f59e0b' },
+  { id: 'love',   icon: Heart,       label: 'Love',    color: '#ec4899' },
 ] as const;
 
 export type ReactionId = (typeof REACTION_ITEMS)[number]['id'];
@@ -81,7 +81,7 @@ function FloatingParticle({
   const keyframeName = `float_${animId}`;
   const css = `
 @keyframes ${keyframeName} {
-  0%   { transform: translate3d(0px, 0px, 0)              scale(0.3); opacity: 0;   }
+  0%   { transform: translate3d(0px, 0px, 0)              scale(0.4); opacity: 0;   }
   15%  { transform: translate3d(${sway * 0.1}px, -8vh,  0) scale(1.1); opacity: 1;   }
   50%  { transform: translate3d(${sway * 0.5}px, -45vh, 0) scale(1.25); opacity: 0.95;}
   80%  { transform: translate3d(${sway * 0.85}px,-70vh, 0) scale(1.1); opacity: 0.6; }
@@ -92,18 +92,15 @@ function FloatingParticle({
     <>
       <style dangerouslySetInnerHTML={{ __html: css }} />
       <div
-        className="absolute pointer-events-none select-none z-50 flex items-center justify-center p-2.5 rounded-full shadow-2xl backdrop-blur-sm"
+        className="absolute pointer-events-none select-none z-50 flex items-center justify-center"
         style={{
           left: `${x}%`,
-          bottom: '8px',
-          backgroundColor: item.bg,
-          border: `1.5px solid ${item.border}`,
-          boxShadow: `0 0 16px ${item.color}50`,
+          bottom: '12px',
           willChange: 'transform, opacity',
           animation: `${keyframeName} ${duration}ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards`,
         }}
       >
-        <Icon style={{ width: `${size}rem`, height: `${size}rem`, color: item.color }} />
+        <Icon style={{ width: `${size * 1.4}rem`, height: `${size * 1.4}rem`, color: item.color, filter: `drop-shadow(0 0 8px ${item.color}90)` }} />
       </div>
     </>
   );
@@ -191,37 +188,19 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
         ))}
       </div>
 
-      {/* Reaction icon bar */}
+      {/* Reaction icon bar — Pure Icon Only (No circle background, border, or glow on click) */}
       <div
-        className="shrink-0 flex items-center justify-around gap-1.5 px-3 py-2 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 z-30"
+        className="shrink-0 flex items-center justify-around gap-1 px-3 py-2.5 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 z-30"
       >
-        {REACTION_ITEMS.map(({ id, icon: Icon, label, color, bg, border }) => (
+        {REACTION_ITEMS.map(({ id, icon: Icon, label, color }) => (
           <button
             key={id}
             id={`reaction-btn-${id}`}
             aria-label={`React with ${label}`}
             onClick={() => sendReaction(id)}
-            className="w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-150 active:scale-90"
-            style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
-            onMouseEnter={(e) => {
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.background  = bg;
-              btn.style.borderColor = border;
-              btn.style.transform   = 'scale(1.15)';
-              btn.style.boxShadow   = `0 0 12px ${color}40`;
-            }}
-            onMouseLeave={(e) => {
-              const btn = e.currentTarget as HTMLButtonElement;
-              btn.style.background  = 'rgba(255, 255, 255, 0.03)';
-              btn.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-              btn.style.transform   = 'scale(1)';
-              btn.style.boxShadow   = 'none';
-            }}
+            className="flex-1 py-1 flex items-center justify-center transition-transform duration-150 active:scale-125 hover:scale-110 outline-none select-none bg-transparent"
           >
-            <Icon size={18} style={{ color }} />
+            <Icon size={24} style={{ color, filter: `drop-shadow(0 0 6px ${color}60)` }} />
           </button>
         ))}
       </div>
