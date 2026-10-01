@@ -334,8 +334,6 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           }
         }}
         roomCode={roomCode}
-        isInstallable={isInstallable}
-        onInstallApp={installApp}
       />
 
       {/* Header */}
@@ -428,7 +426,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
                   value={editNameValue}
                   onChange={(e) => setEditNameValue(e.target.value)}
                   onKeyDown={handleEditKeyDown}
-                  maxLength={30}
+                  maxLength={20}
                   className="text-right text-xs text-white bg-transparent outline-none w-20 font-medium"
                   aria-label="Edit your name"
                 />
