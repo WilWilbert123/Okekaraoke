@@ -114,7 +114,7 @@ interface FeedbackItem {
   created_at: string;
 }
 
-type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks' | 'supabase_stats' | 'logs';
+type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks' | 'supabase_stats';
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 function MetricCard({
@@ -1600,7 +1600,7 @@ function FeedbacksTab() {
   );
 }
 
-// ─── Panel: Supabase Database Storage & Quota Monitoring ─────────────────────
+// ─── Panel: Supabase Database Storage, Quota Monitoring & Live Audit Logs ───
 interface SupabaseStatsResponse {
   database: {
     usedBytes: number;
@@ -1631,12 +1631,21 @@ interface SupabaseStatsResponse {
 
 function SupabaseStatsTab() {
   const [stats, setStats] = useState<SupabaseStatsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<Array<{
+    id: string;
+    room_code: string;
+    action: string;
+    guest_session_id: string;
+    metadata?: any;
+    created_at: string;
+  }>>([]);
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [loadingLogs, setLoadingLogs] = useState(true);
   const [purgingTable, setPurgingTable] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
-    setLoading(true);
+    setLoadingStats(true);
     try {
       const res = await fetch('/api/admin/supabase-stats');
       if (res.ok) {
@@ -1648,13 +1657,31 @@ function SupabaseStatsTab() {
     } catch (e) {
       console.error('Error fetching Supabase storage stats:', e);
     } finally {
-      setLoading(false);
+      setLoadingStats(false);
+    }
+  }, []);
+
+  const fetchLogs = useCallback(async () => {
+    setLoadingLogs(true);
+    try {
+      const res = await fetch('/api/admin/logs');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setLogs(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching reservation logs:', e);
+    } finally {
+      setLoadingLogs(false);
     }
   }, []);
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
+    fetchLogs();
+  }, [fetchStats, fetchLogs]);
 
   const handlePurgeTable = async (tableName: string, label: string) => {
     if (!window.confirm(`⚠️ WARNING: Are you sure you want to PURGE ALL DATA from table '${label}' (${tableName}) in Supabase? This action cannot be undone.`)) return;
@@ -1668,6 +1695,7 @@ function SupabaseStatsTab() {
       const json = await res.json();
       if (json.success) {
         setToastMessage(`Successfully cleared table '${label}'!`);
+        if (tableName === 'reservation_logs') setLogs([]);
         fetchStats();
         setTimeout(() => setToastMessage(null), 4000);
       } else {
@@ -1678,6 +1706,29 @@ function SupabaseStatsTab() {
       alert('Network error while clearing table.');
     } finally {
       setPurgingTable(null);
+    }
+  };
+
+  const handleDeleteSingleLog = async (id: string) => {
+    setLogs((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await fetch(`/api/admin/logs?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      fetchStats();
+    } catch (e) {
+      console.error('Error deleting log item:', e);
+    }
+  };
+
+  const handleClearAllLogs = async () => {
+    if (!window.confirm('Are you sure you want to clear all reservation logs?')) return;
+    setLogs([]);
+    try {
+      await fetch('/api/admin/logs?all=true', { method: 'DELETE' });
+      setToastMessage('Reservation audit logs cleared successfully!');
+      fetchStats();
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (e) {
+      console.error('Error clearing reservation logs:', e);
     }
   };
 
@@ -1706,25 +1757,25 @@ function SupabaseStatsTab() {
           </div>
           <div>
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <span>Supabase Free Quota & Storage Monitor</span>
+              <span>Supabase Quota, Storage & Database Manager</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                 500MB DB Limit & 1GB Bucket Limit
               </span>
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Real-time monitoring of your Supabase database size, bucket storage usage, and table row metrics.
+              Real-time monitoring of your Supabase database size, bucket storage, table purges & reservation audit logs.
             </p>
           </div>
         </div>
 
         <button
           type="button"
-          onClick={fetchStats}
-          disabled={loading}
+          onClick={() => { fetchStats(); fetchLogs(); }}
+          disabled={loadingStats || loadingLogs}
           className="px-3.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
         >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          <span>Refresh Quotas</span>
+          <RefreshCw size={13} className={(loadingStats || loadingLogs) ? 'animate-spin' : ''} />
+          <span>Refresh Data</span>
         </button>
       </div>
 
@@ -1810,7 +1861,7 @@ function SupabaseStatsTab() {
               <span>Total Database Rows</span>
             </span>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-zinc-800">
-              {stats?.tables.length || 0} Tables
+              {stats?.tables.length || 8} Tables
             </span>
           </div>
 
@@ -1878,155 +1929,6 @@ function SupabaseStatsTab() {
           })}
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── Panel: System Logs & Supabase Table Manager ────────────────────────────
-function SystemLogsTab() {
-  const [logs, setLogs] = useState<Array<{
-    id: string;
-    room_code: string;
-    action: string;
-    guest_session_id: string;
-    metadata?: any;
-    created_at: string;
-  }>>([]);
-  const [loading, setLoading] = useState(true);
-  const [purgingTable, setPurgingTable] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/logs');
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          setLogs(json.data);
-        }
-      }
-    } catch (e) {
-      console.warn('Error fetching reservation logs:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleDeleteSingleLog = async (id: string) => {
-    setLogs((prev) => prev.filter((item) => item.id !== id));
-    try {
-      await fetch(`/api/admin/logs?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    } catch (e) {
-      console.error('Error deleting log item:', e);
-    }
-  };
-
-  const handleClearAllLogs = async () => {
-    if (!window.confirm('Are you sure you want to clear all reservation logs?')) return;
-    setLogs([]);
-    try {
-      await fetch('/api/admin/logs?all=true', { method: 'DELETE' });
-      setToastMessage('Reservation audit logs cleared successfully!');
-      setTimeout(() => setToastMessage(null), 3500);
-    } catch (e) {
-      console.error('Error clearing reservation logs:', e);
-    }
-  };
-
-  const handlePurgeTable = async (tableName: string, label: string) => {
-    if (!window.confirm(`⚠️ WARNING: Are you sure you want to PURGE ALL DATA from table '${label}' (${tableName}) in Supabase? This action cannot be undone.`)) return;
-    setPurgingTable(tableName);
-    try {
-      const res = await fetch('/api/admin/tables/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table: tableName }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setToastMessage(`Successfully cleared table '${label}'!`);
-        if (tableName === 'reservation_logs') setLogs([]);
-        setTimeout(() => setToastMessage(null), 4000);
-      } else {
-        alert(`Failed to clear table: ${json.error?.message || 'Unknown error'}`);
-      }
-    } catch (e) {
-      console.error('Error purging table:', e);
-      alert('Network error while clearing table.');
-    } finally {
-      setPurgingTable(null);
-    }
-  };
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
-
-  const TABLES_TO_MANAGE = [
-    { id: 'reservation_logs', name: 'Reservation Audit Logs', desc: 'System log of song reservations, skips, and queue actions', icon: FileText },
-    { id: 'room_shoutouts', name: 'Live TV Shoutouts', desc: 'Real-time room shoutouts sent from remote phones', icon: Megaphone },
-    { id: 'room_chats', name: 'Room Guest Chats', desc: 'Guest chat messages sent in TV room channels', icon: MessageSquare },
-    { id: 'feedbacks', name: 'Feedback & Bug Reports', desc: 'User feedback, bug reports, and song requests', icon: AlertTriangle },
-    { id: 'queue_items', name: 'Active Song Queues', desc: 'Current song reservation queues across all active rooms', icon: Music2 },
-  ];
-
-  return (
-    <div className="space-y-4">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
-          <CheckCircle size={14} className="text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Supabase Table Maintenance Purge Tools */}
-      <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database size={16} className="text-indigo-400" />
-            <div>
-              <h2 className="text-xs font-bold text-white">Supabase Database Tables Manager</h2>
-              <p className="text-[10px] text-slate-400">Directly clear database tables from the admin backend</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-0.5">
-          {TABLES_TO_MANAGE.map((item) => {
-            const IconComp = item.icon;
-            const isPurging = purgingTable === item.id;
-            return (
-              <div
-                key={item.id}
-                className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-2"
-              >
-                <div className="flex items-start gap-2">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
-                    <IconComp size={13} />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-[11px] font-bold text-white truncate">{item.name}</h3>
-                    <p className="text-[9px] text-slate-400 leading-tight mt-0.5 line-clamp-2">{item.desc}</p>
-                    <span className="text-[8px] font-mono text-slate-500 mt-0.5 block truncate">Table: {item.id}</span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handlePurgeTable(item.id, item.name)}
-                  disabled={isPurging}
-                  className="w-full py-1 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-[10px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <Trash2 size={11} className={isPurging ? 'animate-spin' : ''} />
-                  <span>{isPurging ? 'Clearing...' : 'Clear Table'}</span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Live Reservation Logs Table Monitor */}
       <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-2.5">
@@ -2048,7 +1950,7 @@ function SystemLogsTab() {
               onClick={fetchLogs}
               className="p-1 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
             >
-              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={11} className={loadingLogs ? 'animate-spin' : ''} />
               <span>Refresh</span>
             </button>
 
@@ -2066,7 +1968,7 @@ function SystemLogsTab() {
         </div>
 
         {logs.length > 0 ? (
-          <div className="max-h-[220px] sm:max-h-[260px] overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+          <div className="max-h-[260px] overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
             {logs.map((log) => (
               <div
                 key={log.id}
@@ -2084,33 +1986,34 @@ function SystemLogsTab() {
                       {new Date(log.created_at).toLocaleString()}
                     </span>
                   </div>
-
-                  <div className="flex items-center gap-2 text-slate-300 text-xs font-mono truncate">
-                    <span className="text-slate-500 text-[10px]">Session:</span>
-                    <span className="truncate max-w-[200px]">{log.guest_session_id}</span>
-                    {log.metadata?.title && (
-                      <span className="text-indigo-300 font-bold truncate">
-                        — "{log.metadata.title}"
-                      </span>
-                    )}
-                  </div>
+                  {log.metadata && (
+                    <p className="text-[11px] text-slate-300 truncate">
+                      {log.metadata.title ? (
+                        <span>
+                          <strong className="text-white">{log.metadata.title}</strong> by {log.metadata.artist || 'Unknown'}
+                        </span>
+                      ) : (
+                        JSON.stringify(log.metadata)
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => handleDeleteSingleLog(log.id)}
-                  className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
-                  title="Delete log item"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                  title="Delete log entry"
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-[11px] text-slate-500 italic text-center py-4 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
-            No reservation audit logs stored yet.
-          </p>
+          <div className="p-8 text-center text-slate-500 text-xs rounded-xl bg-white/[0.01] border border-white/5">
+            No reservation audit logs recorded yet.
+          </div>
         )}
       </div>
     </div>
@@ -2267,8 +2170,7 @@ export default function AdminDashboardPage() {
     { id: 'banner', label: 'Announcement', icon: Radio },
     { id: 'songs', label: 'Song Catalog', icon: Music2 },
     { id: 'feedbacks', label: 'Feedbacks & Reports', icon: MessageSquare },
-    { id: 'supabase_stats', label: 'Supabase Quotas & DB', icon: HardDrive },
-    { id: 'logs', label: 'System Logs & Tables', icon: Database },
+    { id: 'supabase_stats', label: 'Supabase & Audit Logs', icon: HardDrive },
   ];
 
   return (
@@ -2385,7 +2287,6 @@ export default function AdminDashboardPage() {
           )}
           {activeTab === 'feedbacks' && <FeedbacksTab />}
           {activeTab === 'supabase_stats' && <SupabaseStatsTab />}
-          {activeTab === 'logs' && <SystemLogsTab />}
         </div>
       </div>
     </div>
