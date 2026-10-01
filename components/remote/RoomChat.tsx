@@ -183,9 +183,13 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
     };
   }, [roomCode, supabase, sessionId, guestName, saveToLocalStorage]);
 
+  const messagesListRef = useRef<HTMLDivElement>(null);
+
   // ── Auto-scroll to bottom when new messages arrive ───────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messagesListRef.current) {
+      messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight;
+    }
   }, [messages]);
 
   // ── 3. Send a message ─────────────────────────────────────
@@ -289,7 +293,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
       </div>
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div ref={messagesListRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 py-16 text-center">
             <div

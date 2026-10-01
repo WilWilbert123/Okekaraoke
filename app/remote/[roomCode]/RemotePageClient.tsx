@@ -467,41 +467,49 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       </header>
 
       {/* Tab content — relative so emoji overlay stacks correctly */}
-      <div className="flex-1 overflow-y-auto relative pb-2">
+      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
         {tab === 'search' && (
-          <SongSearch
-            roomCode={roomCode}
-            sessionId={sessionId}
-            guestName={guestName}
-            onReserved={() => fetchState()}
-          />
+          <div className="flex-1 overflow-y-auto pb-2">
+            <SongSearch
+              roomCode={roomCode}
+              sessionId={sessionId}
+              guestName={guestName}
+              onReserved={() => fetchState()}
+            />
+          </div>
         )}
         {tab === 'chat' && (
-          <RoomChat
-            roomCode={roomCode}
-            sessionId={sessionId}
-            guestName={guestName}
-            onlineUsers={onlineUsers}
-          />
+          <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
+            <RoomChat
+              roomCode={roomCode}
+              sessionId={sessionId}
+              guestName={guestName}
+              onlineUsers={onlineUsers}
+            />
+          </div>
         )}
         {tab === 'my-songs' && (
-          <MyReservations
-            reservations={myReservations}
-            sessionId={sessionId}
-            roomCode={roomCode}
-            guestName={guestName}
-            onCancelled={() => fetchState()}
-            allowCancel={instanceState?.settings.allow_cancel ?? true}
-          />
+          <div className="flex-1 overflow-y-auto pb-2">
+            <MyReservations
+              reservations={myReservations}
+              sessionId={sessionId}
+              roomCode={roomCode}
+              guestName={guestName}
+              onCancelled={() => fetchState()}
+              allowCancel={instanceState?.settings.allow_cancel ?? true}
+            />
+          </div>
         )}
         {tab === 'queue' && (
-          <RemoteQueue
-            queue={queue}
-            currentSong={currentSong}
-            sessionId={sessionId}
-            roomCode={roomCode}
-            onRefresh={() => fetchState()}
-          />
+          <div className="flex-1 overflow-y-auto pb-2">
+            <RemoteQueue
+              queue={queue}
+              currentSong={currentSong}
+              sessionId={sessionId}
+              roomCode={roomCode}
+              onRefresh={() => fetchState()}
+            />
+          </div>
         )}
       </div>
 
