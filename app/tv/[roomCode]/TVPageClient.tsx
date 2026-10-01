@@ -15,6 +15,7 @@ import { NowPlaying } from '@/components/tv/NowPlaying';
 import { QRPanel } from '@/components/tv/QRPanel';
 import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
 import { SongCountdownModal } from '@/components/tv/SongCountdownModal';
+import { TVShoutoutOverlay, type ShoutoutItem } from '@/components/tv/TVShoutoutOverlay';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -52,7 +53,15 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       return newState;
     });
   }, []);
-  const [bannerSettings, setBannerSettings] = useState<{ banner_enabled: boolean; banner_text: string; banner_image_url?: string; banner_speed?: number }>({ banner_enabled: false, banner_text: '' });
+  const [bannerSettings, setBannerSettings] = useState<{
+    banner_enabled: boolean;
+    banner_type?: 'ticker' | 'side_card' | 'bottom_bar' | 'popup';
+    banner_text: string;
+    banner_image_url?: string;
+    banner_images?: string[];
+    banner_speed?: number;
+  }>({ banner_enabled: false, banner_text: '' });
+  const [shoutouts, setShoutouts] = useState<ShoutoutItem[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPseudoFullscreen, setIsPseudoFullscreen] = useState(false);
@@ -344,6 +353,11 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     },
     instance_updated: () => fetchStateRef.current(),
     banner_updated: (payload: any) => { if (payload) setBannerSettings(payload); else fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }); },
+    shoutout_broadcast: (payload: any) => {
+      if (payload && payload.message) {
+        setShoutouts((prev) => [...prev, payload]);
+      }
+    },
   }).current;
 
   useRealtime({
@@ -526,7 +540,14 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       {/* LAYER 1: Single Clean Header Bar */}
       <div className="absolute top-0 left-0 right-0 z-20 pointer-events-auto">
-        <TVBanner bannerEnabled={bannerSettings.banner_enabled} bannerText={bannerSettings.banner_text} bannerImageUrl={bannerSettings.banner_image_url} bannerSpeed={bannerSettings.banner_speed} />
+        <TVBanner
+          bannerEnabled={bannerSettings.banner_enabled}
+          bannerType={bannerSettings.banner_type}
+          bannerText={bannerSettings.banner_text}
+          bannerImageUrl={bannerSettings.banner_image_url}
+          bannerImages={bannerSettings.banner_images}
+          bannerSpeed={bannerSettings.banner_speed}
+        />
         <TVHeader
           roomCode={roomCode}
           connectionStatus={connectionStatus}
@@ -577,6 +598,9 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           onComplete={() => setCountdownSong(null)}
         />
       )}
+
+      {/* LAYER 3.8: Floating Real-time Room Shoutouts Overlay */}
+      <TVShoutoutOverlay shoutouts={shoutouts} />
 
       {/* LAYER 4: Mobile Portrait TV Mode Overlay Banner — ONLY shown when viewing TV mode on mobile devices in portrait orientation */}
       {isMobileDevice && isPortrait && !dismissMobileBanner && (

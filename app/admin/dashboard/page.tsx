@@ -31,6 +31,7 @@ import {
   Wifi,
   WifiOff,
   MessageSquare,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -76,8 +77,11 @@ interface AnalyticsData {
 
 interface BannerSettings {
   banner_enabled: boolean;
+  shoutout_enabled?: boolean;
+  banner_type?: 'ticker' | 'side_card' | 'bottom_bar' | 'popup';
   banner_text: string;
   banner_image_url: string;
+  banner_images?: string[];
   banner_speed: number;
 }
 
@@ -350,6 +354,95 @@ function BannerTab({
   saving: boolean;
   saved: boolean;
 }) {
+  const [newUrlInput, setNewUrlInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  // Helper: Compress image to lightweight WebP data URL via HTML5 Canvas
+  const compressImage = (file: File, maxWidth = 800, quality = 0.82): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/webp', quality);
+          resolve(compressedDataUrl);
+        };
+        img.onerror = reject;
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const imagesList = (banner.banner_images && banner.banner_images.length > 0)
+    ? banner.banner_images
+    : (banner.banner_image_url ? [banner.banner_image_url] : []);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    const updatedImages = [...imagesList];
+
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const compressedDataUrl = await compressImage(files[i], 800, 0.82);
+        updatedImages.push(compressedDataUrl);
+      } catch (err) {
+        console.error('File compression error:', err);
+      }
+    }
+
+    setBanner({
+      ...banner,
+      banner_images: updatedImages,
+      banner_image_url: updatedImages[0] || '',
+    });
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  const handleAddUrl = () => {
+    if (!newUrlInput.trim()) return;
+    const updatedImages = [...imagesList, newUrlInput.trim()];
+    setBanner({
+      ...banner,
+      banner_images: updatedImages,
+      banner_image_url: updatedImages[0] || '',
+    });
+    setNewUrlInput('');
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    const updatedImages = imagesList.filter((_, idx) => idx !== indexToRemove);
+    setBanner({
+      ...banner,
+      banner_images: updatedImages,
+      banner_image_url: updatedImages[0] || '',
+    });
+  };
+
   return (
     <div
       className="p-5 rounded-2xl flex flex-col h-[calc(100vh-380px)] min-h-[350px] overflow-y-auto custom-scrollbar gap-4"
@@ -358,10 +451,10 @@ function BannerTab({
       <div>
         <h2 className="text-base font-bold text-white flex items-center gap-2">
           <Radio size={17} className="text-indigo-400" />
-          <span>Live TV Announcement Banner</span>
+          <span>Live TV Announcement Banner & Advertisement Manager</span>
         </h2>
         <p className="text-xs text-slate-400 mt-1">
-          Broadcast a running text ticker or advertisement banner on all active TV screens in real-time.
+          Broadcast continuous text tickers, side ad cards, bottom bars, or popup banners to all active TV screens in real-time.
         </p>
       </div>
 
@@ -376,60 +469,106 @@ function BannerTab({
       )}
 
       <form onSubmit={onSave} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-          {/* Left Column: Toggle & Announcement Text */}
-          <div className="space-y-4">
-            {/* Enable toggle */}
-            <div
-              className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer select-none"
-              style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
-              onClick={() => setBanner({ ...banner, banner_enabled: !banner.banner_enabled })}
-            >
-              <div>
-                <p className="text-xs font-bold text-white">Enable TV Banner</p>
-                <p className="text-[11px] text-slate-500">Show running text/image banner on all active TV screens</p>
-              </div>
-              <div
-                className="w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0"
-                style={{ background: banner.banner_enabled ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
-              >
-                <div
-                  className="w-5 h-5 rounded-full bg-white shadow transition-transform"
-                  style={{ transform: banner.banner_enabled ? 'translateX(20px)' : 'translateX(0)' }}
-                />
-              </div>
-            </div>
-
-            {/* Banner text */}
+        {/* Enable Toggles Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Banner Enable Toggle */}
+          <div
+            className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer select-none"
+            style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
+            onClick={() => setBanner({ ...banner, banner_enabled: !banner.banner_enabled })}
+          >
             <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
-                Announcement Text (Running Ticker)
-              </label>
-              <input
-                type="text"
-                value={banner.banner_text}
-                onChange={(e) => setBanner({ ...banner, banner_text: e.target.value })}
-                placeholder="e.g. Welcome to OKEKARAOKE! Special promo: 20% off drinks tonight."
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs text-white outline-none transition-all placeholder-slate-600"
-                style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+              <p className="text-xs font-bold text-white">Enable TV Advertisement Banner</p>
+              <p className="text-[11px] text-slate-500">Show live banner overlay across active TV screens</p>
+            </div>
+            <div
+              className="w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0"
+              style={{ background: banner.banner_enabled ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+            >
+              <div
+                className="w-5 h-5 rounded-full bg-white shadow transition-transform"
+                style={{ transform: banner.banner_enabled ? 'translateX(20px)' : 'translateX(0)' }}
               />
             </div>
           </div>
 
-          {/* Right Column: Image URL & Scroll Speed */}
-          <div className="space-y-4">
-            {/* Banner image URL */}
+          {/* Shoutout Enable Toggle */}
+          <div
+            className="flex items-center justify-between p-3.5 rounded-xl cursor-pointer select-none"
+            style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)' }}
+            onClick={() => setBanner({ ...banner, shoutout_enabled: !(banner.shoutout_enabled ?? true) })}
+          >
             <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
-                <ImageIcon size={13} />
-                <span>Advertisement Banner Image URL (Optional)</span>
+              <p className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>Enable TV Room Shoutouts</span>
+                <span className="text-[10px] text-emerald-400 font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">50 CHAR MAX</span>
+              </p>
+              <p className="text-[11px] text-slate-500">Allow phone remote users to broadcast live TV floating shoutouts</p>
+            </div>
+            <div
+              className="w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0"
+              style={{ background: (banner.shoutout_enabled ?? true) ? '#10b981' : 'rgba(255,255,255,0.08)' }}
+            >
+              <div
+                className="w-5 h-5 rounded-full bg-white shadow transition-transform"
+                style={{ transform: (banner.shoutout_enabled ?? true) ? 'translateX(20px)' : 'translateX(0)' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* SELECT BANNER TYPE */}
+        <div>
+          <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+            <Layers size={13} className="text-indigo-400" />
+            <span>Select Banner / Advertisement Display Type</span>
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            {[
+              { id: 'ticker', name: 'Top Header Ticker', desc: 'Running marquee ticker at top header', icon: '📺' },
+              { id: 'side_card', name: 'Side Ad Box', desc: 'Floating glass ad card on top right side', icon: '📌' },
+              { id: 'bottom_bar', name: 'Bottom Edge Bar', desc: 'Running ticker bar fixed along bottom edge', icon: '📟' },
+              { id: 'popup', name: 'Center Popup Card', desc: 'Featured interstitial popup banner modal', icon: '📣' },
+            ].map((typeOption) => {
+              const selected = (banner.banner_type || 'ticker') === typeOption.id;
+              return (
+                <div
+                  key={typeOption.id}
+                  onClick={() => setBanner({ ...banner, banner_type: typeOption.id as any })}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between select-none ${
+                    selected
+                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg'
+                      : 'bg-white/[0.02] border-white/10 text-slate-400 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-base">{typeOption.icon}</span>
+                    {selected && <CheckCircle size={14} className="text-indigo-400" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white">{typeOption.name}</p>
+                    <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{typeOption.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+          {/* Left Column: Announcement Text & Scroll Speed */}
+          <div className="space-y-4">
+            {/* Banner text */}
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
+                Announcement Text / Ad Caption
               </label>
-              <input
-                type="url"
-                value={banner.banner_image_url}
-                onChange={(e) => setBanner({ ...banner, banner_image_url: e.target.value })}
-                placeholder="https://example.com/banner.png"
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs text-white outline-none transition-all placeholder-slate-600 font-mono"
+              <textarea
+                rows={3}
+                value={banner.banner_text}
+                onChange={(e) => setBanner({ ...banner, banner_text: e.target.value })}
+                placeholder="e.g. Welcome to OKEKARAOKE! Special promo: 20% off drinks & bucket beers tonight."
+                className="w-full px-3.5 py-2.5 rounded-xl text-xs text-white outline-none transition-all placeholder-slate-600 resize-none"
                 style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
               />
             </div>
@@ -437,7 +576,7 @@ function BannerTab({
             {/* Scroll speed */}
             <div>
               <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
-                Scroll Speed: <span className="text-indigo-300">{banner.banner_speed}s</span>
+                Ticker Scroll Speed: <span className="text-indigo-300">{banner.banner_speed}s</span>
               </label>
               <input
                 type="range"
@@ -453,17 +592,187 @@ function BannerTab({
               </div>
             </div>
           </div>
+
+          {/* Right Column: Multiple Images & Direct File Upload */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <ImageIcon size={13} className="text-indigo-400" />
+                  <span>Advertisement Images ({imagesList.length})</span>
+                </span>
+                <span className="text-[10px] text-indigo-300">Auto-compressed Lightweight WebP</span>
+              </label>
+
+              {/* Upload or Add URL Input */}
+              <div className="flex flex-col gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={newUrlInput}
+                    onChange={(e) => setNewUrlInput(e.target.value)}
+                    placeholder="Paste image URL (https://...)"
+                    className="flex-1 px-3 py-2 rounded-xl text-xs text-white outline-none placeholder-slate-600 font-mono"
+                    style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddUrl}
+                    disabled={!newUrlInput.trim()}
+                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-bold text-xs flex items-center gap-1 transition-all active:scale-95 shrink-0"
+                  >
+                    <Plus size={14} />
+                    <span>Add</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <label
+                    htmlFor="banner-file-upload"
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Upload size={14} />
+                    <span>{uploading ? 'Compressing & Adding Image...' : '📁 Upload Local Image File (Auto-Compress)'}</span>
+                  </label>
+                  <input
+                    id="banner-file-upload"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Image Thumbnails Gallery */}
+              {imagesList.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2 max-h-[140px] overflow-y-auto custom-scrollbar p-1.5 rounded-xl bg-white/[0.02] border border-white/5">
+                  {imagesList.map((imgUrl, index) => (
+                    <div
+                      key={index}
+                      className="relative group rounded-lg overflow-hidden border border-white/10 bg-black/40 aspect-video flex items-center justify-center"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imgUrl}
+                        alt={`Ad ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveImage(index)}
+                          className="p-1 rounded-md bg-red-600 text-white hover:bg-red-500 transition-all active:scale-90"
+                          title="Remove image"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <span className="absolute bottom-0.5 left-1 text-[9px] font-black text-white px-1 bg-black/70 rounded">
+                        #{index + 1}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 italic text-center py-3 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
+                  No images added yet. Paste a URL or click upload to add lightweight ad images.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={saving}
-          className="px-6 py-2.5 rounded-xl font-bold text-xs text-white transition-all active:scale-95 disabled:opacity-50 mt-2"
+          className="w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs text-white transition-all active:scale-95 disabled:opacity-50 mt-2 flex items-center justify-center gap-2 shadow-lg"
           style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}
         >
           {saving ? 'Publishing Live...' : 'Save & Broadcast to All TV Screens'}
         </button>
       </form>
+
+      {/* Live TV Shoutout Monitoring Section */}
+      <AdminShoutoutMonitor />
+    </div>
+  );
+}
+
+// ─── Sub-component: Live Admin Shoutout Monitor ────────────────────────────────
+function AdminShoutoutMonitor() {
+  const [shoutouts, setShoutouts] = useState<Array<{ id: string; room_code: string; guest_name: string; message: string; created_at?: string; sent_at?: number }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchShoutouts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/shoutouts');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setShoutouts(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Error fetching shoutouts:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchShoutouts();
+  }, [fetchShoutouts]);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-white/10 space-y-2.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📢</span>
+          <div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>Live Room Shoutouts Monitoring</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            </h3>
+            <p className="text-[10px] text-slate-400">Real-time broadcast log across all active TV rooms</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={fetchShoutouts}
+          className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
+        >
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh</span>
+        </button>
+      </div>
+
+      {shoutouts.length > 0 ? (
+        <div className="max-h-[160px] overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
+          {shoutouts.map((so, idx) => (
+            <div
+              key={so.id || idx}
+              className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 text-xs"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
+                  {so.room_code}
+                </span>
+                <span className="font-bold text-teal-300 shrink-0">{so.guest_name}:</span>
+                <span className="text-zinc-200 truncate font-medium">"{so.message}"</span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono shrink-0">
+                {so.created_at ? new Date(so.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500 italic text-center py-3 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
+          No shoutouts broadcasted yet. Send a shoutout from any phone remote to see it live here!
+        </p>
+      )}
     </div>
   );
 }
