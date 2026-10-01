@@ -149,52 +149,78 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
       )}
 
       {/* Now playing */}
-      {currentSong && (
-        <div
-          className="flex items-center gap-3 p-3 rounded-xl"
-          style={{
-            background: 'rgba(34, 197, 94, 0.06)',
-            border: '1px solid rgba(34, 197, 94, 0.2)',
-          }}
-        >
+      {currentSong && (() => {
+        const currentThumb = currentSong.song.thumbnail_url || (currentSong.song.youtube_video_id ? `https://img.youtube.com/vi/${currentSong.song.youtube_video_id}/mqdefault.jpg` : null);
+        return (
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: 'rgba(34, 197, 94, 0.1)' }}
+            className="flex items-center gap-2.5 p-2.5 rounded-xl"
+            style={{
+              background: 'rgba(34, 197, 94, 0.06)',
+              border: '1px solid rgba(34, 197, 94, 0.2)',
+            }}
           >
-            <Play size={14} className="text-green-400 fill-green-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-white text-sm truncate">{currentSong.song.title}</p>
-            <p className="text-xs text-slate-500 truncate">{currentSong.song.artist}</p>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs font-bold text-green-400">PLAYING</span>
-
-            {/* Stop button for currently playing song */}
-            <button
-              onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
-              disabled={stoppingId === currentSong.queue_item_id}
-              className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#ef4444',
-              }}
-              title="Stop song on TV"
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: 'rgba(34, 197, 94, 0.1)' }}
             >
-              {stoppingId === currentSong.queue_item_id ? (
-                <Loader2 size={12} className="animate-spin text-red-400" />
+              <Play size={13} className="text-green-400 fill-green-400" />
+            </div>
+
+            {/* Thumbnail */}
+            <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden bg-black shrink-0 relative border border-green-500/20 flex items-center justify-center">
+              {currentThumb ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={currentThumb}
+                  alt={currentSong.song.title}
+                  className="w-full h-full object-cover scale-[1.18]"
+                  loading="lazy"
+                />
               ) : (
-                <>
-                  <Square size={10} className="fill-red-500 text-red-500" />
-                  <span>STOP</span>
-                </>
+                <Music2 size={18} className="text-green-400" />
               )}
-            </button>
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-white text-sm truncate">{currentSong.song.title}</p>
+              <p className="text-xs text-slate-500 truncate">
+                {currentSong.song.artist}
+                {currentSong.guest_name && (
+                  <span className="ml-1.5 text-teal-400/90 font-medium">({currentSong.guest_name})</span>
+                )}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs font-bold text-green-400">PLAYING</span>
+
+              {/* Stop button ONLY for the owner of the currently playing song */}
+              {isCurrentSongMine && (
+                <button
+                  onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
+                  disabled={stoppingId === currentSong.queue_item_id}
+                  className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#ef4444',
+                  }}
+                  title="Stop your song on TV"
+                >
+                  {stoppingId === currentSong.queue_item_id ? (
+                    <Loader2 size={12} className="animate-spin text-red-400" />
+                  ) : (
+                    <>
+                      <Square size={10} className="fill-red-500 text-red-500" />
+                      <span>STOP</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Stop error notification */}
       {stopError && (
@@ -211,11 +237,12 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
       {queue.map((item, index) => {
         const isMyItem = item.guest_session_id === sessionId;
         const isCancelling = cancellingId === item.queue_item_id;
+        const itemThumb = item.song.thumbnail_url || (item.song.youtube_video_id ? `https://img.youtube.com/vi/${item.song.youtube_video_id}/mqdefault.jpg` : null);
 
         return (
           <div
             key={item.queue_item_id}
-            className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+            className="flex items-center gap-2.5 p-2.5 rounded-xl transition-colors"
             style={{
               background: isMyItem
                 ? 'rgba(99, 102, 241, 0.08)'
@@ -227,13 +254,28 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
           >
             {/* Position */}
             <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold"
               style={{
                 background: isMyItem ? 'rgba(45, 212, 191, 0.15)' : 'rgba(255, 255, 255, 0.04)',
                 color: isMyItem ? '#2dd4bf' : '#475569',
               }}
             >
               {index + 1}
+            </div>
+
+            {/* Thumbnail */}
+            <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden bg-black shrink-0 relative border border-zinc-800 flex items-center justify-center">
+              {itemThumb ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={itemThumb}
+                  alt={item.song.title}
+                  className="w-full h-full object-cover scale-[1.18]"
+                  loading="lazy"
+                />
+              ) : (
+                <Music2 size={18} className="text-zinc-600" />
+              )}
             </div>
 
             {/* Song info */}

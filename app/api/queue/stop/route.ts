@@ -42,11 +42,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Find target song to stop in DB
-    let targetItem: { id: string; status: string } | null = null;
+    let targetItem: { id: string; status: string; guest_session_id: string | null } | null = null;
 
     const { data: playingItem } = await supabase
       .from('queue_items')
-      .select('id, status')
+      .select('id, status, guest_session_id')
       .eq('instance_id', instance.id)
       .eq('status', 'playing')
       .maybeSingle();
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     } else if (clientQueueItemId) {
       const { data: clientItem } = await supabase
         .from('queue_items')
-        .select('id, status')
+        .select('id, status, guest_session_id')
         .eq('id', clientQueueItemId)
         .eq('instance_id', instance.id)
         .in('status', ['playing', 'queued'])
@@ -66,6 +66,21 @@ export async function POST(request: NextRequest) {
 
     if (!targetItem) {
       return apiError('NOTHING_PLAYING', 'No active song to stop in this room.', 404);
+    }
+
+    // 2.5 Ensure caller is the owner of the song OR a TV device
+    const { data: device } = await supabase
+      .from('devices')
+      .select('device_type')
+      .eq('instance_id', instance.id)
+      .eq('session_id', session_id)
+      .maybeSingle();
+
+    const isTV = device?.device_type === 'tv';
+    const isOwner = targetItem.guest_session_id === session_id;
+
+    if (!isTV && !isOwner) {
+      return apiError('UNAUTHORIZED', 'You can only stop or skip your own songs.', 403);
     }
 
     // 3. Mark target song as completed

@@ -408,11 +408,12 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
             {filteredList.map((song) => {
               const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
               const isFav = isSongFavorited(song);
+              const thumbnailUrl = song.thumbnail_url || (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : null);
 
               return (
                 <div
                   key={song.id}
-                  className="flex items-center gap-3 p-3 rounded-xl transition-all bg-zinc-900 border border-zinc-800"
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl transition-all bg-zinc-900 border border-zinc-800"
                   style={{
                     borderColor:
                       songStatus.status === 'success'
@@ -427,15 +428,30 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                       toggleFavoriteSong(song);
                       setFavTrigger((prev) => prev + 1);
                     }}
-                    className="p-1.5 rounded-lg transition-all active:scale-90 hover:bg-zinc-800 shrink-0"
+                    className="p-1 rounded-lg transition-all active:scale-90 hover:bg-zinc-800 shrink-0"
                     title={isFav ? 'Remove from favorites' : 'Add to favorites'}
                     aria-label={isFav ? `Remove ${song.title} from favorites` : `Add ${song.title} to favorites`}
                   >
                     <Star
-                      size={18}
+                      size={16}
                       className={isFav ? 'fill-yellow-400 text-yellow-400 drop-shadow' : 'text-zinc-500 hover:text-yellow-400'}
                     />
                   </button>
+
+                  {/* Video Thumbnail */}
+                  <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden bg-zinc-800 shrink-0 relative border border-zinc-800 flex items-center justify-center">
+                    {thumbnailUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={thumbnailUrl}
+                        alt={song.title}
+                        className="w-full h-full object-cover scale-[1.18]"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Music2 size={18} className="text-zinc-600" />
+                    )}
+                  </div>
 
                   {/* Song Info */}
                   <div className="flex-1 min-w-0">
