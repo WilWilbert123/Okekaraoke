@@ -202,10 +202,12 @@ export function MyReservations({
               const canCancel = allowCancel && item.status === 'queued';
               const isPlaying = item.status === 'playing';
 
+              const itemThumb = item.song.thumbnail_url || (item.song.youtube_video_id ? `https://img.youtube.com/vi/${item.song.youtube_video_id}/mqdefault.jpg` : null);
+
               return (
                 <div
                   key={item.queue_item_id}
-                  className="flex items-center gap-3 p-4 rounded-xl transition-all"
+                  className="flex items-center gap-2.5 p-3 rounded-xl transition-all"
                   style={{
                     background: statusStyle.bg,
                     border: `1px solid ${statusStyle.border}`,
@@ -213,17 +215,32 @@ export function MyReservations({
                 >
                   {/* Position/status icon */}
                   <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
                     style={{ background: statusStyle.bg }}
                   >
                     {isPlaying ? (
-                      <Play size={16} style={{ fill: statusStyle.text, color: statusStyle.text }} />
+                      <Play size={14} style={{ fill: statusStyle.text, color: statusStyle.text }} />
                     ) : item.status === 'completed' ? (
-                      <CheckCircle size={16} style={{ color: statusStyle.text }} />
+                      <CheckCircle size={14} style={{ color: statusStyle.text }} />
                     ) : (
-                      <span className="font-black text-sm" style={{ color: statusStyle.text }}>
+                      <span className="font-black text-xs" style={{ color: statusStyle.text }}>
                         {index + 1}
                       </span>
+                    )}
+                  </div>
+
+                  {/* Thumbnail */}
+                  <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden bg-black shrink-0 relative border border-zinc-800 flex items-center justify-center">
+                    {itemThumb ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={itemThumb}
+                        alt={item.song.title}
+                        className="w-full h-full object-cover scale-[1.18]"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Music2 size={18} className="text-zinc-600" />
                     )}
                   </div>
 

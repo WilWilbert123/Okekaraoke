@@ -99,6 +99,25 @@ export async function POST(request: NextRequest) {
       targetItem = topQueued ?? null;
     }
 
+    if (!targetItem) {
+      return apiError('NOTHING_PLAYING', 'No active song to skip in this room.', 404);
+    }
+
+    // Ensure caller is the owner of the song OR a TV device
+    const { data: device } = await supabase
+      .from('devices')
+      .select('device_type')
+      .eq('instance_id', instance.id)
+      .eq('session_id', session_id)
+      .maybeSingle();
+
+    const isTV = device?.device_type === 'tv';
+    const isOwner = targetItem.guest_session_id === session_id;
+
+    if (!isTV && !isOwner) {
+      return apiError('UNAUTHORIZED', 'You can only stop or skip your own songs.', 403);
+    }
+
     // 3. Always clean up all 'playing' status rows for this instance
     await supabase
       .from('queue_items')
