@@ -526,7 +526,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
   const currentVideoId = currentSong?.song.youtube_video_id ?? null;
   const currentQueueItemId = currentSong?.queue_item_id ?? null;
-  const hideQR = isFullscreen || (isMobileDevice && !isPortrait);
+  const hideOverlays = isFullscreen || isPseudoFullscreen || (isMobileDevice && !isPortrait);
 
   return (
     <div
@@ -573,12 +573,12 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
       </button>
 
-      {/* LAYER 2: Floating Corner Widgets (Transparent center for song lyrics) */}
+      {/* LAYER 2: Floating Corner Widgets (Auto-hidden in fullscreen mode for clean view) */}
       <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">
-        <div className="pointer-events-auto">
+        <div className={`pointer-events-auto transition-all duration-300 ${hideOverlays ? 'opacity-0 pointer-events-none invisible scale-95' : 'opacity-100 visible scale-100'}`}>
           <NowPlaying currentSong={currentSong} />
         </div>
-        <div className={`pointer-events-auto transition-all duration-300 ${hideQR ? 'opacity-0 pointer-events-none invisible scale-95' : 'opacity-100 visible scale-100'}`}>
+        <div className={`pointer-events-auto transition-all duration-300 ${hideOverlays ? 'opacity-0 pointer-events-none invisible scale-95' : 'opacity-100 visible scale-100'}`}>
           <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
         </div>
       </div>

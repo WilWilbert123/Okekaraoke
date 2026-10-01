@@ -1,12 +1,12 @@
 'use client';
 
 // ============================================================
-// OKEKARAOKE — Minimal Clean Score Result Modal
-// Clean, elegant, logo-teal styled videoke performance score modal
+// OKEKARAOKE — Authentic Videoke Performance Score Modal
+// 10.0s Total Duration: 2.0s Thrilling Rollup + 8.0s Score Celebration
 // ============================================================
 
-import { useEffect, useState, useRef } from 'react';
-import { Music2, Play } from 'lucide-react';
+import { useEffect, useState, useRef, useMemo } from 'react';
+import { Music2, Play, Sparkles, Star, Flame, PartyPopper, Trophy, Heart, Zap } from 'lucide-react';
 
 interface KaraokeScoreModalProps {
   completedSong: {
@@ -24,17 +24,44 @@ interface KaraokeScoreModalProps {
 }
 
 function getGradeTitle(score: number) {
-  if (score === 100) return 'PERFECT SUPERSTAR';
-  if (score >= 95) return 'SUPERSTAR VOCALS';
-  if (score >= 90) return 'GREAT PERFORMANCE';
-  return 'GOOD EFFORT';
+  if (score === 100) return '🏆 PERFECT SUPERSTAR 🏆';
+  if (score >= 95) return '🔥 SUPERSTAR VOCALS 🔥';
+  if (score >= 90) return '⭐ GREAT PERFORMANCE ⭐';
+  return '🎤 GOOD EFFORT 🎤';
+}
+
+const FIREWORKS_ICONS = [Sparkles, Star, Flame, PartyPopper, Trophy, Heart, Zap];
+const FIREWORKS_COLORS = ['#2dd4bf', '#f59e0b', '#ec4899', '#38bdf8', '#a855f7', '#10b981', '#f97316'];
+
+function synthScoreSound(score: number) {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    const freqs = score >= 95
+      ? [523.25, 659.25, 783.99, 1046.50, 1318.51]
+      : [440, 554.37, 659.25, 880, 1108.73];
+
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime + idx * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + idx * 0.12);
+      osc.stop(ctx.currentTime + idx * 0.12 + 0.5);
+    });
+  } catch {}
 }
 
 export default function KaraokeScoreModal({
   completedSong,
   nextSong,
   onCountdownComplete,
-  onSkip,
 }: KaraokeScoreModalProps) {
   const [targetScore] = useState(() => {
     const seedStr = `${completedSong.title}-${completedSong.artist}`;
@@ -43,62 +70,94 @@ export default function KaraokeScoreModal({
       hash = (hash << 5) - hash + seedStr.charCodeAt(i);
       hash |= 0;
     }
-    return 88 + (Math.abs(hash) % 12); // 88 to 99
+    const score = 88 + (Math.abs(hash) % 13);
+    return Math.min(100, Math.max(88, score));
   });
 
-  const [phase, setPhase] = useState<'rolling' | 'revealed'>('rolling');
-  const [displayScore, setDisplayScore] = useState(40);
-  const [countdown, setCountdown] = useState(5);
+  const [phase, setPhase] = useState<'rolling' | 'celebration'>('rolling');
+  const [displayScore, setDisplayScore] = useState(1);
+  const [celebrationSeconds, setCelebrationSeconds] = useState(8); // 8s hold after 2s roll = 10s exact
   const hasFinishedRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Score Rollup Effect
+  // Preload score audio on mount
   useEffect(() => {
-    let current = 40;
-    const duration = 1200; // 1.2s rollup
-    const stepTime = 25;
-    const increment = (targetScore - 40) / (duration / stepTime);
+    if (typeof window !== 'undefined') {
+      try {
+        const audio = new Audio('/sounds/score.mp3');
+        audio.preload = 'auto';
+        audioRef.current = audio;
+      } catch {}
+    }
+  }, []);
+
+  const triggerAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {
+        try {
+          const fallback = new Audio('/score.mp3');
+          fallback.play().catch(() => synthScoreSound(targetScore));
+        } catch {
+          synthScoreSound(targetScore);
+        }
+      });
+    } else {
+      synthScoreSound(targetScore);
+    }
+  };
+
+  // Generate 16 radial fireworks particles
+  const particles = useMemo(() => {
+    return Array.from({ length: 16 }).map((_, i) => {
+      const angle = (i * 360) / 16 + ((i % 2 === 0 ? 1 : -1) * 8);
+      const distance = 130 + (i % 3) * 35;
+      const iconIndex = i % FIREWORKS_ICONS.length;
+      const colorIndex = i % FIREWORKS_COLORS.length;
+      const delay = (i % 4) * 100;
+      const size = 18 + (i % 3) * 6;
+      return {
+        id: i,
+        icon: FIREWORKS_ICONS[iconIndex],
+        color: FIREWORKS_COLORS[colorIndex],
+        angle,
+        distance,
+        delay,
+        size,
+      };
+    });
+  }, []);
+
+  // Step 1: Thrilling Score Rollup from 1 to targetScore (e.g. 98) over EXACTLY 2.0s
+  useEffect(() => {
+    let current = 1;
+    const duration = 2000; // 2.0 seconds thrilling rollup
+    const stepTime = 30;
+    const increment = (targetScore - 1) / (duration / stepTime);
 
     const timer = setInterval(() => {
       current += increment;
       if (current >= targetScore) {
         setDisplayScore(targetScore);
-        setPhase('revealed');
+        setPhase('celebration');
         clearInterval(timer);
 
-        // Subtle audio fanfare sound
-        try {
-          const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-          if (AudioCtx) {
-            const ctx = new AudioCtx();
-            const notes = targetScore >= 95 ? [523.25, 659.25, 783.99, 1046.50] : [440, 554.37, 659.25, 880];
-            notes.forEach((freq, idx) => {
-              const osc = ctx.createOscillator();
-              const gain = ctx.createGain();
-              osc.type = 'triangle';
-              osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
-              gain.gain.setValueAtTime(0.1, ctx.currentTime + idx * 0.1);
-              gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.25);
-              osc.connect(gain);
-              gain.connect(ctx.destination);
-              osc.start(ctx.currentTime + idx * 0.1);
-              osc.stop(ctx.currentTime + idx * 0.1 + 0.3);
-            });
-          }
-        } catch {}
+        // Instant synchronous audio playback
+        triggerAudio();
       } else {
         setDisplayScore(Math.floor(current));
       }
     }, stepTime);
 
     return () => clearInterval(timer);
-  }, [targetScore]);
+  }, [targetScore]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Countdown timer once score revealed
+  // Step 2: Hold score view for EXACTLY 8.0 SECONDS (Total = 2.0s roll + 8.0s hold = 10.0s exact)
   useEffect(() => {
-    if (phase !== 'revealed') return;
+    if (phase !== 'celebration') return;
 
     const timer = setInterval(() => {
-      setCountdown((prev) => {
+      setCelebrationSeconds((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
           if (!hasFinishedRef.current) {
@@ -117,78 +176,123 @@ export default function KaraokeScoreModal({
   const gradeTitle = getGradeTitle(targetScore);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-fadeIn">
-      {/* Minimal Glass Container */}
-      <div className="relative z-10 w-full max-w-lg bg-zinc-900/90 border border-teal-500/40 p-8 rounded-3xl text-center text-white shadow-2xl flex flex-col items-center">
-        
-        {/* Header Badge */}
-        <p className="text-[10px] font-black text-teal-400 uppercase tracking-widest mb-4">
-          PERFORMANCE SCORE
-        </p>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-6 bg-black/90 backdrop-blur-xl animate-fadeIn overflow-hidden text-center text-white">
+      {/* Dynamic CSS Keyframes for Radial Fireworks Burst */}
+      <style>{`
+        @keyframes fireworks-pop {
+          0% {
+            transform: translate(-50%, -50%) scale(0.1) rotate(0deg);
+            opacity: 0;
+          }
+          20% {
+            opacity: 1;
+            transform: translate(calc(-50% + var(--tx) * 0.45), calc(-50% + var(--ty) * 0.45)) scale(1.4) rotate(45deg);
+          }
+          60% {
+            opacity: 0.95;
+            transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1.1) rotate(90deg);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(calc(-50% + var(--tx) * 1.3), calc(-50% + var(--ty) * 1.3)) scale(0.3) rotate(140deg);
+          }
+        }
+      `}</style>
 
-        {/* Completed Song Title & Artist */}
-        <div className="mb-4 max-w-md">
-          <h2 className="text-2xl font-black text-white truncate tracking-tight">
-            {completedSong.title}
-          </h2>
-          <p className="text-sm text-zinc-300 font-medium truncate mt-0.5">
-            {completedSong.artist}
-            {completedSong.guestName && (
-              <span className="text-teal-400 font-semibold ml-2">
-                · {completedSong.guestName}
-              </span>
-            )}
-          </p>
-        </div>
-
-        {/* Big Score Display */}
-        <div className="my-3 flex flex-col items-center justify-center">
-          <div className="text-8xl font-black tracking-tighter text-white font-mono drop-shadow-md">
-            {displayScore}
-          </div>
-        </div>
-
-        {/* Grade Badge */}
-        <div className="mb-6 px-4 py-1.5 rounded-full bg-teal-400/20 border border-teal-400/50 font-black text-sm text-teal-300 uppercase tracking-wider">
-          {gradeTitle}
-        </div>
-
-        {/* Next Song Footer Bar */}
-        <div className="w-full bg-zinc-800/80 border border-zinc-700/70 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-left">
-          {nextSong ? (
-            <>
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-teal-400/20 border border-teal-400/30 flex items-center justify-center text-teal-400 shrink-0">
-                  <Music2 className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-teal-400 block">
-                    UP NEXT ({countdown}s)
-                  </span>
-                  <p className="text-xs font-bold text-white truncate">{nextSong.title}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => {
-                  if (!hasFinishedRef.current) {
-                    hasFinishedRef.current = true;
-                    onSkip ? onSkip() : onCountdownComplete();
-                  }
-                }}
-                className="px-3.5 py-2 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1 shrink-0 active:scale-95 shadow-md"
-              >
-                <span>Play Now</span>
-                <Play className="w-3.5 h-3.5 fill-black" />
-              </button>
-            </>
-          ) : (
-            <div className="w-full text-center py-1 text-xs text-zinc-400 font-medium">
-              Queue is empty — reserve songs on your phone remote!
-            </div>
+      {/* Top Title: EXCELLENT! */}
+      <div className="mb-2 max-w-xl">
+        <h1
+          className="text-4xl md:text-6xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-yellow-300 to-teal-300 uppercase drop-shadow-lg"
+          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+        >
+          EXCELLENT!
+        </h1>
+        <p className="text-sm md:text-base text-zinc-300 font-semibold mt-1 truncate">
+          {completedSong.title} — {completedSong.artist}
+          {completedSong.guestName && (
+            <span className="text-teal-400 font-bold ml-1.5">({completedSong.guestName})</span>
           )}
+        </p>
+      </div>
+
+      {/* GIGANTIC CENTER SCORE with Radial Fireworks Burst (No background box) */}
+      <div className="relative my-2 flex flex-col items-center justify-center w-full max-w-2xl min-h-[200px] md:min-h-[260px]">
+        {/* Fireworks explosion layer when Score Revealed */}
+        {phase === 'celebration' && (
+          <div className="absolute inset-0 pointer-events-none overflow-visible z-0" aria-hidden="true">
+            {particles.map((p) => {
+              const Icon = p.icon;
+              const rad = (p.angle * Math.PI) / 180;
+              const tx = Math.cos(rad) * (p.distance * 1.35);
+              const ty = Math.sin(rad) * (p.distance * 1.35);
+
+              return (
+                <div
+                  key={p.id}
+                  className="absolute top-1/2 left-1/2 pointer-events-none"
+                  style={{
+                    animation: `fireworks-pop 2.2s cubic-bezier(0.15, 0.85, 0.35, 1.2) infinite`,
+                    animationDelay: `${p.delay}ms`,
+                    ['--tx' as any]: `${tx}px`,
+                    ['--ty' as any]: `${ty}px`,
+                  }}
+                >
+                  <div
+                    className="p-3 rounded-full shadow-2xl backdrop-blur-md flex items-center justify-center"
+                    style={{
+                      backgroundColor: `${p.color}25`,
+                      border: `1.5px solid ${p.color}80`,
+                      boxShadow: `0 0 25px ${p.color}`,
+                    }}
+                  >
+                    <Icon style={{ width: `${p.size * 1.2}px`, height: `${p.size * 1.2}px`, color: p.color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Gigantic Score Number Font */}
+        <div
+          className={`text-[9rem] sm:text-[12rem] md:text-[15rem] leading-none font-black tracking-tighter font-mono z-10 transition-all duration-300 text-transparent bg-clip-text bg-gradient-to-b from-white via-teal-200 to-teal-400 ${
+            phase === 'celebration' ? 'scale-105 drop-shadow-[0_0_55px_rgba(45,212,191,0.85)]' : ''
+          }`}
+          style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+        >
+          {displayScore}
         </div>
       </div>
+
+      {/* Label: SCORE */}
+      <div
+        className="text-2xl md:text-4xl font-black uppercase tracking-[0.35em] text-teal-400 mb-4 drop-shadow"
+        style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+      >
+        SCORE
+      </div>
+
+      {/* Grade Title Badge */}
+      <div className="mb-6 px-6 py-2 rounded-full bg-teal-400/15 border border-teal-400/40 font-black text-xs md:text-sm text-teal-300 uppercase tracking-widest backdrop-blur-md shadow-xl">
+        {gradeTitle}
+      </div>
+
+      {/* Minimal Bottom Up Next Banner */}
+      {nextSong ? (
+        <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-md max-w-md text-xs shadow-lg">
+          <span className="font-extrabold text-teal-400 uppercase tracking-wider shrink-0">
+            UP NEXT ({celebrationSeconds}s):
+          </span>
+          <span className="font-bold text-white truncate">{nextSong.title}</span>
+          <span className="text-zinc-400 truncate">· {nextSong.artist}</span>
+        </div>
+      ) : (
+        <div className="text-xs text-zinc-400 font-medium">
+          Proceeding in <strong className="text-teal-400 font-bold">{celebrationSeconds}s</strong> · Queue is empty
+        </div>
+      )}
     </div>
   );
 }
+
+
