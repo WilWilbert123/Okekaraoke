@@ -145,6 +145,9 @@ export async function GET(request: NextRequest) {
       const queueCount = queueCountMap.get(room.id) || 0;
       const chatCount = chatCountMap.get(room.room_code) || 0;
 
+      // A room is online ONLY if at least 1 device (TV or remote) is currently connected
+      const isOnline = stats.user_count > 0;
+
       return {
         id: room.id,
         room_code: room.room_code,
@@ -155,7 +158,7 @@ export async function GET(request: NextRequest) {
         remote_count: stats.remote_count,
         city: stats.city,
         country: stats.country,
-        is_online: stats.user_count > 0 || playing !== null || queueCount > 0,
+        is_online: isOnline,
         currently_playing: playing,
         queue_count: queueCount,
         chat_count: chatCount,
@@ -163,10 +166,11 @@ export async function GET(request: NextRequest) {
     });
 
     const loc = extractLocationFromRequest(request);
+    const onlineRoomsCount = activeRoomsFormatted.filter((r) => r.is_online).length;
 
     return apiSuccess({
       metrics: {
-        active_rooms: activeRooms ?? 0,
+        active_rooms: onlineRoomsCount > 0 ? onlineRoomsCount : (activeRooms ?? 0),
         online_devices: deviceList.filter((d) => d.is_online).length,
         total_songs: totalSongs ?? 0,
         reservations_today: reservationsToday ?? 0,
