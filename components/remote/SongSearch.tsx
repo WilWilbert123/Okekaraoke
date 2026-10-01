@@ -184,7 +184,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
   const [micError, setMicError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
 
-  // Microphone Voice Search Handler
+  // Microphone Voice Search Handler (Android Chrome compatible)
   const startVoiceSearch = useCallback(() => {
     setMicError(null);
     if (typeof window === 'undefined') return;
@@ -206,11 +206,12 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
       recognitionRef.current = recognition;
 
       recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+      recognition.interimResults = false; // Disable interim results on mobile/Android Chrome to prevent sudden speech aborts
+      recognition.lang = window.navigator.language || 'en-US';
 
       recognition.onstart = () => {
         setIsListening(true);
+        setMicError(null);
       };
 
       recognition.onresult = (event: any) => {
@@ -219,9 +220,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
           transcript += event.results[i][0].transcript;
         }
 
-        if (transcript.trim()) {
-          setQuery(transcript);
-          search(transcript);
+        const trimmed = transcript.trim();
+        if (trimmed) {
+          setQuery(trimmed);
+          search(trimmed);
         }
       };
 
@@ -231,9 +233,13 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
           setMicError('Microphone permission denied. Please allow mic in browser settings.');
         } else if (event.error === 'no-speech') {
-          setMicError('No speech detected. Please speak clearly.');
+          setMicError('No speech detected. Tap mic & speak clearly.');
+        } else if (event.error === 'audio-capture') {
+          setMicError('Microphone hardware in use or unavailable.');
+        } else if (event.error === 'aborted') {
+          // Ignored on user cancel
         } else {
-          setMicError('Voice search error. Please try again.');
+          setMicError('Voice search error. Tap mic and try again.');
         }
         setTimeout(() => setMicError(null), 4000);
       };
@@ -242,17 +248,9 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
         setIsListening(false);
       };
 
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-          .then(() => {
-            try { recognition.start(); } catch {}
-          })
-          .catch(() => {
-            try { recognition.start(); } catch {}
-          });
-      } else {
-        try { recognition.start(); } catch {}
-      }
+      // Directly start SpeechRecognition. DO NOT call getUserMedia beforehand
+      // because getUserMedia locks the mic hardware stream on Android Chrome, breaking WebSpeech!
+      recognition.start();
     } catch (e) {
       console.error('Speech recognition exception:', e);
       setIsListening(false);

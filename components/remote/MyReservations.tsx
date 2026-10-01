@@ -137,18 +137,18 @@ export function MyReservations({
   return (
     <div className="p-4 space-y-4">
       {/* Top Sub-Tab Navigation Bar */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-zinc-900 border border-zinc-800">
+      <div className="flex items-center gap-1.5 p-1 rounded-lg bg-zinc-900 border border-zinc-800">
         <button
           onClick={() => setActiveTab('reservations')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'reservations'
-              ? 'bg-white text-black font-extrabold shadow'
+              ? 'bg-white text-black font-extrabold shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
-          <span>MY RESERVATIONS</span>
+          <span className="truncate">MY RESERVATIONS</span>
           <span
-            className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
               activeTab === 'reservations'
                 ? 'bg-teal-500/20 text-teal-700'
                 : 'bg-zinc-800 text-zinc-400'
@@ -160,19 +160,19 @@ export function MyReservations({
 
         <button
           onClick={() => setActiveTab('favorites')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 py-2 px-2 rounded-lg text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'favorites'
-              ? 'bg-white text-black font-extrabold shadow'
+              ? 'bg-white text-black font-extrabold shadow-sm'
               : 'text-zinc-400 hover:text-zinc-200'
           }`}
         >
           <Star
-            size={14}
-            className={activeTab === 'favorites' ? 'fill-yellow-500 text-yellow-500' : 'text-yellow-500'}
+            size={12}
+            className={`shrink-0 ${activeTab === 'favorites' ? 'fill-yellow-500 text-yellow-500' : 'text-yellow-500'}`}
           />
-          <span>FAVORITES</span>
+          <span className="truncate">FAVORITES</span>
           <span
-            className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+            className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
               activeTab === 'favorites'
                 ? 'bg-yellow-500/20 text-yellow-700'
                 : 'bg-zinc-800 text-zinc-400'

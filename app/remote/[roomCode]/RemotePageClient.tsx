@@ -19,7 +19,15 @@ import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
+import { createClient } from '@/lib/supabase/client';
 import type { EnrichedQueueItem, InstanceState, ConnectionStatus } from '@/lib/types';
+
+export interface OnlineUser {
+  session_id: string;
+  name: string;
+  device_type?: string;
+  online_at?: string;
+}
 
 type RemoteTab = 'search' | 'chat' | 'my-songs' | 'queue';
 
@@ -49,6 +57,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [showScanModal, setShowScanModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShoutoutModal, setShowShoutoutModal] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const { isInstallable, installApp } = usePWAInstall();
 
   // Remember last room code for app shortcuts & quick rejoining
@@ -57,6 +66,54 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       localStorage.setItem('okekaraoke_last_room', roomCode.toUpperCase());
     }
   }, [roomCode]);
+
+  // ── Room-Wide Presence Subscription (tracks all remotes across all tabs) ──
+  useEffect(() => {
+    if (!roomCode || !sessionId) return;
+    const supabase = createClient();
+    const presenceChannelName = `okekaraoke:presence:${roomCode.toUpperCase()}`;
+
+    const channel = supabase.channel(presenceChannelName, {
+      config: { presence: { key: sessionId } },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const activeList: OnlineUser[] = [];
+        const seen = new Set<string>();
+
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            const sId = p.session_id || p.name;
+            if (sId && !seen.has(sId)) {
+              seen.add(sId);
+              activeList.push({
+                session_id: p.session_id || sId,
+                name: p.name || 'Guest Remote',
+                device_type: p.device_type || 'remote',
+                online_at: p.online_at,
+              });
+            }
+          });
+        });
+        setOnlineUsers(activeList);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            session_id: sessionId,
+            name: guestName || 'Guest Remote',
+            device_type: 'remote',
+            online_at: new Date().toISOString(),
+          });
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [roomCode, sessionId, guestName]);
 
   // ── Name modal + inline editing ──────────────────────────
   const [showNameModal, setShowNameModal] = useState(false);
@@ -266,74 +323,77 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Header */}
       <header
-        className="px-4 py-3 shrink-0"
+        className="px-3.5 py-2.5 shrink-0 select-none"
         style={{
-          background: 'rgba(5, 5, 8, 0.95)',
+          background: 'rgba(9, 9, 11, 0.96)',
           borderBottom: '1px solid var(--color-border)',
         }}
       >
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
+        {/* Top Row: Logo, Room Code Badge, Status, Settings */}
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-7 h-7 object-contain drop-shadow" />
-            <span className="text-sm font-black tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+            <img src="/okekaraokelogo.png" alt="OKEKARAOKE" className="w-6 h-6 object-contain drop-shadow shrink-0" />
+            <span className="text-xs font-black tracking-tight shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               <span className="text-teal-400">OKE</span>
               <span className="text-white">KARAOKE</span>
             </span>
+
+            {/* Room Code Badge */}
+            <div className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-black text-teal-400 flex items-center gap-1 shrink-0 font-mono">
+              <span className="text-zinc-500 font-semibold">ROOM</span>
+              <span className="text-white font-extrabold tracking-wider">{roomCode}</span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {isInstallable && (
               <button
                 onClick={installApp}
-                className="px-2.5 py-1 rounded-lg bg-teal-400 hover:bg-teal-300 text-black text-[11px] font-black flex items-center gap-1 active:scale-95 transition-all shadow-md shrink-0"
+                className="p-1.5 rounded-lg bg-teal-400 hover:bg-teal-300 text-black flex items-center justify-center transition-all active:scale-95 shadow-sm shrink-0"
+                title="Install App"
+                aria-label="Install App"
               >
-                <Download size={12} />
-                <span>Install App</span>
+                <Download size={14} />
               </button>
             )}
 
             {connectionStatus !== 'connected' && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800">
                 <StatusIcon
-                  size={12}
+                  size={11}
                   style={{ color: statusColor }}
                   className={connectionStatus === 'reconnecting' ? 'animate-spin' : ''}
                 />
-                <span className="text-xs font-medium" style={{ color: statusColor }}>{statusLabel}</span>
+                <span className="text-[10px] font-semibold" style={{ color: statusColor }}>{statusLabel}</span>
               </div>
             )}
 
             <button
               onClick={() => setShowSettingsModal(true)}
-              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 hover:text-white flex items-center justify-center transition-all active:scale-95"
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
               title="Settings & Support"
             >
-              <Settings size={15} />
+              <Settings size={14} />
             </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-zinc-500 font-medium">ROOM</span>
-            <span
-              className="text-base font-black text-white tracking-widest"
-              style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '0.12em' }}
-            >
-              {roomCode}
-            </span>
+        {/* Action Row: Scan TV, Live Shoutout, Guest Name Edit */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-900/80">
+          <div className="flex items-center gap-1.5 min-w-0">
             <button
               onClick={() => setShowScanModal(true)}
-              className="ml-1 px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all"
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1.5 text-[11px] font-bold active:scale-95 transition-all shrink-0 whitespace-nowrap"
               title="Scan TV / Switch Room"
             >
-              <QrCode size={12} />
+              <QrCode size={12} className="text-teal-400" />
               <span>Scan TV</span>
             </button>
+
             <button
               onClick={() => setShowShoutoutModal(true)}
-              className="px-2 py-0.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-teal-300 flex items-center gap-1 text-[11px] font-extrabold active:scale-95 transition-all shadow-sm"
+              className="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all shadow-sm shrink-0 whitespace-nowrap"
               title="Broadcast Live TV Shoutout"
             >
               <Megaphone size={12} className="text-teal-400 animate-pulse" />
@@ -341,10 +401,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </button>
           </div>
 
-          {/* Guest name — editable */}
-          <div className="flex items-center gap-1.5">
+          {/* Guest name — editable inline */}
+          <div className="flex items-center gap-1 shrink-0 max-w-[140px]">
             {editingName ? (
-              <>
+              <div className="flex items-center gap-1 bg-zinc-900 border border-teal-500/50 rounded-lg px-2 py-0.5">
                 <input
                   ref={editInputRef}
                   type="text"
@@ -352,32 +412,25 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
                   onChange={(e) => setEditNameValue(e.target.value)}
                   onKeyDown={handleEditKeyDown}
                   maxLength={30}
-                  className="text-right text-sm text-white bg-transparent border-b border-teal-400 outline-none w-28"
+                  className="text-right text-xs text-white bg-transparent outline-none w-20 font-medium"
                   aria-label="Edit your name"
                 />
-                <button onClick={saveEditName} aria-label="Save name" className="text-green-400 active:scale-90 transition-transform">
-                  <Check size={14} />
+                <button onClick={saveEditName} aria-label="Save name" className="text-green-400 hover:text-green-300 active:scale-90 transition-transform">
+                  <Check size={12} />
                 </button>
-                <button onClick={cancelEditName} aria-label="Cancel" className="text-zinc-500 active:scale-90 transition-transform">
-                  <X size={14} />
+                <button onClick={cancelEditName} aria-label="Cancel" className="text-zinc-500 hover:text-zinc-300 active:scale-90 transition-transform">
+                  <X size={12} />
                 </button>
-              </>
+              </div>
             ) : (
-              <>
-                <span
-                  className="text-sm font-semibold text-zinc-300 cursor-pointer hover:text-white"
-                  onClick={startEditName}
-                >
-                  {guestName || 'Your name'}
-                </span>
-                <button
-                  onClick={startEditName}
-                  aria-label="Edit name"
-                  className="text-zinc-500 hover:text-white transition-colors active:scale-90"
-                >
-                  <Pencil size={12} />
-                </button>
-              </>
+              <button
+                onClick={startEditName}
+                className="px-2 py-1 rounded-lg bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/80 text-zinc-300 hover:text-white flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-all truncate"
+                title="Click to edit your display name"
+              >
+                <span className="truncate max-w-[90px] text-[11px]">{guestName || 'Your name'}</span>
+                <Pencil size={11} className="text-zinc-500 shrink-0" />
+              </button>
             )}
           </div>
         </div>
@@ -385,10 +438,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         {/* Now playing mini */}
         {currentSong && (
           <div
-            className="mt-2 px-3 py-1.5 rounded-lg flex items-center gap-2 bg-zinc-900 border border-zinc-800"
+            className="mt-2 px-3 py-1.5 rounded-lg flex items-center gap-2 bg-zinc-900/80 border border-zinc-800/60"
           >
             <div className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse shrink-0" />
-            <p className="text-xs text-zinc-400 truncate">
+            <p className="text-[11px] text-zinc-400 truncate">
               NOW: <span className="text-white font-medium">{currentSong.song.title}</span>
               {' · '}{currentSong.song.artist}
             </p>
@@ -411,6 +464,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             roomCode={roomCode}
             sessionId={sessionId}
             guestName={guestName}
+            onlineUsers={onlineUsers}
           />
         )}
         {tab === 'my-songs' && (
