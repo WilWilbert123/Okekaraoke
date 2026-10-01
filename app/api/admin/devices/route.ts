@@ -15,17 +15,18 @@ export async function DELETE(request: NextRequest) {
     const clearOffline = searchParams.get('clear_offline') === 'true';
 
     if (clearOffline) {
+      const cutoff = new Date(Date.now() - 45000).toISOString();
       const { error, count } = await supabase
         .from('devices')
         .delete()
-        .eq('is_online', false);
+        .or(`is_online.eq.false,last_seen_at.lt.${cutoff}`);
 
       if (error) {
         console.error('Error clearing offline devices:', error);
         return apiError('DB_ERROR', 'Failed to clear offline devices', 500);
       }
 
-      return apiSuccess({ message: 'Offline devices cleared successfully', count });
+      return apiSuccess({ message: 'Offline devices cleared successfully from Supabase', count });
     }
 
     if (!id) {

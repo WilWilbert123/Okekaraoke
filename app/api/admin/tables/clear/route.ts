@@ -13,6 +13,8 @@ const ALLOWED_TABLES = [
   'room_chats',
   'feedbacks',
   'queue_items',
+  'instances',
+  'devices',
 ];
 
 export async function POST(request: NextRequest) {
@@ -23,6 +25,15 @@ export async function POST(request: NextRequest) {
 
     if (!table || !ALLOWED_TABLES.includes(table)) {
       return apiError('BAD_REQUEST', `Invalid table name. Allowed: ${ALLOWED_TABLES.join(', ')}`, 400);
+    }
+
+    // If clearing instances, delete dependent child tables first
+    if (table === 'instances') {
+      await supabase.from('queue_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('instance_settings').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('devices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('room_chats').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('room_shoutouts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     }
 
     const { error, count } = await supabase

@@ -33,18 +33,21 @@ export async function GET(request: NextRequest) {
       .lt('last_seen_at', purgeCutoff)
       .eq('is_online', false);
 
-    // Auto-clean devices belonging to closed/terminated rooms
+    // Auto-clean closed/terminated rooms & their child records from Supabase DB
     const { data: closedInstances } = await supabase
       .from('instances')
-      .select('id')
+      .select('id, room_code')
       .eq('status', 'closed');
 
     if (closedInstances && closedInstances.length > 0) {
       const closedIds = closedInstances.map((i) => i.id);
-      await supabase
-        .from('devices')
-        .delete()
-        .in('instance_id', closedIds);
+      const closedCodes = closedInstances.map((i) => i.room_code);
+      await supabase.from('queue_items').delete().in('instance_id', closedIds);
+      await supabase.from('instance_settings').delete().in('instance_id', closedIds);
+      await supabase.from('devices').delete().in('instance_id', closedIds);
+      await supabase.from('room_chats').delete().in('room_code', closedCodes);
+      await supabase.from('room_shoutouts').delete().in('room_code', closedCodes);
+      await supabase.from('instances').delete().in('id', closedIds);
     }
 
     // 2. Count Active Rooms
