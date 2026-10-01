@@ -196,11 +196,16 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
         </div>
       )}
 
-        <div className="px-3 py-2 rounded-lg text-xs text-red-300 font-mono break-all flex items-center gap-1.5"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+      {/* Stop error notification */}
+      {stopError && (
+        <div
+          className="px-3 py-2 rounded-lg text-xs text-red-300 font-mono break-all flex items-center gap-1.5 animate-fadeIn"
+          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
+        >
           <AlertTriangle size={12} className="text-red-400 shrink-0" />
           <span>{stopError}</span>
         </div>
+      )}
 
       {/* Queued items */}
       {queue.map((item, index) => {
