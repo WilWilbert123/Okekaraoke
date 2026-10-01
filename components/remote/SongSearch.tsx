@@ -170,6 +170,101 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     }
   };
 
+  const [isListening, setIsListening] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Microphone Voice Search Handler (Web Speech API with iOS & Android permission support)
+  const startVoiceSearch = useCallback(() => {
+    setMicError(null);
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMicError('Voice search is not supported on this browser.');
+      setTimeout(() => setMicError(null), 3500);
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+
+      const recognition = new SpeechRecognition();
+      recognitionRef.current = recognition;
+
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+
+        if (transcript.trim()) {
+          setQuery(transcript);
+          search(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Speech recognition error:', event.error);
+        setIsListening(false);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setMicError('Microphone permission denied. Please allow mic in browser settings.');
+        } else if (event.error === 'no-speech') {
+          setMicError('No speech detected. Please speak clearly.');
+        } else {
+          setMicError('Voice search error. Please try again.');
+        }
+        setTimeout(() => setMicError(null), 4000);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      // Request browser audio permission first if available
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+          .then(() => {
+            try { recognition.start(); } catch {}
+          })
+          .catch(() => {
+            try { recognition.start(); } catch {}
+          });
+      } else {
+        try { recognition.start(); } catch {}
+      }
+    } catch (e) {
+      console.error('Speech recognition exception:', e);
+      setIsListening(false);
+    }
+  }, [search]);
+
+  const stopVoiceSearch = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    setIsListening(false);
+  }, []);
+
+  const toggleVoiceSearch = () => {
+    if (isListening) {
+      stopVoiceSearch();
+    } else {
+      startVoiceSearch();
+    }
+  };
+
   // Determine list of displayed songs
   const baseList = searched ? searchResults : catalog;
   const filteredList = baseList.filter((song) => {
@@ -184,40 +279,68 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
     <div className="flex flex-col h-full">
       {/* Search Input & Category Filter Bar */}
       <div className="p-4 sticky top-0 space-y-3" style={{ background: 'var(--color-bg)', zIndex: 10 }}>
-        <div className="relative">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+        <div className="relative flex items-center">
+          <Search size={18} className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${isListening ? 'text-teal-400' : 'text-slate-500'}`} />
           <input
             id="song-search-input"
             type="search"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
-            placeholder="Search songs, artists, code..."
-            className="w-full pl-10 pr-10 py-3 rounded-xl text-white placeholder-slate-500 transition-all text-sm"
+            placeholder={isListening ? "Listening... Speak song title or artist" : "Search songs, artists, code..."}
+            className={`w-full pl-10 pr-20 py-3 rounded-xl text-white placeholder-slate-500 transition-all text-sm ${
+              isListening ? 'ring-2 ring-teal-400/80 bg-teal-950/20' : ''
+            }`}
             style={{
-              background: 'var(--color-surface-2)',
-              border: '1px solid var(--color-border)',
+              background: isListening ? 'rgba(20, 184, 166, 0.08)' : 'var(--color-surface-2)',
+              border: isListening ? '1px solid rgba(45, 212, 191, 0.5)' : '1px solid var(--color-border)',
             }}
             onFocus={(e) => {
-              e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+              if (!isListening) e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
             }}
             onBlur={(e) => {
-              e.target.style.borderColor = 'var(--color-border)';
+              if (!isListening) e.target.style.borderColor = 'var(--color-border)';
             }}
           />
-          {query && (
+
+          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            {query && (
+              <button
+                onClick={() => {
+                  setQuery('');
+                  setSearchResults([]);
+                  setSearched(false);
+                }}
+                className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                aria-label="Clear search"
+              >
+                <X size={16} />
+              </button>
+            )}
+
+            {/* Voice Search Microphone Button */}
             <button
-              onClick={() => {
-                setQuery('');
-                setSearchResults([]);
-                setSearched(false);
-              }}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-              aria-label="Clear search"
+              type="button"
+              onClick={toggleVoiceSearch}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
+                isListening
+                  ? 'bg-red-500 text-white animate-pulse shadow-md scale-105'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+              }`}
+              aria-label={isListening ? 'Stop voice search' : 'Voice search with microphone'}
+              title={isListening ? 'Stop voice search' : 'Voice search with microphone'}
             >
-              <X size={16} />
+              <Mic size={16} className={isListening ? 'animate-bounce text-white' : ''} />
             </button>
-          )}
+          </div>
         </div>
+
+        {/* Mic Error / Permission Toast Banner */}
+        {micError && (
+          <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs flex items-center gap-2 animate-fadeIn">
+            <AlertCircle size={14} className="text-red-400 shrink-0" />
+            <span>{micError}</span>
+          </div>
+        )}
 
         {/* Quick Category Filter Pills with Lucide Icons */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
@@ -228,11 +351,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
-                  isActive
-                    ? 'bg-white text-black font-extrabold shadow'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${isActive
+                  ? 'bg-white text-black font-extrabold shadow'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
+                  }`}
               >
                 <IconComponent size={13} className={isActive ? 'text-black' : 'text-zinc-400'} />
                 <span>{filter.label}</span>
@@ -251,14 +373,9 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
               ? `Search Results (${filteredList.length})`
               : activeFilter !== 'all'
                 ? `${activeFilter.toUpperCase()} KARAOKE (${filteredList.length})`
-                : `Available Karaoke Catalog (${filteredList.length})`}
+                : `Available Karaoke (${filteredList.length})`}
           </span>
-          {!searched && catalog.length > 0 && (
-            <span className="text-[10px] text-teal-400 font-semibold bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20 flex items-center gap-1">
-              <Mic size={10} className="text-teal-400" />
-              <span>Ready to Reserve</span>
-            </span>
-          )}
+
         </div>
 
         {loading && (
@@ -331,11 +448,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved }: SongS
                     id={`reserve-btn-${song.id}`}
                     onClick={() => handleReserve(song)}
                     disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-                    className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${
-                      songStatus.status === 'success'
-                        ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
-                    }`}
+                    className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${songStatus.status === 'success'
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
+                      }`}
                     aria-label={`Reserve ${song.title}`}
                   >
                     {songStatus.status === 'reserving' ? (

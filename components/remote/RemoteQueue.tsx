@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Play, Music2, User, Trash2, Square, Loader2 } from 'lucide-react';
+import { Play, Music2, User, Trash2, Square, Loader2, AlertTriangle } from 'lucide-react';
 import type { EnrichedQueueItem } from '@/lib/types';
 
 interface RemoteQueueProps {
@@ -196,13 +196,11 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
         </div>
       )}
 
-      {/* Stop error feedback */}
-      {stopError && (
-        <div className="px-3 py-2 rounded-lg text-xs text-red-300 font-mono break-all"
+        <div className="px-3 py-2 rounded-lg text-xs text-red-300 font-mono break-all flex items-center gap-1.5"
           style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
-          ⚠️ {stopError}
+          <AlertTriangle size={12} className="text-red-400 shrink-0" />
+          <span>{stopError}</span>
         </div>
-      )}
 
       {/* Queued items */}
       {queue.map((item, index) => {

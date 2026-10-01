@@ -82,7 +82,7 @@ export function NameModal({ open, onConfirm }: NameModalProps) {
             Welcome to the Room!
           </h2>
           <p className="text-sm text-slate-400">
-            Pick a name so others know who&apos;s singing 🎤
+            Pick a name so others know who&apos;s singing
           </p>
         </div>
 

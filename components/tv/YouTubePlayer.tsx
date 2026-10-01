@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { VolumeX } from 'lucide-react';
+import { VideoOff } from 'lucide-react';
 import type { PlayerState } from '@/lib/types';
 
 declare global {
@@ -345,7 +345,7 @@ export function YouTubePlayer({
       {embedBlocked && videoId && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-black/95 z-10">
           <div className="text-center px-8 max-w-lg">
-            <div className="text-5xl mb-4">🚫</div>
+            <VideoOff size={48} className="text-red-400 mb-4 mx-auto" />
             <p className="text-2xl font-bold text-white mb-2">Embedding Disabled</p>
             <p className="text-slate-400 mb-1">This video cannot be played here.</p>
             <p className="text-slate-500 text-sm">

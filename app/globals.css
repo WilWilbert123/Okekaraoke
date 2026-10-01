@@ -230,3 +230,31 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* ── Slow Bouncing Floating Banner Animation ────────────────── */
+@keyframes slowBounceFloat {
+  0% {
+    top: 5%;
+    left: 4%;
+  }
+  25% {
+    top: 15%;
+    left: calc(100% - 22rem);
+  }
+  50% {
+    top: calc(100% - 18rem);
+    left: calc(100% - 22rem);
+  }
+  75% {
+    top: calc(100% - 18rem);
+    left: 4%;
+  }
+  100% {
+    top: 5%;
+    left: 4%;
+  }
+}
+
+.animate-slow-bounce {
+  animation: slowBounceFloat 38s ease-in-out infinite alternate;
+}
