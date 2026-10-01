@@ -98,7 +98,7 @@ export function NameModal({ open, onConfirm }: NameModalProps) {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={suggested}
-            maxLength={30}
+            maxLength={20}
             className="w-full px-4 py-3 rounded-2xl text-white text-sm outline-none transition-all"
             style={{
               background: 'rgba(255,255,255,0.06)',
