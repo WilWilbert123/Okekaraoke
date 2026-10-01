@@ -1557,44 +1557,44 @@ function SystemLogsTab() {
   ];
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+        <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
           <CheckCircle size={14} className="text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Supabase Table Maintenance Purge Tools */}
-      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+      <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Database size={18} className="text-indigo-400" />
+            <Database size={16} className="text-indigo-400" />
             <div>
-              <h2 className="text-sm font-bold text-white">Supabase Database Tables Manager</h2>
-              <p className="text-xs text-slate-400">Directly clear database tables from the admin backend</p>
+              <h2 className="text-xs font-bold text-white">Supabase Database Tables Manager</h2>
+              <p className="text-[10px] text-slate-400">Directly clear database tables from the admin backend</p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-0.5">
           {TABLES_TO_MANAGE.map((item) => {
             const IconComp = item.icon;
             const isPurging = purgingTable === item.id;
             return (
               <div
                 key={item.id}
-                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-3"
+                className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-2"
               >
-                <div className="flex items-start gap-2.5">
-                  <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
-                    <IconComp size={15} />
+                <div className="flex items-start gap-2">
+                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 shrink-0">
+                    <IconComp size={13} />
                   </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-white">{item.name}</h3>
-                    <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{item.desc}</p>
-                    <span className="text-[9px] font-mono text-slate-500 mt-1 inline-block">Table: {item.id}</span>
+                  <div className="min-w-0">
+                    <h3 className="text-[11px] font-bold text-white truncate">{item.name}</h3>
+                    <p className="text-[9px] text-slate-400 leading-tight mt-0.5 line-clamp-2">{item.desc}</p>
+                    <span className="text-[8px] font-mono text-slate-500 mt-0.5 block truncate">Table: {item.id}</span>
                   </div>
                 </div>
 
@@ -1602,10 +1602,10 @@ function SystemLogsTab() {
                   type="button"
                   onClick={() => handlePurgeTable(item.id, item.name)}
                   disabled={isPurging}
-                  className="w-full py-1.5 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+                  className="w-full py-1 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-[10px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
                 >
-                  <Trash2 size={12} className={isPurging ? 'animate-spin' : ''} />
-                  <span>{isPurging ? 'Clearing Table...' : `Clear ${item.name}`}</span>
+                  <Trash2 size={11} className={isPurging ? 'animate-spin' : ''} />
+                  <span>{isPurging ? 'Clearing...' : 'Clear Table'}</span>
                 </button>
               </div>
             );
@@ -1614,16 +1614,16 @@ function SystemLogsTab() {
       </div>
 
       {/* Live Reservation Logs Table Monitor */}
-      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+      <div className="p-3.5 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText size={18} className="text-indigo-400" />
+            <FileText size={16} className="text-indigo-400" />
             <div>
-              <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <h2 className="text-xs font-bold text-white flex items-center gap-1.5">
                 <span>Reservation Audit Logs (reservation_logs)</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </h2>
-              <p className="text-xs text-slate-400">Live reservation history & activity events ({logs.length} logs)</p>
+              <p className="text-[10px] text-slate-400">Live reservation history & activity events ({logs.length} logs)</p>
             </div>
           </div>
 
@@ -1631,9 +1631,9 @@ function SystemLogsTab() {
             <button
               type="button"
               onClick={fetchLogs}
-              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-xs font-bold flex items-center gap-1"
+              className="p-1 px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
             >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
               <span>Refresh</span>
             </button>
 
@@ -1641,9 +1641,9 @@ function SystemLogsTab() {
               <button
                 type="button"
                 onClick={handleClearAllLogs}
-                className="px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold flex items-center gap-1 transition-all"
+                className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 text-[11px] font-bold flex items-center gap-1 transition-all"
               >
-                <Trash2 size={12} />
+                <Trash2 size={11} />
                 <span>Clear Audit Logs</span>
               </button>
             )}
@@ -1651,13 +1651,13 @@ function SystemLogsTab() {
         </div>
 
         {logs.length > 0 ? (
-          <div className="max-h-[380px] overflow-y-auto custom-scrollbar space-y-2 pr-1">
+          <div className="max-h-[220px] sm:max-h-[260px] overflow-y-auto custom-scrollbar space-y-1.5 pr-1">
             {logs.map((log) => (
               <div
                 key={log.id}
-                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 text-xs"
+                className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-3 text-xs"
               >
-                <div className="space-y-1 min-w-0 flex-1">
+                <div className="space-y-0.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2 py-0.5 rounded font-mono font-black text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                       Room: {log.room_code}
@@ -1684,16 +1684,16 @@ function SystemLogsTab() {
                 <button
                   type="button"
                   onClick={() => handleDeleteSingleLog(log.id)}
-                  className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
+                  className="p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors shrink-0"
                   title="Delete log item"
                 >
-                  <Trash2 size={13} />
+                  <Trash2 size={12} />
                 </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-500 italic text-center py-6 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
+          <p className="text-[11px] text-slate-500 italic text-center py-4 bg-white/[0.01] rounded-xl border border-dashed border-white/5">
             No reservation audit logs stored yet.
           </p>
         )}
@@ -1936,8 +1936,8 @@ export default function AdminDashboardPage() {
         </div>
 
 
-        {/* Tabs */}
-        <div className="flex border-b border-white/10 overflow-x-auto" role="tablist">
+        {/* Tabs Navigation Bar */}
+        <div className="flex border-b border-white/10 overflow-x-auto shrink-0" role="tablist">
           {tabs.map(({ id, label, icon }) => (
             <TabButton
               key={id}
@@ -1949,25 +1949,27 @@ export default function AdminDashboardPage() {
           ))}
         </div>
 
-        {/* Tab Panels */}
-        {activeTab === 'overview' && <OverviewTab analytics={analytics} />}
-        {activeTab === 'rooms' && (
-          <RoomsTab analytics={analytics} onKillRoom={handleKillRoom} />
-        )}
-        {activeTab === 'banner' && (
-          <BannerTab
-            banner={banner}
-            setBanner={updateBanner}
-            onSave={handleSaveBanner}
-            saving={savingBanner}
-            saved={bannerSaveSuccess}
-          />
-        )}
-        {activeTab === 'songs' && (
-          <SongsTab songs={songs} totalCount={totalSongsCount} onRefresh={fetchData} />
-        )}
-        {activeTab === 'feedbacks' && <FeedbacksTab />}
-        {activeTab === 'logs' && <SystemLogsTab />}
+        {/* Tab Panels Scrollable Content Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pb-2 space-y-4">
+          {activeTab === 'overview' && <OverviewTab analytics={analytics} />}
+          {activeTab === 'rooms' && (
+            <RoomsTab analytics={analytics} onKillRoom={handleKillRoom} />
+          )}
+          {activeTab === 'banner' && (
+            <BannerTab
+              banner={banner}
+              setBanner={updateBanner}
+              onSave={handleSaveBanner}
+              saving={savingBanner}
+              saved={bannerSaveSuccess}
+            />
+          )}
+          {activeTab === 'songs' && (
+            <SongsTab songs={songs} totalCount={totalSongsCount} onRefresh={fetchData} />
+          )}
+          {activeTab === 'feedbacks' && <FeedbacksTab />}
+          {activeTab === 'logs' && <SystemLogsTab />}
+        </div>
       </div>
     </div>
   );
