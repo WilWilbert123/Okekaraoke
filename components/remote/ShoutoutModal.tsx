@@ -18,10 +18,10 @@ interface ShoutoutModalProps {
 }
 
 const PRESETS = [
-  'Shout out kay talong na pogi!',
-  'Happy Birthday!',
-  'Para sa pamilya at tropa!',
-  'Kanta pa & Tagay pa!',
+  'Shout out sayo naka black!',
+  'Happy Birthday pre!',
+  'Para sa tropa!',
+  'Tagay pa!',
 ];
 
 export function ShoutoutModal({
