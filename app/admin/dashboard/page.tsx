@@ -251,12 +251,12 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <span
                     className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      room.is_online
+                      room.is_online && room.user_count > 0
                         ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                     }`}
                   >
-                    {room.is_online ? '● LIVE ONLINE' : 'IDLE'}
+                    {room.is_online && room.user_count > 0 ? '● LIVE ONLINE' : 'IDLE / OFFLINE'}
                   </span>
                 </div>
               </div>
@@ -1037,6 +1037,33 @@ function RoomsTab({
   const [previewRoom, setPreviewRoom] = useState<string | null>(null);
 
   const [inspectorView, setInspectorView] = useState<'tv' | 'remote'>('tv');
+  const [filterCategory, setFilterCategory] = useState<'all' | 'online' | 'offline'>('all');
+  const [killingAllOffline, setKillingAllOffline] = useState(false);
+
+  const roomsList = analytics?.active_rooms_list || [];
+  const onlineRooms = roomsList.filter((r) => r.is_online && r.user_count > 0);
+  const offlineRooms = roomsList.filter((r) => !r.is_online || r.user_count === 0);
+
+  const displayedRooms = roomsList.filter((r) => {
+    const isRoomOnline = r.is_online && r.user_count > 0;
+    if (filterCategory === 'online') return isRoomOnline;
+    if (filterCategory === 'offline') return !isRoomOnline;
+    return true;
+  });
+
+  const handleKillAllOffline = async () => {
+    if (offlineRooms.length === 0) return;
+    if (!window.confirm(`Are you sure you want to terminate ALL ${offlineRooms.length} offline/idle rooms? This will clear space immediately.`)) return;
+    setKillingAllOffline(true);
+    try {
+      await fetch('/api/admin/rooms?kill_all_offline=true', { method: 'DELETE' });
+      await onKillRoom('');
+    } catch (e) {
+      console.error('Failed to kill offline rooms:', e);
+    } finally {
+      setKillingAllOffline(false);
+    }
+  };
 
   const handleKill = async (roomCode: string) => {
     if (confirmKill !== roomCode) {
@@ -1083,14 +1110,67 @@ function RoomsTab({
         </p>
       </div>
 
-      {!analytics?.active_rooms_list.length ? (
+      {/* Category Filter Pills & Kill All Offline Button Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 shrink-0 pt-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setFilterCategory('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              filterCategory === 'all'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            All Rooms ({roomsList.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory('online')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              filterCategory === 'online'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Online ({onlineRooms.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterCategory('offline')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              filterCategory === 'offline'
+                ? 'bg-amber-600 text-white shadow-md'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <AlertTriangle size={12} className="text-amber-300" />
+            <span>Offline / Idle ({offlineRooms.length})</span>
+          </button>
+        </div>
+
+        {offlineRooms.length > 0 && (
+          <button
+            type="button"
+            onClick={handleKillAllOffline}
+            disabled={killingAllOffline}
+            className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+          >
+            <Trash2 size={13} className={killingAllOffline ? 'animate-spin' : ''} />
+            <span>{killingAllOffline ? 'Terminating...' : `Kill All Offline (${offlineRooms.length})`}</span>
+          </button>
+        )}
+      </div>
+
+      {!displayedRooms.length ? (
         <div className="py-8 text-center my-auto">
           <Tv size={32} className="text-slate-700 mx-auto mb-2" />
-          <p className="text-xs text-slate-500">No active rooms right now.</p>
+          <p className="text-xs text-slate-500">No rooms found in this category.</p>
         </div>
       ) : (
         <div className="space-y-3 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-          {analytics.active_rooms_list.map((room) => {
+          {displayedRooms.map((room) => {
             const isKilling = killing === room.room_code;
             const isKilled = killed === room.room_code;
             const isConfirming = confirmKill === room.room_code;
@@ -1100,7 +1180,7 @@ function RoomsTab({
               ? `${uptimeMin}m uptime`
               : `${Math.floor(uptimeMin / 60)}h ${uptimeMin % 60}m uptime`;
 
-            const isIdle = !room.is_online && room.user_count === 0 && !room.currently_playing && (room.queue_count || 0) === 0;
+            const isIdle = !room.is_online || room.user_count === 0;
 
             return (
               <div
@@ -1143,7 +1223,7 @@ function RoomsTab({
                         </span>
                       ) : isIdle ? (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                          <AlertTriangle size={12} className="inline text-amber-400" /> IDLE / UNUSED
+                          <AlertTriangle size={12} className="inline text-amber-400" /> IDLE / OFFLINE (0 users)
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
