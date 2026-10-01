@@ -186,9 +186,17 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     const session = getOrCreateGuestSession();
     setSessionId(session.session_id);
 
-    const confirmed = localStorage.getItem(NAME_CONFIRMED_KEY);
-    if (session.guest_name && confirmed) {
-      setGuestName(session.guest_name);
+    const storedName = session.guest_name || (typeof window !== 'undefined' ? localStorage.getItem('okekaraoke_guest_name') : null);
+
+    if (storedName && storedName.trim()) {
+      const cleanName = storedName.trim();
+      setGuestName(cleanName);
+      setShowNameModal(false);
+      localStorage.setItem(NAME_CONFIRMED_KEY, '1');
+      localStorage.setItem('okekaraoke_guest_name', cleanName);
+      if (session.guest_name !== cleanName) {
+        updateGuestSession({ guest_name: cleanName });
+      }
     } else {
       setShowNameModal(true);
     }
@@ -226,11 +234,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   // ── Name modal confirm ────────────────────────────────────
   const handleNameConfirm = useCallback((name: string) => {
     const trimmed = name.trim();
-    setGuestName(trimmed);
-    updateGuestSession({ guest_name: trimmed });
-    localStorage.setItem(NAME_CONFIRMED_KEY, '1');
-    setShowNameModal(false);
-    registerDevice(trimmed);
+    if (trimmed) {
+      setGuestName(trimmed);
+      updateGuestSession({ guest_name: trimmed });
+      localStorage.setItem('okekaraoke_guest_name', trimmed);
+      localStorage.setItem(NAME_CONFIRMED_KEY, '1');
+      setShowNameModal(false);
+      registerDevice(trimmed);
+    }
   }, [registerDevice]);
 
   // ── Inline name edit ──────────────────────────────────────
@@ -245,6 +256,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     if (trimmed) {
       setGuestName(trimmed);
       updateGuestSession({ guest_name: trimmed });
+      localStorage.setItem('okekaraoke_guest_name', trimmed);
+      localStorage.setItem(NAME_CONFIRMED_KEY, '1');
       registerDevice(trimmed);
     }
     setEditingName(false);
@@ -306,15 +319,19 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       {/* Name entry modal */}
       <NameModal open={showNameModal} onConfirm={handleNameConfirm} />
 
-      {/* Settings Modal */}
       <SettingsModal
         open={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
         guestName={guestName}
         onUpdateName={(name) => {
-          setGuestName(name);
-          updateGuestSession({ guest_name: name });
-          registerDevice(name);
+          const trimmed = name.trim();
+          if (trimmed) {
+            setGuestName(trimmed);
+            updateGuestSession({ guest_name: trimmed });
+            localStorage.setItem('okekaraoke_guest_name', trimmed);
+            localStorage.setItem(NAME_CONFIRMED_KEY, '1');
+            registerDevice(trimmed);
+          }
         }}
         roomCode={roomCode}
         isInstallable={isInstallable}
