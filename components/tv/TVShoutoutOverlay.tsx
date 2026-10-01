@@ -33,10 +33,10 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
       return [...prev.slice(-4), latest];
     });
 
-    // Auto cleanup after 6.5 seconds animation completes
+    // Auto cleanup after 14 seconds animation completes
     const timer = setTimeout(() => {
       setActiveList((prev) => prev.filter((item) => item.id !== latest.id));
-    }, 6500);
+    }, 14000);
 
     return () => clearTimeout(timer);
   }, [shoutouts]);
@@ -44,11 +44,11 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
   if (activeList.length === 0) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 pointer-events-none flex flex-col items-center gap-3 overflow-hidden px-4">
+    <div className="fixed inset-0 z-40 pointer-events-none overflow-hidden flex flex-col items-center justify-end pb-8 px-4">
       {activeList.map((item) => (
         <div
           key={item.id}
-          className="animate-shoutout-float pointer-events-auto flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/75 border border-teal-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-white"
+          className="animate-shoutout-float pointer-events-auto flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/80 border border-teal-400/40 backdrop-blur-md shadow-[0_10px_30px_rgba(0,0,0,0.8)] text-white mb-2"
         >
           <div className="w-6 h-6 rounded-full bg-teal-500/20 border border-teal-400/50 flex items-center justify-center text-teal-300 shrink-0">
             <Megaphone size={12} className="animate-pulse" />
@@ -65,23 +65,23 @@ export function TVShoutoutOverlay({ shoutouts }: TVShoutoutOverlayProps) {
         @keyframes shoutoutFloat {
           0% {
             opacity: 0;
-            transform: translateY(40px) scale(0.92);
+            transform: translateY(50px) scale(0.9);
           }
-          15% {
+          10% {
             opacity: 1;
             transform: translateY(0px) scale(1);
           }
-          70% {
+          85% {
             opacity: 1;
-            transform: translateY(-90px) scale(1);
+            transform: translateY(-70vh) scale(1);
           }
           100% {
             opacity: 0;
-            transform: translateY(-160px) scale(0.95);
+            transform: translateY(-88vh) scale(0.92);
           }
         }
         .animate-shoutout-float {
-          animation: shoutoutFloat 6.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: shoutoutFloat 14s linear forwards;
         }
       `}</style>
     </div>

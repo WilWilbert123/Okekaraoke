@@ -32,6 +32,10 @@ import {
   WifiOff,
   MessageSquare,
   Upload,
+  Megaphone,
+  Pin,
+  Layout,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -525,12 +529,13 @@ function BannerTab({
           </label>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             {[
-              { id: 'ticker', name: 'Top Header Ticker', desc: 'Running marquee ticker at top header', icon: '📺' },
-              { id: 'side_card', name: 'Side Ad Box', desc: 'Floating glass ad card on top right side', icon: '📌' },
-              { id: 'bottom_bar', name: 'Bottom Edge Bar', desc: 'Running ticker bar fixed along bottom edge', icon: '📟' },
-              { id: 'popup', name: 'Center Popup Card', desc: 'Featured interstitial popup banner modal', icon: '📣' },
+              { id: 'ticker', name: 'Top Header Ticker', desc: 'Running marquee ticker at top header', Icon: Tv },
+              { id: 'side_card', name: 'Side Ad Box', desc: 'Floating glass ad card on top right side', Icon: Pin },
+              { id: 'bottom_bar', name: 'Bottom Edge Bar', desc: 'Running ticker bar fixed along bottom edge', Icon: Layout },
+              { id: 'popup', name: 'Slow Bouncing Card', desc: 'Smooth slow bouncing floating banner on screen', Icon: Sparkles },
             ].map((typeOption) => {
               const selected = (banner.banner_type || 'ticker') === typeOption.id;
+              const OptionIcon = typeOption.Icon;
               return (
                 <div
                   key={typeOption.id}
@@ -542,7 +547,7 @@ function BannerTab({
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-base">{typeOption.icon}</span>
+                    <OptionIcon size={16} className={selected ? 'text-indigo-400' : 'text-slate-400'} />
                     {selected && <CheckCircle size={14} className="text-indigo-400" />}
                   </div>
                   <div>
@@ -632,7 +637,7 @@ function BannerTab({
                     className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-indigo-500/30 text-indigo-300 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95"
                   >
                     <Upload size={14} />
-                    <span>{uploading ? 'Compressing & Adding Image...' : '📁 Upload Local Image File (Auto-Compress)'}</span>
+                    <span>{uploading ? 'Compressing & Adding Image...' : 'Upload Local Image File (Auto-Compress)'}</span>
                   </label>
                   <input
                     id="banner-file-upload"
@@ -729,7 +734,7 @@ function AdminShoutoutMonitor() {
     <div className="mt-4 pt-4 border-t border-white/10 space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-base">📢</span>
+          <Megaphone size={16} className="text-indigo-400" />
           <div>
             <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
               <span>Live Room Shoutouts Monitoring</span>
@@ -1090,7 +1095,7 @@ function RoomsTab({
                         </span>
                       ) : isIdle ? (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                          ⚠️ IDLE / UNUSED
+                          <AlertTriangle size={12} className="inline text-amber-400" /> IDLE / UNUSED
                         </span>
                       ) : (
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 flex items-center gap-1">
@@ -1342,7 +1347,7 @@ function FeedbacksTab() {
               <div className="space-y-1.5 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 ${
                       item.category === 'bug'
                         ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                         : item.category === 'song_request'
@@ -1350,7 +1355,22 @@ function FeedbacksTab() {
                         : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                     }`}
                   >
-                    {item.category === 'song_request' ? '🎵 Song Request' : item.category === 'bug' ? '🐛 Bug Report' : '💬 Feedback'}
+                    {item.category === 'song_request' ? (
+                      <>
+                        <Music2 size={11} />
+                        <span>Song Request</span>
+                      </>
+                    ) : item.category === 'bug' ? (
+                      <>
+                        <AlertTriangle size={11} />
+                        <span>Bug Report</span>
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare size={11} />
+                        <span>Feedback</span>
+                      </>
+                    )}
                   </span>
 
                   {item.guest_name && (

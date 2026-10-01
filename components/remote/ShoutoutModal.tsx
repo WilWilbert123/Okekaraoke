@@ -18,10 +18,10 @@ interface ShoutoutModalProps {
 }
 
 const PRESETS = [
-  'Shout out kay talong na pogi! 😎',
-  'Happy Birthday! 🎉',
-  'Para sa pamilya at tropa! 🎤',
-  'Kanta pa & Tagay pa! 🍺',
+  'Shout out kay talong na pogi!',
+  'Happy Birthday!',
+  'Para sa pamilya at tropa!',
+  'Kanta pa & Tagay pa!',
 ];
 
 export function ShoutoutModal({
@@ -162,7 +162,7 @@ export function ShoutoutModal({
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value.slice(0, 50))}
-                  placeholder="e.g. Shout out kay talong na pogi! 😎"
+                  placeholder="e.g. Shout out kay talong na pogi!"
                   rows={2}
                   maxLength={50}
                   className="w-full p-2.5 rounded-[8px] bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-teal-500 transition-all resize-none"

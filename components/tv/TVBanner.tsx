@@ -208,30 +208,30 @@ export function TVBanner({
   }
 
   // ============================================================
-  // TYPE 4: Center Floating Interstitial Card (Popup Ad Modal)
+  // TYPE 4: Slow Bouncing Floating Announcement Card
+  // Bounces slowly & smoothly across the TV screen without blocking playback
   // ============================================================
   if (bannerType === 'popup') {
     if (dismissedPopup) return null;
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in pointer-events-auto">
-        <div className="relative w-full max-w-sm sm:max-w-md p-5 rounded-3xl bg-zinc-950/95 border border-indigo-500/50 backdrop-blur-2xl shadow-2xl text-white flex flex-col items-center text-center">
+      <div className="fixed z-40 pointer-events-auto animate-slow-bounce transition-all">
+        <div className="relative w-[260px] sm:w-[290px] p-3.5 rounded-2xl bg-zinc-950/90 border border-indigo-500/40 backdrop-blur-xl shadow-[0_10px_30px_rgba(99,102,241,0.35)] text-white flex flex-col items-center text-center">
           <button
             onClick={() => setDismissedPopup(true)}
-            className="absolute top-3.5 right-3.5 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all active:scale-95"
+            className="absolute top-2.5 right-2.5 p-1 rounded-full bg-white/10 hover:bg-white/20 text-zinc-300 hover:text-white transition-all active:scale-95"
             aria-label="Dismiss banner"
           >
-            <X size={16} />
+            <X size={14} />
           </button>
 
-          <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-indigo-400 mb-3 shadow-lg">
-            <Sparkles size={20} />
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles size={14} className="text-indigo-400" />
+            <span className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">ANNOUNCEMENT</span>
           </div>
 
-          <p className="text-xs font-black text-indigo-300 uppercase tracking-widest mb-1">ANNOUNCEMENT</p>
-
           {currentImage && (
-            <div className="relative w-full h-36 sm:h-44 rounded-2xl overflow-hidden my-3 bg-black/60 border border-white/10 shadow-lg">
+            <div className="relative w-full h-24 sm:h-28 rounded-xl overflow-hidden my-1.5 bg-black/60 border border-white/10 shadow-inner">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={currentImage}
@@ -242,18 +242,18 @@ export function TVBanner({
           )}
 
           {bannerText && (
-            <p className="text-xs sm:text-sm font-extrabold text-white leading-snug my-2">
+            <p className="text-xs font-bold text-zinc-100 line-clamp-3 leading-snug my-1">
               {bannerText}
             </p>
           )}
 
           {imagesList.length > 1 && (
-            <div className="flex items-center gap-1.5 mt-2">
+            <div className="flex items-center gap-1 mt-1.5">
               {imagesList.map((_, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? 'bg-indigo-400 w-4' : 'bg-white/30 w-1.5'}`}
+                  className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? 'bg-indigo-400 w-3.5' : 'bg-white/30 w-1.5'}`}
                 />
               ))}
             </div>
