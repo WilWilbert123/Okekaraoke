@@ -54,6 +54,7 @@ export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeO
       'remote_joined',
       'remote_left',
       'banner_updated',
+      'shoutout_broadcast',
     ];
 
     eventTypes.forEach((eventType) => {

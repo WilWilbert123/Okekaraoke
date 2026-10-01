@@ -18,14 +18,28 @@ export async function GET() {
       .maybeSingle();
 
     const banner_enabled = settings?.banner_enabled ?? false;
+    const shoutout_enabled = settings?.shoutout_enabled ?? true;
+    const banner_type = settings?.banner_type ?? 'ticker';
     const banner_text = settings?.banner_text ?? 'Welcome to OKEKARAOKE! Scan the QR code to reserve your favorite songs.';
     const banner_image_url = settings?.banner_image_url ?? '';
+    let banner_images: string[] = Array.isArray(settings?.banner_images)
+      ? settings.banner_images
+      : [];
+
+    // Fallback: if banner_images is empty but banner_image_url exists
+    if (banner_images.length === 0 && banner_image_url) {
+      banner_images = [banner_image_url];
+    }
+
     const banner_speed = settings?.banner_speed ?? 20;
 
     return apiSuccess({
       banner_enabled,
+      shoutout_enabled,
+      banner_type,
       banner_text,
       banner_image_url,
+      banner_images,
       banner_speed,
     });
   } catch (error) {
@@ -37,31 +51,60 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { banner_enabled, banner_text, banner_image_url, banner_speed } = body;
+    const { banner_enabled, shoutout_enabled, banner_type, banner_text, banner_image_url, banner_images, banner_speed } = body;
 
     const supabase = createAdminClient();
 
-    // Upsert into app_settings table
+    // Standardize images array
+    const imageList: string[] = Array.isArray(banner_images)
+      ? banner_images.filter((url: any) => typeof url === 'string' && url.trim().length > 0)
+      : (banner_image_url ? [banner_image_url] : []);
+
+    const primaryImageUrl = imageList.length > 0 ? imageList[0] : (String(banner_image_url ?? ''));
+    const bType = String(banner_type ?? 'ticker');
+
+    // Attempt upsert with new columns first
+    const fullRecord = {
+      id: 'global_settings',
+      banner_enabled: Boolean(banner_enabled),
+      shoutout_enabled: shoutout_enabled !== undefined ? Boolean(shoutout_enabled) : true,
+      banner_type: bType,
+      banner_text: String(banner_text ?? ''),
+      banner_image_url: primaryImageUrl,
+      banner_images: imageList,
+      banner_speed: Number(banner_speed ?? 20),
+      updated_at: new Date().toISOString(),
+    };
+
     const { error: upsertError } = await supabase
       .from('app_settings')
-      .upsert({
-        id: 'global_settings',
-        banner_enabled: Boolean(banner_enabled),
-        banner_text: String(banner_text ?? ''),
-        banner_image_url: String(banner_image_url ?? ''),
-        banner_speed: Number(banner_speed ?? 20),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'id' });
+      .upsert(fullRecord, { onConflict: 'id' });
 
     if (upsertError) {
-      console.error('Settings upsert error:', upsertError);
+      console.warn('Settings upsert with new columns returned warning/error, attempting legacy column fallback:', upsertError.message);
+      // Fallback upsert without new columns
+      try {
+        await supabase
+          .from('app_settings')
+          .upsert({
+            id: 'global_settings',
+            banner_enabled: Boolean(banner_enabled),
+            banner_text: String(banner_text ?? ''),
+            banner_image_url: primaryImageUrl,
+            banner_speed: Number(banner_speed ?? 20),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+      } catch {}
     }
 
-    // Broadcast live banner update to all active TV screens!
+    // Broadcast live banner update to all active TV screens in real-time!
     const bannerPayload = {
       banner_enabled: Boolean(banner_enabled),
+      shoutout_enabled: shoutout_enabled !== undefined ? Boolean(shoutout_enabled) : true,
+      banner_type: bType,
       banner_text: String(banner_text ?? ''),
-      banner_image_url: String(banner_image_url ?? ''),
+      banner_image_url: primaryImageUrl,
+      banner_images: imageList,
       banner_speed: Number(banner_speed ?? 20),
     };
 

@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
@@ -15,6 +15,7 @@ import { NameModal } from '@/components/remote/NameModal';
 import { EmojiReactions } from '@/components/remote/EmojiReactions';
 import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
 import { SettingsModal } from '@/components/remote/SettingsModal';
+import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -47,6 +48,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [instanceId, setInstanceId] = useState<string>('');
   const [showScanModal, setShowScanModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showShoutoutModal, setShowShoutoutModal] = useState(false);
   const { isInstallable, installApp } = usePWAInstall();
 
   // Remember last room code for app shortcuts & quick rejoining
@@ -329,6 +331,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
               <QrCode size={12} />
               <span>Scan TV</span>
             </button>
+            <button
+              onClick={() => setShowShoutoutModal(true)}
+              className="px-2 py-0.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-400/40 text-teal-300 flex items-center gap-1 text-[11px] font-extrabold active:scale-95 transition-all shadow-sm"
+              title="Broadcast Live TV Shoutout"
+            >
+              <Megaphone size={12} className="text-teal-400 animate-pulse" />
+              <span>Shoutout</span>
+            </button>
           </div>
 
           {/* Guest name — editable */}
@@ -437,6 +447,15 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         currentRoomCode={roomCode}
         isOpen={showScanModal}
         onClose={() => setShowScanModal(false)}
+      />
+
+      {/* Live Broadcast TV Shoutout Modal */}
+      <ShoutoutModal
+        open={showShoutoutModal}
+        onClose={() => setShowShoutoutModal(false)}
+        roomCode={roomCode}
+        guestName={guestName}
+        sessionId={sessionId}
       />
 
       {/* Bottom Navigation Bar */}
