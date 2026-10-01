@@ -38,6 +38,9 @@ import {
   Sparkles,
   Database,
   FileText,
+  HardDrive,
+  Server,
+  PieChart,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -111,7 +114,7 @@ interface FeedbackItem {
   created_at: string;
 }
 
-type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks' | 'logs';
+type Tab = 'overview' | 'banner' | 'songs' | 'rooms' | 'feedbacks' | 'supabase_stats' | 'logs';
 
 // ─── Metric Card ─────────────────────────────────────────────────────────────
 function MetricCard({
@@ -1597,6 +1600,288 @@ function FeedbacksTab() {
   );
 }
 
+// ─── Panel: Supabase Database Storage & Quota Monitoring ─────────────────────
+interface SupabaseStatsResponse {
+  database: {
+    usedBytes: number;
+    usedMb: number;
+    quotaMb: number;
+    quotaBytes: number;
+    percentageUsed: number;
+    totalRows: number;
+    status: 'Healthy' | 'Warning';
+  };
+  storage: {
+    usedBytes: number;
+    usedMb: number;
+    quotaMb: number;
+    quotaBytes: number;
+    percentageUsed: number;
+    status: 'Healthy' | 'Warning';
+  };
+  tables: Array<{
+    id: string;
+    name: string;
+    desc: string;
+    rowCount: number;
+    estimatedSizeBytes: number;
+  }>;
+  timestamp: string;
+}
+
+function SupabaseStatsTab() {
+  const [stats, setStats] = useState<SupabaseStatsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [purgingTable, setPurgingTable] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/supabase-stats');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setStats(json.data);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching Supabase storage stats:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const handlePurgeTable = async (tableName: string, label: string) => {
+    if (!window.confirm(`⚠️ WARNING: Are you sure you want to PURGE ALL DATA from table '${label}' (${tableName}) in Supabase? This action cannot be undone.`)) return;
+    setPurgingTable(tableName);
+    try {
+      const res = await fetch('/api/admin/tables/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: tableName }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setToastMessage(`Successfully cleared table '${label}'!`);
+        fetchStats();
+        setTimeout(() => setToastMessage(null), 4000);
+      } else {
+        alert(`Failed to clear table: ${json.error?.message || 'Unknown error'}`);
+      }
+    } catch (e) {
+      console.error('Error purging table:', e);
+      alert('Network error while clearing table.');
+    } finally {
+      setPurgingTable(null);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="p-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+          <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+            <HardDrive size={20} />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-2">
+              <span>Supabase Free Quota & Storage Monitor</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                500MB DB Limit & 1GB Bucket Limit
+              </span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Real-time monitoring of your Supabase database size, bucket storage usage, and table row metrics.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={fetchStats}
+          disabled={loading}
+          className="px-3.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+        >
+          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh Quotas</span>
+        </button>
+      </div>
+
+      {/* Quota Progress Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Card 1: Database Storage (500 MB) */}
+        <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Database size={14} className="text-indigo-400" />
+              <span>PostgreSQL DB Storage</span>
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              {stats?.database.status || 'Healthy'}
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-2xl font-black text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                {stats ? stats.database.usedMb : '0.00'} <span className="text-xs font-medium text-slate-400">MB</span>
+              </span>
+              <span className="text-xs font-mono text-slate-400">
+                / {stats ? stats.database.quotaMb : 500} MB Limit
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-2.5 rounded-full bg-zinc-800 overflow-hidden relative">
+              <div
+                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400"
+                style={{ width: `${Math.max(2, stats?.database.percentageUsed || 0)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 flex justify-between">
+              <span>{stats ? `${stats.database.percentageUsed}% of 500 MB used` : 'Calculating usage...'}</span>
+              <span>Available: {stats ? (stats.database.quotaMb - stats.database.usedMb).toFixed(2) : 500} MB</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Card 2: Storage Bucket (1 GB / 1000 MB) */}
+        <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <ImageIcon size={14} className="text-pink-400" />
+              <span>Storage Bucket (Media & Assets)</span>
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              {stats?.storage.status || 'Healthy'}
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-2xl font-black text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                {stats ? stats.storage.usedMb : '0.00'} <span className="text-xs font-medium text-slate-400">MB</span>
+              </span>
+              <span className="text-xs font-mono text-slate-400">
+                / {stats ? stats.storage.quotaMb : 1000} MB (1GB) Limit
+              </span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-2.5 rounded-full bg-zinc-800 overflow-hidden relative">
+              <div
+                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-pink-500 to-rose-400"
+                style={{ width: `${Math.max(2, stats?.storage.percentageUsed || 0)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 flex justify-between">
+              <span>{stats ? `${stats.storage.percentageUsed}% of 1 GB used` : 'Calculating bucket...'}</span>
+              <span>Available: {stats ? (stats.storage.quotaMb - stats.storage.usedMb).toFixed(2) : 1000} MB</span>
+            </p>
+          </div>
+        </div>
+
+        {/* Card 3: Total Managed Database Rows */}
+        <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Server size={14} className="text-teal-400" />
+              <span>Total Database Rows</span>
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono text-slate-400 bg-zinc-800">
+              {stats?.tables.length || 0} Tables
+            </span>
+          </div>
+
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-2xl font-black text-white" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+                {stats ? stats.database.totalRows.toLocaleString() : '0'} <span className="text-xs font-medium text-slate-400">records</span>
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 mt-2">
+              Includes songs, queues, chats, shoutouts, system audit logs, user feedbacks, instances & registered devices.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Database Tables Usage & Purge Manager */}
+      <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xs font-bold text-white flex items-center gap-2">
+              <PieChart size={15} className="text-indigo-400" />
+              <span>Managed Tables Storage Breakdown & Quick Clear</span>
+            </h3>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              View row counts and estimated disk usage per table. Select &quot;Clear Table&quot; to free database space instantly.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          {stats?.tables.map((table) => {
+            const isPurging = purgingTable === table.id;
+            return (
+              <div
+                key={table.id}
+                className="p-3 rounded-xl bg-white/[0.02] border border-white/5 flex flex-col justify-between gap-2.5 transition-all hover:border-white/10"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-white truncate">{table.name}</h4>
+                    <span className="text-[10px] font-mono font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20 shrink-0">
+                      {table.rowCount} rows
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 line-clamp-2 leading-snug">{table.desc}</p>
+                  <div className="flex items-center justify-between pt-1 text-[9px] font-mono text-slate-500 border-t border-white/5">
+                    <span>Table: {table.id}</span>
+                    <span>~{formatBytes(table.estimatedSizeBytes)}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handlePurgeTable(table.id, table.name)}
+                  disabled={isPurging}
+                  className="w-full py-1.5 px-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-[10px] font-bold flex items-center justify-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Trash2 size={11} className={isPurging ? 'animate-spin' : ''} />
+                  <span>{isPurging ? 'Clearing...' : 'Clear Table'}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Panel: System Logs & Supabase Table Manager ────────────────────────────
 function SystemLogsTab() {
   const [logs, setLogs] = useState<Array<{
@@ -1982,6 +2267,7 @@ export default function AdminDashboardPage() {
     { id: 'banner', label: 'Announcement', icon: Radio },
     { id: 'songs', label: 'Song Catalog', icon: Music2 },
     { id: 'feedbacks', label: 'Feedbacks & Reports', icon: MessageSquare },
+    { id: 'supabase_stats', label: 'Supabase Quotas & DB', icon: HardDrive },
     { id: 'logs', label: 'System Logs & Tables', icon: Database },
   ];
 
@@ -2098,6 +2384,7 @@ export default function AdminDashboardPage() {
             <SongsTab songs={songs} totalCount={totalSongsCount} onRefresh={fetchData} />
           )}
           {activeTab === 'feedbacks' && <FeedbacksTab />}
+          {activeTab === 'supabase_stats' && <SupabaseStatsTab />}
           {activeTab === 'logs' && <SystemLogsTab />}
         </div>
       </div>
