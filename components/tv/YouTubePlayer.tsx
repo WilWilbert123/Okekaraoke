@@ -6,7 +6,7 @@
 // NEVER downloads, proxies, or bypasses YouTube
 // ============================================================
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
 import { VideoOff } from 'lucide-react';
 import type { PlayerState } from '@/lib/types';
 
@@ -84,6 +84,11 @@ function loadYouTubeAPI(): Promise<void> {
   });
 }
 
+export interface YouTubePlayerRef {
+  playVideo: () => void;
+  pauseVideo: () => void;
+}
+
 interface YouTubePlayerProps {
   videoId: string | null;
   queueItemId: string | null;
@@ -93,22 +98,46 @@ interface YouTubePlayerProps {
   className?: string;
 }
 
-export function YouTubePlayer({
-  videoId,
-  queueItemId,
-  onEnded,
-  onStateChange,
-  autoplay = true,
-  className = '',
-}: YouTubePlayerProps) {
+export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(function YouTubePlayer(
+  {
+    videoId,
+    queueItemId,
+    onEnded,
+    onStateChange,
+    autoplay = true,
+    className = '',
+  },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const currentVideoIdRef = useRef<string | null>(null);
   const currentQueueItemIdRef = useRef<string | null>(null);
+  const hasStartedPlayingRef = useRef<boolean>(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
+
+  // Expose imperative methods to parent (e.g. countdown modal completion)
+  useImperativeHandle(ref, () => ({
+    playVideo: () => {
+      if (playerRef.current) {
+        try {
+          playerRef.current.mute();
+          playerRef.current.playVideo();
+          setTimeout(() => {
+            try { playerRef.current?.unMute(); } catch {}
+          }, 300);
+        } catch {}
+      }
+    },
+    pauseVideo: () => {
+      try {
+        playerRef.current?.pauseVideo();
+      } catch {}
+    },
+  }));
 
   // Keep refs current
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
@@ -145,13 +174,11 @@ export function YouTubePlayer({
           if (videoId) {
             currentVideoIdRef.current = videoId;
             currentQueueItemIdRef.current = queueItemId;
+            hasStartedPlayingRef.current = false;
             try {
               playerRef.current?.mute();
               playerRef.current?.loadVideoById(videoId);
               playerRef.current?.playVideo();
-              setTimeout(() => {
-                try { playerRef.current?.unMute(); } catch {}
-              }, 400);
             } catch (e) {
               console.warn('onReady load video error:', e);
             }
@@ -160,14 +187,17 @@ export function YouTubePlayer({
         onStateChange: (event) => {
           const YTState = window.YT.PlayerState;
 
+          if (event.data === YTState.PLAYING) {
+            hasStartedPlayingRef.current = true;
+            try {
+              playerRef.current?.unMute();
+            } catch {}
+          }
+
           let playerStatus: PlayerState['status'] = 'idle';
           switch (event.data) {
             case YTState.PLAYING:
               playerStatus = 'playing';
-              // Attempt un-muting once playing starts
-              try {
-                playerRef.current?.unMute();
-              } catch {}
               break;
             case YTState.PAUSED:
               playerStatus = 'paused';
@@ -242,15 +272,21 @@ export function YouTubePlayer({
       if (currentVideoIdRef.current !== videoId) {
         currentVideoIdRef.current = videoId;
         currentQueueItemIdRef.current = queueItemId;
+        hasStartedPlayingRef.current = false;
         setEmbedBlocked(false);
         try {
           playerRef.current.mute();
           playerRef.current.loadVideoById(videoId);
           playerRef.current.playVideo();
+
+          // Retry un-mute & play after 400ms if player hasn't started playing yet
           setTimeout(() => {
-            try {
-              playerRef.current?.unMute();
-            } catch {}
+            if (playerRef.current && !hasStartedPlayingRef.current) {
+              try {
+                playerRef.current.playVideo();
+                playerRef.current.unMute();
+              } catch {}
+            }
           }, 400);
         } catch (e) {
           console.warn('Error playing video:', e);
@@ -260,6 +296,7 @@ export function YouTubePlayer({
       if (currentVideoIdRef.current !== null) {
         currentVideoIdRef.current = null;
         currentQueueItemIdRef.current = null;
+        hasStartedPlayingRef.current = false;
         try {
           playerRef.current.stopVideo();
         } catch {}
@@ -274,7 +311,7 @@ export function YouTubePlayer({
     }
   }, [queueItemId]);
 
-  // Autoplay & End-of-Video Watchdog: Ensures video starts playing if stuck AND auto-advances when video finishes
+  // Smart Initial Autoplay & End-of-Video Watchdog
   useEffect(() => {
     if (!videoId || !playerReady) return;
 
@@ -299,13 +336,20 @@ export function YouTubePlayer({
           }
         }
 
-        // 2. Force play & unmute if player stuck in cued (5), paused (2), or unstarted (-1)
-        if (state === 5 || state === 2 || state === -1) {
-          playerRef.current.playVideo();
-          try { playerRef.current.unMute(); } catch {}
+        // 2. Initial playback recovery: ONLY until video starts playing for the first time
+        if (!hasStartedPlayingRef.current) {
+          if (state === 1) {
+            hasStartedPlayingRef.current = true;
+            try { playerRef.current.unMute(); } catch {}
+          } else if (state === 5 || state === -1 || state === 2) {
+            try {
+              playerRef.current.mute();
+              playerRef.current.playVideo();
+            } catch {}
+          }
         }
       } catch {}
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [videoId, queueItemId, playerReady]);
@@ -375,4 +419,4 @@ export function YouTubePlayer({
       )}
     </div>
   );
-}
+});
