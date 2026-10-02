@@ -187,6 +187,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     roomCode,
     sessionId,
     deviceType: 'remote',
+    deviceName: guestName || undefined,
     intervalMs: 30000,
     enabled: !!(roomCode && sessionId),
   });

@@ -11,6 +11,7 @@ interface UseHeartbeatOptions {
   roomCode: string | null;
   sessionId: string | null;
   deviceType?: 'tv' | 'remote' | 'admin';
+  deviceName?: string;
   intervalMs?: number;
   enabled?: boolean;
 }
@@ -19,6 +20,7 @@ export function useHeartbeat({
   roomCode,
   sessionId,
   deviceType = 'tv',
+  deviceName,
   intervalMs = 30000,
   enabled = true,
 }: UseHeartbeatOptions) {
@@ -31,7 +33,11 @@ export function useHeartbeat({
       await fetch(`/api/instances/${roomCode}/heartbeat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, device_type: deviceType }),
+        body: JSON.stringify({
+          session_id: sessionId,
+          device_type: deviceType,
+          device_name: deviceName || undefined,
+        }),
       });
     } catch {
       // Silently fail — connection status is handled elsewhere

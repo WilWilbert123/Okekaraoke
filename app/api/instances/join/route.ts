@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
         instance_id: instance.id,
         device_type,
         session_id: guest_session_id,
-        device_name: guest_name ?? `${device_type} device`,
+        device_name: guest_name || (device_type === 'tv' ? 'TV Screen' : 'Guest Remote'),
         is_online: true,
         city: clientCity,
         country: clientCountry,
