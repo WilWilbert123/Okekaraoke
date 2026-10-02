@@ -45,18 +45,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const loc = extractLocationFromRequest(request);
 
     const now = new Date().toISOString();
+    const upsertPayload: any = {
+      instance_id: instance.id,
+      device_type,
+      session_id,
+      is_online: true,
+      city: body.city || loc.city,
+      country: body.country || loc.country,
+      ip_address: loc.ip,
+      last_seen_at: now,
+    };
+    if (body.device_name || body.guest_name) {
+      upsertPayload.device_name = body.device_name || body.guest_name;
+    }
+
     await supabase
       .from('devices')
-      .upsert({
-        instance_id: instance.id,
-        device_type,
-        session_id,
-        is_online: true,
-        city: body.city || loc.city,
-        country: body.country || loc.country,
-        ip_address: loc.ip,
-        last_seen_at: now,
-      }, {
+      .upsert(upsertPayload, {
         onConflict: 'instance_id,session_id',
       });
 

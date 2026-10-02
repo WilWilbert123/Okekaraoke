@@ -19,7 +19,7 @@ export function useHeartbeat({
   roomCode,
   sessionId,
   deviceType = 'tv',
-  intervalMs = 15000,
+  intervalMs = 30000,
   enabled = true,
 }: UseHeartbeatOptions) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -44,8 +44,11 @@ export function useHeartbeat({
     // Send immediately
     sendHeartbeat();
 
-    // Then on interval
-    intervalRef.current = setInterval(sendHeartbeat, intervalMs);
+    // Then on interval (only if tab/screen is active)
+    intervalRef.current = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      sendHeartbeat();
+    }, intervalMs);
 
     return () => {
       if (intervalRef.current) {
@@ -55,4 +58,6 @@ export function useHeartbeat({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomCode, sessionId, deviceType, intervalMs, enabled]);
+
+  return { sendHeartbeat, triggerHeartbeat: sendHeartbeat };
 }

@@ -231,7 +231,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     roomCode,
     sessionId: sessionRef.current,
     deviceType: 'tv',
-    intervalMs: 15000,
+    intervalMs: 30000,
     enabled: !!sessionRef.current,
   });
 

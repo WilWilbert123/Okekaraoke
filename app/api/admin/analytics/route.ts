@@ -184,11 +184,13 @@ export async function GET(request: NextRequest) {
 
     const loc = extractLocationFromRequest(request);
     const onlineRoomsCount = activeRoomsFormatted.filter((r) => r.is_online).length;
+    const onlineRemotesCount = deviceList.filter((d) => d.is_online && d.device_type === 'remote').length;
 
     return apiSuccess({
       metrics: {
         active_rooms: onlineRoomsCount > 0 ? onlineRoomsCount : (activeRooms ?? 0),
         online_devices: deviceList.filter((d) => d.is_online).length,
+        online_remotes: onlineRemotesCount,
         total_songs: totalSongs ?? 0,
         reservations_today: reservationsToday ?? 0,
       },
