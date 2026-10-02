@@ -48,6 +48,7 @@ interface AnalyticsData {
   metrics: {
     active_rooms: number;
     online_devices: number;
+    online_remotes?: number;
     total_songs: number;
     reservations_today: number;
   };
@@ -184,7 +185,7 @@ function TabButton({
 }
 
 // ─── Panel: Live Overview ─────────────────────────────────────────────────────
-function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
+function OverviewTab({ analytics, onRefresh, loading }: { analytics: AnalyticsData | null; onRefresh?: () => void; loading?: boolean }) {
   const [deviceList, setDeviceList] = useState(analytics?.online_devices_list || []);
 
   useEffect(() => {
@@ -225,10 +226,23 @@ function OverviewTab({ analytics }: { analytics: AnalyticsData | null }) {
               Active TV Rooms ({analytics?.active_rooms_list.length ?? 0})
             </h2>
           </div>
-          <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-green-400 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping" />
-            REALTIME
-          </span>
+          <div className="flex items-center gap-2">
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={loading}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-slate-300 hover:text-white px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all active:scale-95"
+                title="Refresh active rooms & devices immediately"
+              >
+                <RefreshCw size={12} className={loading ? 'animate-spin text-indigo-400' : ''} />
+                <span>Refresh</span>
+              </button>
+            )}
+            <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-green-400 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/25">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-ping" />
+              REALTIME
+            </span>
+          </div>
         </div>
 
         {!analytics?.active_rooms_list.length ? (
@@ -2201,10 +2215,11 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fetchData()}
+            disabled={loading}
             className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
-            title="Refresh Data"
+            title="Refresh Data Immediately"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={16} className={loading ? 'animate-spin text-indigo-400' : ''} />
           </button>
 
           <button
@@ -2232,7 +2247,7 @@ export default function AdminDashboardPage() {
           />
           <MetricCard
             label="Online Remotes"
-            value={analytics?.metrics.online_devices ?? 0}
+            value={analytics?.metrics.online_remotes ?? analytics?.metrics.online_devices ?? 0}
             icon={Users}
             color="#6366f1"
             desc="Connected Phones"
@@ -2269,7 +2284,7 @@ export default function AdminDashboardPage() {
 
         {/* Tab Panels Scrollable Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pb-2 space-y-4">
-          {activeTab === 'overview' && <OverviewTab analytics={analytics} />}
+          {activeTab === 'overview' && <OverviewTab analytics={analytics} onRefresh={() => fetchData()} loading={loading} />}
           {activeTab === 'rooms' && (
             <RoomsTab analytics={analytics} onKillRoom={handleKillRoom} />
           )}

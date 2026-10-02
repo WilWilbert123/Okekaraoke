@@ -17,6 +17,7 @@ import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
 import { SettingsModal } from '@/components/remote/SettingsModal';
 import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
 import { useRealtime } from '@/hooks/useRealtime';
+import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
 import { createClient } from '@/lib/supabase/client';
@@ -181,6 +182,15 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     }
   }, [roomCode, instanceState]);
 
+  // Periodic heartbeat from Remote device to server (every 30s)
+  useHeartbeat({
+    roomCode,
+    sessionId,
+    deviceType: 'remote',
+    intervalMs: 30000,
+    enabled: !!(roomCode && sessionId),
+  });
+
   // Load saved guest name & decide if modal should show
   useEffect(() => {
     const session = getOrCreateGuestSession();
@@ -197,11 +207,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       if (session.guest_name !== cleanName) {
         updateGuestSession({ guest_name: cleanName });
       }
+      registerDevice(cleanName);
     } else {
       setShowNameModal(true);
     }
     fetchState();
-  }, [fetchState]);
+  }, [fetchState, registerDevice]);
 
   // Online/offline
   useEffect(() => {
