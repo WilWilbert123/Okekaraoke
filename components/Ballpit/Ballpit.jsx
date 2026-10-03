@@ -635,11 +635,17 @@ const X = {
     ambientIntensity: 1,
     lightIntensity: 200,
     materialParams: {
-        metalness: 0.5,
-        roughness: 0.5,
+        metalness: 0.1,
+        roughness: 0.05,
         clearcoat: 1,
-        clearcoatRoughness: 0.15
+        clearcoatRoughness: 0.05,
+        transmission: 0.9,
+        ior: 1.2,
+        thickness: 0.5,
+        iridescence: 1,
+        iridescenceIOR: 1.3
     },
+    theme: 'classic',
     minSize: 0.5,
     maxSize: 1,
     size0: 1,
@@ -704,10 +710,13 @@ class Z extends d {
                     }
                 };
             })(e);
+            this.baseColors = [];
             for (let idx = 0; idx < this.count; idx++) {
-                this.setColorAt(idx, t.getColorAt(idx / this.count));
+                const col = t.getColorAt(idx / this.count);
+                this.baseColors.push(col.clone());
+                this.setColorAt(idx, col);
                 if (idx === 0) {
-                    this.light.color.copy(t.getColorAt(idx / this.count));
+                    this.light.color.copy(col);
                 }
             }
             this.instanceColor.needsUpdate = true;
@@ -715,6 +724,7 @@ class Z extends d {
     }
     update(e) {
         this.physics.update(e);
+        const time = performance.now() * 0.005; // speed of the blink
         for (let idx = 0; idx < this.count; idx++) {
             U.position.fromArray(this.physics.positionData, 3 * idx);
             if (idx === 0 && this.config.followCursor === false) {
@@ -725,6 +735,24 @@ class Z extends d {
             U.updateMatrix();
             this.setMatrixAt(idx, U.matrix);
             if (idx === 0) this.light.position.copy(U.position);
+            
+            // Christmas light blinking effect
+            if (this.config.theme === 'christmas' && this.baseColors && this.baseColors[idx]) {
+                const baseColor = this.baseColors[idx];
+                // Smooth sine wave pulse, offset by index so they don't all blink at once
+                const pulse = (Math.sin(time + idx * 1.5) + 1) / 2; 
+                // brightness oscillates between 0.1 (dim) and 1.0 (full brightness)
+                const brightness = 0.1 + (pulse * 0.9);
+                
+                const current = baseColor.clone().multiplyScalar(brightness);
+                this.setColorAt(idx, current);
+            } else if (this.config.theme !== 'christmas' && this.baseColors && this.baseColors[idx]) {
+                // Restore original color if not christmas theme
+                this.setColorAt(idx, this.baseColors[idx]);
+            }
+        }
+        if (this.baseColors) {
+            this.instanceColor.needsUpdate = true;
         }
         this.instanceMatrix.needsUpdate = true;
     }

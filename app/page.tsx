@@ -7,6 +7,7 @@ import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import Ballpit from '@/components/Ballpit/Ballpit';
 import { IntroSplash } from '@/components/IntroSplash';
+import { createClient } from '@/lib/supabase/client';
 
 export default function LandingPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function LandingPage() {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<string>('classic');
   const { isInstallable, isStandalone, installApp } = usePWAInstall();
 
   useEffect(() => {
@@ -29,6 +31,54 @@ export default function LandingPage() {
         setLastTvRoom(savedTv);
       }
     }
+
+    // Fetch initial theme
+    const fetchTheme = async () => {
+      try {
+        const res = await fetch('/api/admin/settings');
+        const data = await res.json();
+        if (data?.success && data?.data?.theme) {
+          setTheme(data.data.theme);
+        }
+      } catch (err) {}
+    };
+    fetchTheme();
+
+    // Subscribe to realtime updates for theme
+    const supabase = createClient();
+    
+    // Fallback: Listen to postgres changes if column exists
+    const dbSub = supabase
+      .channel('public:app_settings')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_settings', filter: 'id=eq.global_settings' },
+        (payload: any) => {
+          if (payload.new?.theme) {
+            setTheme(payload.new.theme);
+          }
+        }
+      )
+      .subscribe();
+
+    // Primary: Listen to global broadcast (works even before DB column is created)
+    const broadcastSub = supabase
+      .channel('okekaraoke:global')
+      .on(
+        'broadcast',
+        { event: 'banner_updated' },
+        (payload: any) => {
+          if (payload.payload?.theme) {
+            setTheme(payload.payload.theme);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      dbSub.unsubscribe();
+      broadcastSub.unsubscribe();
+    };
   }, []);
 
   const handleCreate = async () => {
@@ -132,7 +182,16 @@ export default function LandingPage() {
           friction={0.9995}
           wallBounce={0.99}
           followCursor={true}
-          colors={[0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff]}
+          theme={theme}
+          colors={
+            theme === 'christmas' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
+            theme === '90s' ? [0xFF00FF, 0x00FFFF, 0xFFFF00, 0xFF0055] :
+            theme === 'bubble' ? [0xA5F3FC, 0xFBCFE8, 0xE0E7FF, 0xFFFFFF] :
+            theme === 'summer' ? [0xF59E0B, 0xEF4444, 0xEC4899, 0xFCD34D] :
+            theme === 'rainy' ? [0x1E3A8A, 0x3B82F6, 0x64748B, 0x94A3B8, 0x0F172A] :
+            theme === 'normal' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
+            [0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff] // classic
+          }
         />
       </div>
 

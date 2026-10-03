@@ -32,6 +32,7 @@ export async function GET() {
     }
 
     const banner_speed = settings?.banner_speed ?? 20;
+    const theme = settings?.theme ?? 'classic';
 
     return apiSuccess({
       banner_enabled,
@@ -41,6 +42,7 @@ export async function GET() {
       banner_image_url,
       banner_images,
       banner_speed,
+      theme,
     });
   } catch (error) {
     console.error('Error fetching admin settings:', error);
@@ -51,7 +53,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { banner_enabled, shoutout_enabled, banner_type, banner_text, banner_image_url, banner_images, banner_speed } = body;
+    const { banner_enabled, shoutout_enabled, banner_type, banner_text, banner_image_url, banner_images, banner_speed, theme } = body;
 
     const supabase = createAdminClient();
 
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
       banner_image_url: primaryImageUrl,
       banner_images: imageList,
       banner_speed: Number(banner_speed ?? 20),
+      theme: String(theme ?? 'classic'),
       updated_at: new Date().toISOString(),
     };
 
@@ -92,6 +95,7 @@ export async function POST(request: NextRequest) {
             banner_text: String(banner_text ?? ''),
             banner_image_url: primaryImageUrl,
             banner_speed: Number(banner_speed ?? 20),
+            theme: String(theme ?? 'classic'),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
       } catch {}
@@ -106,6 +110,7 @@ export async function POST(request: NextRequest) {
       banner_image_url: primaryImageUrl,
       banner_images: imageList,
       banner_speed: Number(banner_speed ?? 20),
+      theme: String(theme ?? 'classic'),
     };
 
     await supabase.channel('okekaraoke:global').send({

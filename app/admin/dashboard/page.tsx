@@ -41,6 +41,9 @@ import {
   HardDrive,
   Server,
   PieChart,
+  Sun,
+  CloudRain,
+  Circle,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -93,6 +96,7 @@ interface BannerSettings {
   banner_image_url: string;
   banner_images?: string[];
   banner_speed: number;
+  theme?: string;
 }
 
 interface Song {
@@ -587,6 +591,48 @@ function BannerTab({
                 style={{ transform: (banner.shoutout_enabled ?? true) ? 'translateX(20px)' : 'translateX(0)' }}
               />
             </div>
+          </div>
+        </div>
+
+        {/* SELECT BACKGROUND THEME */}
+        <div>
+          <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center gap-1.5">
+            <Sparkles size={13} className="text-indigo-400" />
+            <span>Select Background Theme</span>
+          </label>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 mb-6">
+            {[
+              { id: 'classic', name: 'Classic Theme', desc: 'Sleek black & white grayscale bubbles', Icon: Tv },
+              { id: 'christmas', name: 'Christmas Theme', desc: 'Vibrant colors with blinking lights effect', Icon: Sparkles },
+              { id: '90s', name: '90s Retro', desc: 'Neon colors and synthwave vibes', Icon: Radio },
+              { id: 'bubble', name: 'Soap Bubble', desc: 'Iridescent transparent light cyan and pink', Icon: Circle },
+              { id: 'summer', name: 'Summer Vibes', desc: 'Warm vibrant sunset orange and pink colors', Icon: Sun },
+              { id: 'rainy', name: 'Rainy Night', desc: 'Cool deep blues and slate gray aesthetic', Icon: CloudRain },
+              { id: 'normal', name: 'Normal Theme', desc: 'Standard vibrant colors without blinking', Icon: ImageIcon },
+            ].map((typeOption) => {
+              const selected = (banner.theme || 'classic') === typeOption.id;
+              const OptionIcon = typeOption.Icon;
+              return (
+                <div
+                  key={typeOption.id}
+                  onClick={() => setBanner({ ...banner, theme: typeOption.id })}
+                  className={`p-3 rounded-xl border cursor-pointer transition-all flex flex-col justify-between select-none ${
+                    selected
+                      ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-lg'
+                      : 'bg-white/[0.02] border-white/10 text-slate-400 hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <OptionIcon size={16} className={selected ? 'text-indigo-400' : 'text-slate-400'} />
+                    {selected && <CheckCircle size={14} className="text-indigo-400" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-white">{typeOption.name}</p>
+                    <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{typeOption.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
