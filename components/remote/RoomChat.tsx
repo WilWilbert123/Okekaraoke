@@ -137,7 +137,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
   // ── 2. Subscribe to room broadcast chat channel ──────────────
   useEffect(() => {
-    const channelName = `okekaraoke:chat:${roomCode}`;
+    const channelName = `okekaraoke:chat:${roomCode.toUpperCase()}`;
 
     const channel = supabase.channel(channelName, {
       config: { broadcast: { self: true }, presence: { key: sessionId } },
@@ -233,7 +233,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
     if (messagesListRef.current) {
       messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages.length]);
 
   // ── 3. Send a message ─────────────────────────────────────
   const sendMessage = useCallback(async () => {
@@ -420,76 +420,84 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                 <span className="text-[10px] text-zinc-600">{formatTime(msg.sent_at)}</span>
               </div>
 
-              {/* Bubble */}
-              <div
-                className="max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-snug break-words"
-                style={
-                  isMe
-                    ? {
-                        background: '#ffffff',
-                        color: '#000000',
-                        fontWeight: 600,
-                        borderBottomRightRadius: '6px',
-                      }
-                    : {
-                        background: '#18181b',
-                        border: '1px solid #27272a',
-                        color: '#f4f4f5',
-                        borderBottomLeftRadius: '6px',
-                      }
-                }
-              >
-                {msg.text}
+              {/* Bubble & Picker Container */}
+              <div className="relative max-w-[80%]">
+                <div
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setActiveReactionPicker(activeReactionPicker === msg.id ? null : msg.id);
+                  }}
+                  onClick={() => setActiveReactionPicker(null)}
+                  className="px-3 py-2 rounded-2xl text-sm leading-snug break-words select-none transition-transform active:scale-[0.98]"
+                  style={
+                    isMe
+                      ? {
+                          background: '#ffffff',
+                          color: '#000000',
+                          fontWeight: 600,
+                          borderBottomRightRadius: '6px',
+                        }
+                      : {
+                          background: '#18181b',
+                          border: '1px solid #27272a',
+                          color: '#f4f4f5',
+                          borderBottomLeftRadius: '6px',
+                        }
+                  }
+                >
+                  {msg.text}
+                </div>
+
+                {/* Reaction Picker Popover */}
+                {activeReactionPicker === msg.id && (
+                  <div 
+                    className={`absolute z-20 ${isMe ? 'right-0' : 'left-0'} top-full mt-1 p-1.5 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl flex gap-1 animate-fadeIn`}
+                    onClick={(e) => e.stopPropagation()}
+                    onContextMenu={(e) => e.preventDefault()}
+                  >
+                    {['👍', '❤️', '😂', '🔥', '🎉'].map(emoji => (
+                      <button
+                        key={emoji}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleReaction(msg.id, emoji);
+                          setActiveReactionPicker(null);
+                        }}
+                        className="w-8 h-8 flex items-center justify-center text-lg hover:bg-zinc-700 rounded-lg active:scale-90 transition-transform"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Reactions UI */}
-              <div className={`flex items-center flex-wrap gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-start'} relative`}>
-                {msg.reactions && Object.entries(msg.reactions).map(([emoji, data]) => {
-                  const hasMyReact = data.users.some(u => u.session_id === sessionId);
-                  return (
-                    <button
-                      key={emoji}
-                      onClick={() => toggleReaction(msg.id, emoji)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        setReactionModal({ emoji, users: data.users });
-                      }}
-                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
-                        hasMyReact 
-                          ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
-                          : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
-                      }`}
-                    >
-                      <span className="text-[12px]">{emoji}</span>
-                      <span className="opacity-90">{data.count}</span>
-                    </button>
-                  );
-                })}
-                
-                <div className="relative">
-                  <button
-                    onClick={() => setActiveReactionPicker(activeReactionPicker === msg.id ? null : msg.id)}
-                    className="w-6 h-6 rounded-full flex items-center justify-center bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
-                    aria-label="Add reaction"
-                  >
-                    <Smile size={12} />
-                  </button>
-                  
-                  {activeReactionPicker === msg.id && (
-                    <div className={`absolute z-20 ${isMe ? 'right-0' : 'left-0'} top-full mt-1 p-1.5 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl flex gap-1 animate-fadeIn`}>
-                      {['👍', '❤️', '😂', '🔥', '🎉'].map(emoji => (
-                        <button
-                          key={emoji}
-                          onClick={() => toggleReaction(msg.id, emoji)}
-                          className="w-8 h-8 flex items-center justify-center text-lg hover:bg-zinc-700 rounded-lg active:scale-90 transition-transform"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {/* Reactions Badges */}
+              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                <div className={`flex items-center flex-wrap gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  {Object.entries(msg.reactions).map(([emoji, data]) => {
+                    const hasMyReact = data.users.some(u => u.session_id === sessionId);
+                    return (
+                      <button
+                        key={emoji}
+                        onClick={() => toggleReaction(msg.id, emoji)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setReactionModal({ emoji, users: data.users });
+                        }}
+                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
+                          hasMyReact 
+                            ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
+                            : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
+                        }`}
+                      >
+                        <span className="text-[12px]">{emoji}</span>
+                        <span className="opacity-90">{data.count}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
             </div>
           );
         })}
