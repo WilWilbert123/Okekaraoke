@@ -59,6 +59,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShoutoutModal, setShowShoutoutModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const { isInstallable, installApp } = usePWAInstall();
 
   // Remember last room code for app shortcuts & quick rejoining
@@ -67,6 +68,13 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       localStorage.setItem('okekaraoke_last_room', roomCode.toUpperCase());
     }
   }, [roomCode]);
+
+  // Clear unread count when viewing chat
+  useEffect(() => {
+    if (tab === 'chat') {
+      setUnreadChatCount(0);
+    }
+  }, [tab]);
 
   // ── Room-Wide Presence Subscription (tracks all remotes across all tabs) ──
   useEffect(() => {
@@ -478,49 +486,44 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Tab content — relative so emoji overlay stacks correctly */}
       <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-        {tab === 'search' && (
-          <div className="flex-1 overflow-y-auto pb-2">
-            <SongSearch
-              roomCode={roomCode}
-              sessionId={sessionId}
-              guestName={guestName}
-              onReserved={() => fetchState()}
-            />
-          </div>
-        )}
-        {tab === 'chat' && (
-          <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden">
-            <RoomChat
-              roomCode={roomCode}
-              sessionId={sessionId}
-              guestName={guestName}
-              onlineUsers={onlineUsers}
-            />
-          </div>
-        )}
-        {tab === 'my-songs' && (
-          <div className="flex-1 overflow-y-auto pb-2">
-            <MyReservations
-              reservations={myReservations}
-              sessionId={sessionId}
-              roomCode={roomCode}
-              guestName={guestName}
-              onCancelled={() => fetchState()}
-              allowCancel={instanceState?.settings.allow_cancel ?? true}
-            />
-          </div>
-        )}
-        {tab === 'queue' && (
-          <div className="flex-1 overflow-y-auto pb-2">
-            <RemoteQueue
-              queue={queue}
-              currentSong={currentSong}
-              sessionId={sessionId}
-              roomCode={roomCode}
-              onRefresh={() => fetchState()}
-            />
-          </div>
-        )}
+        <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'search' ? 'block' : 'none' }}>
+          <SongSearch
+            roomCode={roomCode}
+            sessionId={sessionId}
+            guestName={guestName}
+            onReserved={() => fetchState()}
+          />
+        </div>
+        <div className="flex-1 min-h-0 h-full flex-col overflow-hidden" style={{ display: tab === 'chat' ? 'flex' : 'none' }}>
+          <RoomChat
+            roomCode={roomCode}
+            sessionId={sessionId}
+            guestName={guestName}
+            onlineUsers={onlineUsers}
+            onNewMessage={() => {
+              setUnreadChatCount(prev => prev + 1);
+            }}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'my-songs' ? 'block' : 'none' }}>
+          <MyReservations
+            reservations={myReservations}
+            sessionId={sessionId}
+            roomCode={roomCode}
+            guestName={guestName}
+            onCancelled={() => fetchState()}
+            allowCancel={instanceState?.settings.allow_cancel ?? true}
+          />
+        </div>
+        <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'queue' ? 'block' : 'none' }}>
+          <RemoteQueue
+            queue={queue}
+            currentSong={currentSong}
+            sessionId={sessionId}
+            roomCode={roomCode}
+            onRefresh={() => fetchState()}
+          />
+        </div>
       </div>
 
       {/* Emoji reactions bar + floating particles — ONLY visible on Chat tab */}
@@ -555,10 +558,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       >
         {[
           { id: 'search' as const, icon: Search, label: 'Search' },
-          { id: 'chat' as const, icon: MessageSquare, label: 'Chat' },
+          { id: 'chat' as const, icon: MessageSquare, label: 'Chat', badgeCount: unreadChatCount },
           { id: 'my-songs' as const, icon: Star, label: 'Mine', count: myReservations.length },
           { id: 'queue' as const, icon: ListMusic, label: 'Queue', count: queue.length },
-        ].map(({ id, icon: Icon, label, count }) => (
+        ].map(({ id, icon: Icon, label, count, badgeCount }) => (
           <button
             key={id}
             id={`remote-tab-${id}`}
@@ -568,11 +571,16 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             className="flex-1 flex flex-col items-center justify-center gap-0.5 py-1 transition-all relative"
           >
             <div
-              className={`p-1 rounded-xl transition-all ${
+              className={`p-1 rounded-xl transition-all relative ${
                 tab === id ? 'bg-white text-black font-extrabold scale-105 shadow' : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
               <Icon size={18} />
+              {(badgeCount ?? 0) > 0 && tab !== id && (
+                <div className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-bounce">
+                  {(badgeCount ?? 0) > 9 ? '9+' : badgeCount}
+                </div>
+              )}
             </div>
             <span
               className={`text-[11px] font-bold ${

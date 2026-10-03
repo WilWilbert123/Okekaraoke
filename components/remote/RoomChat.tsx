@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, MessageCircle, Users } from 'lucide-react';
+import { Send, MessageCircle, Users, Smile, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 interface ChatMessage {
@@ -16,6 +16,7 @@ interface ChatMessage {
   sender_session_id: string;
   text: string;
   sent_at: number; // unix ms
+  reactions?: Record<string, { count: number; users: { name: string; session_id: string }[] }>;
 }
 
 export interface OnlineUser {
@@ -30,6 +31,7 @@ interface RoomChatProps {
   sessionId: string;
   guestName: string;
   onlineUsers?: OnlineUser[];
+  onNewMessage?: () => void;
 }
 
 function formatTime(ms: number): string {
@@ -61,11 +63,13 @@ function deduplicateMessages(msgs: ChatMessage[]): ChatMessage[] {
   return result.sort((a, b) => a.sent_at - b.sent_at);
 }
 
-export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOnlineUsers }: RoomChatProps) {
+export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOnlineUsers, onNewMessage }: RoomChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [reactionModal, setReactionModal] = useState<{emoji: string, users: {name: string, session_id: string}[]} | null>(null);
+  const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
@@ -141,6 +145,37 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
     channelRef.current = channel;
 
+    const handleApplyReaction = (messageId: string, emoji: string, user: {name: string, session_id: string}) => {
+      setMessages((prev) => {
+        const updated = prev.map(msg => {
+          if (msg.id === messageId) {
+            const reactions = msg.reactions ? { ...msg.reactions } : {};
+            const reactionGroup = reactions[emoji] || { count: 0, users: [] };
+            
+            const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
+            if (hasReacted) {
+              reactionGroup.users = reactionGroup.users.filter(u => u.session_id !== user.session_id);
+              reactionGroup.count = Math.max(0, reactionGroup.count - 1);
+            } else {
+              reactionGroup.users.push(user);
+              reactionGroup.count += 1;
+            }
+            
+            if (reactionGroup.count === 0) {
+              delete reactions[emoji];
+            } else {
+              reactions[emoji] = reactionGroup;
+            }
+            
+            return { ...msg, reactions };
+          }
+          return msg;
+        });
+        saveToLocalStorage(updated);
+        return updated;
+      });
+    };
+
     channel
       .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
         const msg = payload as ChatMessage;
@@ -149,6 +184,14 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
           saveToLocalStorage(merged);
           return merged;
         });
+        if (msg.sender_session_id !== sessionId) {
+          onNewMessage?.();
+        }
+      })
+      .on('broadcast', { event: 'chat_reaction' }, ({ payload }) => {
+        if (payload.user.session_id !== sessionId) {
+          handleApplyReaction(payload.messageId, payload.emoji, payload.user);
+        }
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
@@ -247,6 +290,53 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
       setSending(false);
     }
   }, [input, sessionId, guestName, roomCode, sending, saveToLocalStorage]);
+
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    setActiveReactionPicker(null);
+    const user = { name: guestName || 'Guest', session_id: sessionId };
+    
+    // Optimistic update locally
+    setMessages((prev) => {
+      const updated = prev.map(msg => {
+        if (msg.id === messageId) {
+          const reactions = msg.reactions ? { ...msg.reactions } : {};
+          const reactionGroup = reactions[emoji] || { count: 0, users: [] };
+          
+          const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
+          if (hasReacted) {
+            reactionGroup.users = reactionGroup.users.filter(u => u.session_id !== user.session_id);
+            reactionGroup.count = Math.max(0, reactionGroup.count - 1);
+          } else {
+            reactionGroup.users.push(user);
+            reactionGroup.count += 1;
+          }
+          
+          if (reactionGroup.count === 0) {
+            delete reactions[emoji];
+          } else {
+            reactions[emoji] = reactionGroup;
+          }
+          
+          return { ...msg, reactions };
+        }
+        return msg;
+      });
+      saveToLocalStorage(updated);
+      return updated;
+    });
+
+    if (channelRef.current) {
+      try {
+        await channelRef.current.send({
+          type: 'broadcast',
+          event: 'chat_reaction',
+          payload: { messageId, emoji, user },
+        });
+      } catch (e) {
+        console.warn('Failed to broadcast reaction', e);
+      }
+    }
+  }, [guestName, sessionId, saveToLocalStorage]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -351,6 +441,55 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
               >
                 {msg.text}
               </div>
+
+              {/* Reactions UI */}
+              <div className={`flex items-center flex-wrap gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-start'} relative`}>
+                {msg.reactions && Object.entries(msg.reactions).map(([emoji, data]) => {
+                  const hasMyReact = data.users.some(u => u.session_id === sessionId);
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => toggleReaction(msg.id, emoji)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setReactionModal({ emoji, users: data.users });
+                      }}
+                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
+                        hasMyReact 
+                          ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
+                          : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
+                      }`}
+                    >
+                      <span className="text-[12px]">{emoji}</span>
+                      <span className="opacity-90">{data.count}</span>
+                    </button>
+                  );
+                })}
+                
+                <div className="relative">
+                  <button
+                    onClick={() => setActiveReactionPicker(activeReactionPicker === msg.id ? null : msg.id)}
+                    className="w-6 h-6 rounded-full flex items-center justify-center bg-zinc-800/50 border border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                    aria-label="Add reaction"
+                  >
+                    <Smile size={12} />
+                  </button>
+                  
+                  {activeReactionPicker === msg.id && (
+                    <div className={`absolute z-20 ${isMe ? 'right-0' : 'left-0'} top-full mt-1 p-1.5 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl flex gap-1 animate-fadeIn`}>
+                      {['👍', '❤️', '😂', '🔥', '🎉'].map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          className="w-8 h-8 flex items-center justify-center text-lg hover:bg-zinc-700 rounded-lg active:scale-90 transition-transform"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -446,6 +585,42 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reaction Details Modal */}
+      {reactionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn" onClick={() => setReactionModal(null)}>
+          <div
+            className="relative w-full max-w-xs bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-2xl flex flex-col gap-3 text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{reactionModal.emoji}</span>
+                <span className="text-sm font-black text-white">
+                  Reactions ({reactionModal.users.length})
+                </span>
+              </div>
+              <button
+                onClick={() => setReactionModal(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-1 max-h-56 overflow-y-auto custom-scrollbar pt-2">
+              {reactionModal.users.map((u, idx) => (
+                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-zinc-900 border border-zinc-800/50 text-sm">
+                  <span className="font-medium text-zinc-200 truncate">{u.name}</span>
+                  {u.session_id === sessionId && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-500/20 text-teal-300">YOU</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
