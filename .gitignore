@@ -3,7 +3,12 @@
 # ============================================================
 
 # Dependencies
-/node_modules
+node_modules/
+**/node_modules/
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/.eas/
 /.pnp
 .pnp.*
 .yarn/*
