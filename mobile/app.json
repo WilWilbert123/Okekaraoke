@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "OKEKARAOKE",
+    "name": "Okekaraoke",
     "slug": "okekaraoke",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -21,10 +21,10 @@
     },
     "android": {
       "package": "com.okekaraoke.app",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#09090b"
+        "backgroundColor": "#ffffff"
       },
       "permissions": [
         "INTERNET",
