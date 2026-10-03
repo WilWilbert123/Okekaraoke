@@ -134,6 +134,16 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   }, [roomCode, storageKey, saveToLocalStorage]);
 
   const [localOnlineUsers, setLocalOnlineUsers] = useState<OnlineUser[]>([]);
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+
+  const toggleExpandReactions = useCallback((msgId: string) => {
+    setExpandedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId);
+      else next.add(msgId);
+      return next;
+    });
+  }, []);
 
   // ── 2. Subscribe to room broadcast chat channel ──────────────
   useEffect(() => {
@@ -275,6 +285,24 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
     if (!msg) return;
 
     const reactions = msg.reactions ? { ...msg.reactions } : {};
+    let removedFromOtherEmoji = false;
+    for (const key of Object.keys(reactions)) {
+      if (key !== emoji) {
+        const group = reactions[key];
+        const hasReacted = group.users.some(u => u.session_id === user.session_id);
+        if (hasReacted) {
+          const newUsers = group.users.filter(u => u.session_id !== user.session_id);
+          const newCount = Math.max(0, group.count - 1);
+          if (newCount === 0) {
+            delete reactions[key];
+          } else {
+            reactions[key] = { ...group, users: newUsers, count: newCount };
+          }
+          removedFromOtherEmoji = true;
+        }
+      }
+    }
+
     const reactionGroup = reactions[emoji] 
       ? { ...reactions[emoji], users: [...reactions[emoji].users] } 
       : { count: 0, users: [] };
@@ -453,31 +481,46 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
               </div>
 
               {/* Reactions Badges */}
-              {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                <div className={`flex items-center flex-wrap gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                  {Object.entries(msg.reactions).map(([emoji, data]) => {
-                    const hasMyReact = data.users.some(u => u.session_id === sessionId);
-                    return (
+              {msg.reactions && Object.keys(msg.reactions).length > 0 && (() => {
+                const reactionEntries = Object.entries(msg.reactions);
+                const isExpanded = expandedMessages.has(msg.id);
+                const visibleReactions = isExpanded ? reactionEntries : reactionEntries.slice(0, 3);
+                const hiddenCount = reactionEntries.length - visibleReactions.length;
+                
+                return (
+                  <div className={`flex items-center flex-wrap gap-1 mt-0.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    {visibleReactions.map(([emoji, data]) => {
+                      const hasMyReact = data.users.some(u => u.session_id === sessionId);
+                      return (
+                        <button
+                          key={emoji}
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setReactionModal({ emoji, users: data.users });
+                          }}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
+                            hasMyReact 
+                              ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
+                              : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
+                          }`}
+                        >
+                          <span className="text-[12px]">{emoji}</span>
+                          <span className="opacity-90">{data.count}</span>
+                        </button>
+                      );
+                    })}
+                    {hiddenCount > 0 && (
                       <button
-                        key={emoji}
-                        onClick={() => toggleReaction(msg.id, emoji)}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setReactionModal({ emoji, users: data.users });
-                        }}
-                        className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
-                          hasMyReact 
-                            ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
-                            : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
-                        }`}
+                        onClick={() => toggleExpandReactions(msg.id)}
+                        className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                       >
-                        <span className="text-[12px]">{emoji}</span>
-                        <span className="opacity-90">{data.count}</span>
+                        +{hiddenCount} more
                       </button>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
