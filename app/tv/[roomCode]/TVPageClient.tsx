@@ -181,6 +181,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       const session = getOrCreateGuestSession();
       sessionRef.current = session.session_id;
       setGuestSessionForInstance(state.instance.id, roomCode, 'tv');
+      localStorage.setItem('okekaraoke_last_tv_room', roomCode);
 
       // Register TV device in DB so /api/queue/next accepts it as authorized
       fetch('/api/instances/join', {

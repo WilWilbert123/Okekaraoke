@@ -12,6 +12,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [lastRoom, setLastRoom] = useState<string | null>(null);
+  const [lastTvRoom, setLastTvRoom] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,10 @@ export default function LandingPage() {
       const saved = localStorage.getItem('okekaraoke_last_room');
       if (saved) {
         setLastRoom(saved);
+      }
+      const savedTv = localStorage.getItem('okekaraoke_last_tv_room');
+      if (savedTv) {
+        setLastTvRoom(savedTv);
       }
     }
   }, []);
@@ -48,13 +53,14 @@ export default function LandingPage() {
 
       const { room_code } = json.data;
 
-      // Update session with instance info
       const { updateGuestSession } = await import('@/lib/auth/guestSession');
       updateGuestSession({
         instance_id: json.data.instance.id,
         room_code,
         device_type: 'tv',
       });
+
+      localStorage.setItem('okekaraoke_last_tv_room', room_code);
 
       router.push(`/tv/${room_code}`);
     } catch {
@@ -207,7 +213,24 @@ export default function LandingPage() {
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
-          {/* Rejoin Last Room Button if available */}
+          {/* Rejoin Last Room Buttons if available */}
+          {lastTvRoom && (
+            <div className="mb-3 sm:mb-4">
+              <button
+                onClick={() => {
+                  router.push(`/tv/${lastTvRoom}`);
+                }}
+                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 rounded-xl sm:rounded-2xl bg-teal-50 border border-teal-200 hover:bg-teal-100 text-teal-900 text-[11px] sm:text-xs font-bold transition-all flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Tv2 size={15} className="text-teal-600" />
+                  <span>Resume TV Display: <strong className="text-teal-900 font-extrabold tracking-wider">{lastTvRoom}</strong></span>
+                </div>
+                <ChevronRight size={15} className="text-teal-600" />
+              </button>
+            </div>
+          )}
+
           {lastRoom && (
             <div className="mb-3 sm:mb-4">
               <button
