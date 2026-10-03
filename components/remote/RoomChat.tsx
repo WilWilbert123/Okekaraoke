@@ -145,37 +145,6 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
     channelRef.current = channel;
 
-    const handleApplyReaction = (messageId: string, emoji: string, user: {name: string, session_id: string}) => {
-      setMessages((prev) => {
-        const updated = prev.map(msg => {
-          if (msg.id === messageId) {
-            const reactions = msg.reactions ? { ...msg.reactions } : {};
-            const reactionGroup = reactions[emoji] || { count: 0, users: [] };
-            
-            const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
-            if (hasReacted) {
-              reactionGroup.users = reactionGroup.users.filter(u => u.session_id !== user.session_id);
-              reactionGroup.count = Math.max(0, reactionGroup.count - 1);
-            } else {
-              reactionGroup.users.push(user);
-              reactionGroup.count += 1;
-            }
-            
-            if (reactionGroup.count === 0) {
-              delete reactions[emoji];
-            } else {
-              reactions[emoji] = reactionGroup;
-            }
-            
-            return { ...msg, reactions };
-          }
-          return msg;
-        });
-        saveToLocalStorage(updated);
-        return updated;
-      });
-    };
-
     channel
       .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
         const msg = payload as ChatMessage;
@@ -188,10 +157,17 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
           onNewMessage?.();
         }
       })
-      .on('broadcast', { event: 'chat_reaction' }, ({ payload }) => {
-        if (payload.user.session_id !== sessionId) {
-          handleApplyReaction(payload.messageId, payload.emoji, payload.user);
-        }
+      .on('broadcast', { event: 'chat_reaction_sync' }, ({ payload }) => {
+        setMessages((prev) => {
+          const updated = prev.map(msg => {
+            if (msg.id === payload.messageId) {
+              return { ...msg, reactions: payload.reactions };
+            }
+            return msg;
+          });
+          saveToLocalStorage(updated);
+          return updated;
+        });
       })
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
@@ -294,13 +270,15 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     setActiveReactionPicker(null);
     const user = { name: guestName || 'Guest', session_id: sessionId };
-    
-    // Optimistic update locally
+    let updatedReactions: Record<string, { count: number, users: {name: string, session_id: string}[] }> = {};
+
     setMessages((prev) => {
       const updated = prev.map(msg => {
         if (msg.id === messageId) {
           const reactions = msg.reactions ? { ...msg.reactions } : {};
-          const reactionGroup = reactions[emoji] || { count: 0, users: [] };
+          const reactionGroup = reactions[emoji] 
+            ? { ...reactions[emoji], users: [...reactions[emoji].users] } 
+            : { count: 0, users: [] };
           
           const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
           if (hasReacted) {
@@ -317,6 +295,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
             reactions[emoji] = reactionGroup;
           }
           
+          updatedReactions = reactions;
           return { ...msg, reactions };
         }
         return msg;
@@ -329,8 +308,8 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
       try {
         await channelRef.current.send({
           type: 'broadcast',
-          event: 'chat_reaction',
-          payload: { messageId, emoji, user },
+          event: 'chat_reaction_sync',
+          payload: { messageId, reactions: updatedReactions },
         });
       } catch (e) {
         console.warn('Failed to broadcast reaction', e);
