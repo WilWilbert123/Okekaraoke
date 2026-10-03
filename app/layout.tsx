@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -53,8 +54,10 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <ServiceWorkerRegister />
+        <OfflineBanner />
         {children}
       </body>
     </html>
   );
 }
+
