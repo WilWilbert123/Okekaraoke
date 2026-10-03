@@ -270,35 +270,36 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
     setActiveReactionPicker(null);
     const user = { name: guestName || 'Guest', session_id: sessionId };
-    let updatedReactions: Record<string, { count: number, users: {name: string, session_id: string}[] }> = {};
+    
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+
+    const reactions = msg.reactions ? { ...msg.reactions } : {};
+    const reactionGroup = reactions[emoji] 
+      ? { ...reactions[emoji], users: [...reactions[emoji].users] } 
+      : { count: 0, users: [] };
+    
+    const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
+    if (hasReacted) {
+      reactionGroup.users = reactionGroup.users.filter(u => u.session_id !== user.session_id);
+      reactionGroup.count = Math.max(0, reactionGroup.count - 1);
+    } else {
+      reactionGroup.users.push(user);
+      reactionGroup.count += 1;
+    }
+    
+    if (reactionGroup.count === 0) {
+      delete reactions[emoji];
+    } else {
+      reactions[emoji] = reactionGroup;
+    }
 
     setMessages((prev) => {
-      const updated = prev.map(msg => {
-        if (msg.id === messageId) {
-          const reactions = msg.reactions ? { ...msg.reactions } : {};
-          const reactionGroup = reactions[emoji] 
-            ? { ...reactions[emoji], users: [...reactions[emoji].users] } 
-            : { count: 0, users: [] };
-          
-          const hasReacted = reactionGroup.users.some(u => u.session_id === user.session_id);
-          if (hasReacted) {
-            reactionGroup.users = reactionGroup.users.filter(u => u.session_id !== user.session_id);
-            reactionGroup.count = Math.max(0, reactionGroup.count - 1);
-          } else {
-            reactionGroup.users.push(user);
-            reactionGroup.count += 1;
-          }
-          
-          if (reactionGroup.count === 0) {
-            delete reactions[emoji];
-          } else {
-            reactions[emoji] = reactionGroup;
-          }
-          
-          updatedReactions = reactions;
-          return { ...msg, reactions };
+      const updated = prev.map(m => {
+        if (m.id === messageId) {
+          return { ...m, reactions };
         }
-        return msg;
+        return m;
       });
       saveToLocalStorage(updated);
       return updated;
@@ -309,13 +310,13 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
         await channelRef.current.send({
           type: 'broadcast',
           event: 'chat_reaction_sync',
-          payload: { messageId, reactions: updatedReactions },
+          payload: { messageId, reactions },
         });
       } catch (e) {
         console.warn('Failed to broadcast reaction', e);
       }
     }
-  }, [guestName, sessionId, saveToLocalStorage]);
+  }, [messages, guestName, sessionId, saveToLocalStorage]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
