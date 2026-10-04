@@ -76,6 +76,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   // Track queue_item_ids that were stopped/skipped by remote so the YouTube
   // player's onEnded callback does NOT call /api/queue/next for them.
   const skippedByRemoteRef = useRef<Set<string>>(new Set());
+  const hasRegisteredTVRef = useRef(false);
 
   // Auto-start: advance queue to play the first song when nothing is playing
   const autoStartQueue = useCallback(async () => {
@@ -177,23 +178,27 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       setConnectionStatus('connected');
       fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
 
-      // Register/update device in localStorage and in Supabase devices table
-      const session = getOrCreateGuestSession();
-      sessionRef.current = session.session_id;
-      setGuestSessionForInstance(state.instance.id, roomCode, 'tv');
-      localStorage.setItem('okekaraoke_last_tv_room', roomCode);
+      // Register TV device in DB once so /api/queue/next accepts it as authorized without spamming
+      if (!hasRegisteredTVRef.current) {
+        hasRegisteredTVRef.current = true;
+        const session = getOrCreateGuestSession();
+        sessionRef.current = session.session_id;
+        setGuestSessionForInstance(state.instance.id, roomCode, 'tv');
+        localStorage.setItem('okekaraoke_last_tv_room', roomCode);
 
-      // Register TV device in DB so /api/queue/next accepts it as authorized
-      fetch('/api/instances/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room_code: roomCode,
-          guest_session_id: session.session_id,
-          device_type: 'tv',
-          guest_name: 'TV Screen',
-        }),
-      }).catch(() => {}); // fire-and-forget
+        fetch('/api/instances/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            guest_session_id: session.session_id,
+            device_type: 'tv',
+            guest_name: 'TV Screen',
+          }),
+        }).catch(() => {});
+      } else {
+        sessionRef.current = sessionRef.current || getOrCreateGuestSession().session_id;
+      }
 
       // Auto-start: if queue has songs but nothing is playing, kick off playback
       // Delay 1200ms to let the /api/instances/join above complete first
@@ -246,8 +251,8 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       return;
     }
 
-    if (advancingRef.current) return;
-    advancingRef.current = true;
+    const sessionId = sessionRef.current || getOrCreateGuestSession().session_id;
+    sessionRef.current = sessionId;
 
     try {
       const response = await fetch('/api/queue/next', {
@@ -255,7 +260,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           room_code: roomCode,
-          session_id: sessionRef.current,
+          session_id: sessionId,
           completed_queue_item_id: completedQueueItemId,
         }),
       });
@@ -265,9 +270,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       if (json.success && json.data.next_queue_item_id) {
         fetchState();
       } else {
-        // No next song
+        // No next song — clear current song and player state so TV returns to idle screen
         setCurrentSong(null);
+        currentSongRef.current = null;
+        lastCountdownSongIdRef.current = null;
+        setCountdownSong(null);
         setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
+        fetchState();
       }
     } catch (err) {
       console.error('Failed to advance queue:', err);
@@ -312,13 +321,19 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   }, [handleSongEnded]);
 
   const handleScoreModalComplete = useCallback(() => {
+    const completedId = scoreModalDataRef.current?.completedQueueItemId;
+
     setScoreModalData(null);
     scoreModalDataRef.current = null;
 
-    // Seamlessly transition into 5s Countdown Modal for the newly-advanced song!
-    if (currentSongRef.current) {
+    // Seamlessly transition into 5s Countdown Modal ONLY if there is an actual NEW next song!
+    // Never show countdown if queue is empty or for the same song that just ended!
+    if (currentSongRef.current && currentSongRef.current.queue_item_id !== completedId) {
       lastCountdownSongIdRef.current = currentSongRef.current.queue_item_id;
       setCountdownSong(currentSongRef.current);
+    } else {
+      lastCountdownSongIdRef.current = null;
+      setCountdownSong(null);
     }
   }, []);
 
@@ -346,6 +361,9 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       // Keep score modal active for full 10s countdown even when queue becomes empty
       setCurrentSong(null);
       currentSongRef.current = null;
+      lastCountdownSongIdRef.current = null;
+      setCountdownSong(null);
+      setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
       fetchStateRef.current();
     },
     song_skipped: (payload: any) => {

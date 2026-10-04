@@ -74,23 +74,6 @@ export function useRealtime({ roomCode, handlers, enabled = true }: UseRealtimeO
       }
     });
 
-    // Also listen to postgres changes for queue_items table
-    channel.on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'queue_items',
-      },
-      (payload: Record<string, unknown>) => {
-        // Queue changes will come via broadcast events from the API
-        // This is a fallback for direct DB changes
-        const handler = handlersRef.current['queue_updated'];
-        if (handler) {
-          handler({ source: 'postgres_changes', ...payload });
-        }
-      }
-    );
 
     channel.subscribe((status: string) => {
       if (status === 'SUBSCRIBED') {

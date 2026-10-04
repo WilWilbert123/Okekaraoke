@@ -171,7 +171,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         currentQueueItemIdRef.current = null;
         hasStartedPlayingRef.current = false;
         if (playerRef.current) {
-          try { playerRef.current.stopVideo(); } catch {}
+          try {
+            playerRef.current.pauseVideo();
+            playerRef.current.stopVideo();
+            playerRef.current.destroy();
+          } catch {}
+          playerRef.current = null;
+        }
+        if (containerRef.current) {
+          containerRef.current.innerHTML = '';
         }
         return;
       }
@@ -203,11 +211,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             console.warn('Error loading video by ID:', e);
           }
         } else {
-          // Same videoId, ensure it's playing
-          try {
-            playerRef.current.mute();
-            playerRef.current.playVideo();
-          } catch {}
+          // Same videoId — only auto-play if it hasn't started yet (don't restart a finished song)
+          if (!hasStartedPlayingRef.current) {
+            try {
+              playerRef.current.mute();
+              playerRef.current.playVideo();
+            } catch {}
+          }
         }
         return;
       }
@@ -274,7 +284,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.CUED:
               case -1: // UNSTARTED
                 playerStatus = 'paused';
-                if (!hasStartedPlayingRef.current) {
+                if (!hasStartedPlayingRef.current && currentVideoIdRef.current) {
                   try {
                     event.target.mute();
                     event.target.playVideo();
@@ -283,7 +293,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 break;
               case YTState.BUFFERING:
                 playerStatus = 'buffering';
-                if (!hasStartedPlayingRef.current) {
+                if (!hasStartedPlayingRef.current && currentVideoIdRef.current) {
                   try {
                     event.target.mute();
                     event.target.playVideo();

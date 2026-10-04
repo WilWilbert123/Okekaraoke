@@ -221,7 +221,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setShowNameModal(true);
     }
     fetchState();
-  }, [fetchState, registerDevice]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Online/offline
   useEffect(() => {
@@ -241,7 +242,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     queue_removed: fetchState,
     queue_updated: fetchState,
     song_started: fetchState,
-    song_finished: fetchState,
+    song_finished: () => {
+      // Optimistically clear current song on remote immediately for instant UI update
+      setCurrentSong(null);
+      fetchState();
+    },
     song_skipped: fetchState,
   }).current;
 

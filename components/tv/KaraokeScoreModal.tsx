@@ -156,22 +156,23 @@ export default function KaraokeScoreModal({
   useEffect(() => {
     if (phase !== 'celebration') return;
 
-    const timer = setInterval(() => {
-      setCelebrationSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          if (!hasFinishedRef.current) {
-            hasFinishedRef.current = true;
-            onCountdownComplete();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+    if (celebrationSeconds <= 0) {
+      if (!hasFinishedRef.current) {
+        hasFinishedRef.current = true;
+        const completeTimeout = setTimeout(() => {
+          onCountdownComplete();
+        }, 0);
+        return () => clearTimeout(completeTimeout);
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setCelebrationSeconds((prev) => prev - 1);
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [phase, onCountdownComplete]);
+    return () => clearTimeout(timer);
+  }, [phase, celebrationSeconds, onCountdownComplete]);
 
   const gradeTitle = getGradeTitle(targetScore);
 

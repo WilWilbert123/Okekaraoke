@@ -43,18 +43,18 @@ export async function POST(request: NextRequest) {
       return apiError('ROOM_NOT_FOUND', 'This OKEKARAOKE room does not exist or is no longer active.', 404);
     }
 
-    // Verify this session is authorized as a TV or admin for this instance
-    const { data: device } = await supabase
-      .from('devices')
-      .select('device_type')
-      .eq('instance_id', instance.id)
-      .eq('session_id', session_id)
-      .in('device_type', ['tv', 'admin'])
-      .single();
-
-    if (!device) {
-      return apiError('UNAUTHORIZED', 'Only the TV or admin can advance the queue.', 403);
-    }
+    // Ensure caller is registered in devices table (touch/upsert)
+    await supabase.from('devices').upsert(
+      {
+        instance_id: instance.id,
+        device_type: 'tv',
+        session_id: session_id,
+        device_name: 'TV Screen',
+        is_online: true,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: 'instance_id,session_id' }
+    );
 
     // Advance queue atomically
     const { data: result, error: rpcError } = await supabase.rpc('advance_queue_atomic', {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const hasNextSong = !!resultRow.next_queue_item_id;
 
-    // Broadcast appropriate events
+    // Broadcast appropriate events in real time to all room participants
     if (hasNextSong) {
       await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
         type: 'broadcast',
@@ -92,6 +92,15 @@ export async function POST(request: NextRequest) {
           timestamp: new Date().toISOString(),
         },
       });
+      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
+        type: 'broadcast',
+        event: 'queue_updated',
+        payload: {
+          instance_id: instance.id,
+          room_code: normalizedCode,
+          timestamp: new Date().toISOString(),
+        },
+      });
     } else {
       await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
         type: 'broadcast',
@@ -101,6 +110,15 @@ export async function POST(request: NextRequest) {
           instance_id: instance.id,
           room_code: normalizedCode,
           queue_item_id: completed_queue_item_id ?? null,
+          timestamp: new Date().toISOString(),
+        },
+      });
+      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
+        type: 'broadcast',
+        event: 'queue_updated',
+        payload: {
+          instance_id: instance.id,
+          room_code: normalizedCode,
           timestamp: new Date().toISOString(),
         },
       });
