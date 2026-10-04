@@ -16,6 +16,7 @@ import { QRPanel } from '@/components/tv/QRPanel';
 import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
 import { SongCountdownModal } from '@/components/tv/SongCountdownModal';
 import { TVShoutoutOverlay, type ShoutoutItem } from '@/components/tv/TVShoutoutOverlay';
+import { TVFloatingReactions } from '@/components/tv/TVFloatingReactions';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -169,8 +170,11 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           }
         }
       } else {
-        lastCountdownSongIdRef.current = null;
-        setCountdownSong(null);
+        // Only clear countdown if one isn't already running — a countdown started
+        // immediately from local queue data must not be wiped by a transient null state.
+        if (!lastCountdownSongIdRef.current) {
+          setCountdownSong(null);
+        }
       }
 
       setQueue(state.queue);
@@ -331,11 +335,21 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     setScoreModalData(null);
     scoreModalDataRef.current = null;
 
-    // NOW advance the queue — score modal is done, it's safe to load the next song
+    // Immediately start the countdown from local queue data — no API wait needed.
+    // queueRef.current holds the waiting songs (not the one that just finished).
+    const nextItem = queueRef.current[0];
+    if (nextItem) {
+      lastCountdownSongIdRef.current = nextItem.queue_item_id;
+      setCountdownSong(nextItem);
+    }
+
+    // Advance the queue in the background — fetchState will update currentSong
+    // so the YouTube player loads once the countdown finishes.
     if (completedId) {
       handleSongEnded(completedId);
     }
   }, [handleSongEnded]);
+
 
   // Realtime subscriptions
   const realtimeHandlers = useRef({
@@ -623,6 +637,9 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       {/* LAYER 3.8: Floating Real-time Room Shoutouts Overlay */}
       <TVShoutoutOverlay shoutouts={shoutouts} />
+
+      {/* LAYER 3.9: Floating Real-time Emoji Reactions from all users in room */}
+      <TVFloatingReactions roomCode={roomCode} />
 
       {/* LAYER 4: Mobile Portrait TV Mode Overlay Banner — ONLY shown when viewing TV mode on mobile devices in portrait orientation */}
       {isMobileDevice && isPortrait && !dismissMobileBanner && (
