@@ -285,7 +285,9 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     }
   }, [roomCode, fetchState]);
 
-  // Score popup trigger: when song finishes playing, pop up score modal and advance queue in background
+  // Score popup trigger: when song finishes playing, show score modal.
+  // Queue advance is intentionally DEFERRED until the score modal closes — so the
+  // next song never starts loading/playing while the score screen is visible.
   const triggerSongEndedScore = useCallback((completedQueueItemId: string) => {
     if (skippedByRemoteRef.current.has(completedQueueItemId)) {
       skippedByRemoteRef.current.delete(completedQueueItemId);
@@ -313,12 +315,15 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       completedQueueItemId,
     };
 
+    // Stop the player immediately so no audio plays during score screen
+    setCurrentSong(null);
+    currentSongRef.current = null;
+    setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
+
     setScoreModalData(modalData);
     scoreModalDataRef.current = modalData;
-
-    // Advance queue in background immediately so next song is loaded & ready
-    handleSongEnded(completedQueueItemId);
-  }, [handleSongEnded]);
+    // DO NOT call handleSongEnded here — it is called in handleScoreModalComplete
+  }, []);
 
   const handleScoreModalComplete = useCallback(() => {
     const completedId = scoreModalDataRef.current?.completedQueueItemId;
@@ -326,16 +331,11 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     setScoreModalData(null);
     scoreModalDataRef.current = null;
 
-    // Seamlessly transition into 5s Countdown Modal ONLY if there is an actual NEW next song!
-    // Never show countdown if queue is empty or for the same song that just ended!
-    if (currentSongRef.current && currentSongRef.current.queue_item_id !== completedId) {
-      lastCountdownSongIdRef.current = currentSongRef.current.queue_item_id;
-      setCountdownSong(currentSongRef.current);
-    } else {
-      lastCountdownSongIdRef.current = null;
-      setCountdownSong(null);
+    // NOW advance the queue — score modal is done, it's safe to load the next song
+    if (completedId) {
+      handleSongEnded(completedId);
     }
-  }, []);
+  }, [handleSongEnded]);
 
   // Realtime subscriptions
   const realtimeHandlers = useRef({
