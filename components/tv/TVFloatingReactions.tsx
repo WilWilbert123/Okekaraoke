@@ -2,14 +2,16 @@
 
 // ============================================================
 // OKEKARAOKE — TV Floating Reactions Layer
-// Subscribes to the same `okekaraoke:reactions:{roomCode}` channel
-// that EmojiReactions (remote) broadcasts on.
-// All users in the room who click an icon will show it here on TV.
+// Uses ONE shared CSS keyframe + CSS custom properties per particle
+// so 5-10 users spamming reactions won't inject dozens of <style> tags.
+// Hard cap at MAX_PARTICLES to prevent memory issues.
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Flame, Smile, Frown, Sparkles, PartyPopper, Heart } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+
+const MAX_PARTICLES = 20;
 
 const REACTION_ITEMS = [
   { id: 'fire',   icon: Flame,       color: '#f97316' },
@@ -32,6 +34,16 @@ interface TVParticle {
   senderName: string;
 }
 
+// Shared keyframe — sway is controlled via --sway CSS custom property on each particle
+const SHARED_KEYFRAME_CSS = `
+@keyframes tv-float-up {
+  0%   { transform: translate3d(0, 0, 0) scale(0.3); opacity: 0; }
+  12%  { transform: translate3d(calc(var(--sway) * 0.08), -5vh,  0) scale(1.2);  opacity: 1;    }
+  45%  { transform: translate3d(calc(var(--sway) * 0.45), -42vh, 0) scale(1.35); opacity: 0.95; }
+  75%  { transform: translate3d(calc(var(--sway) * 0.8),  -68vh, 0) scale(1.1);  opacity: 0.6;  }
+  100% { transform: translate3d(var(--sway),              -90vh, 0) scale(0.5);  opacity: 0;    }
+}`;
+
 let _uid = 0;
 function uid() { return ++_uid; }
 
@@ -46,17 +58,8 @@ function emojiToId(emoji?: string): ReactionId {
 }
 
 function TVParticleItem({
-  reactionId, x, sway, size, duration, senderName, animId, onDone,
-}: {
-  reactionId: ReactionId;
-  x: number;
-  sway: number;
-  size: number;
-  duration: number;
-  senderName: string;
-  animId: string;
-  onDone: () => void;
-}) {
+  reactionId, x, sway, size, duration, senderName, onDone,
+}: Omit<TVParticle, 'key'> & { onDone: () => void }) {
   useEffect(() => {
     const timer = setTimeout(onDone, duration + 80);
     return () => clearTimeout(timer);
@@ -64,57 +67,46 @@ function TVParticleItem({
 
   const item = REACTION_ITEMS.find((r) => r.id === reactionId) || REACTION_ITEMS[0];
   const Icon = item.icon;
-  const keyframeName = `tv_float_${animId}`;
-
-  const css = `
-@keyframes ${keyframeName} {
-  0%   { transform: translate3d(0px, 0px, 0) scale(0.3); opacity: 0; }
-  12%  { transform: translate3d(${sway * 0.08}px, -5vh, 0) scale(1.2); opacity: 1; }
-  45%  { transform: translate3d(${sway * 0.45}px, -42vh, 0) scale(1.35); opacity: 0.95; }
-  75%  { transform: translate3d(${sway * 0.8}px, -68vh, 0) scale(1.1); opacity: 0.6; }
-  100% { transform: translate3d(${sway}px, -90vh, 0) scale(0.5); opacity: 0; }
-}`;
 
   return (
-    <>
-      <style dangerouslySetInnerHTML={{ __html: css }} />
-      <div
-        className="absolute pointer-events-none select-none flex flex-col items-center gap-1"
+    <div
+      className="absolute pointer-events-none select-none flex flex-col items-center gap-1"
+      style={{
+        left: `${x}%`,
+        bottom: '24px',
+        willChange: 'transform, opacity',
+        // CSS custom property drives the sway — no per-particle <style> tag needed
+        ['--sway' as string]: `${sway}px`,
+        animation: `tv-float-up ${duration}ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards`,
+      }}
+    >
+      <Icon
         style={{
-          left: `${x}%`,
-          bottom: '24px',
-          willChange: 'transform, opacity',
-          animation: `${keyframeName} ${duration}ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards`,
+          width: `${size}rem`,
+          height: `${size}rem`,
+          color: item.color,
+          filter: `drop-shadow(0 0 10px ${item.color}90)`,
         }}
-      >
-        <Icon
+      />
+      {senderName && (
+        <span
+          className="font-black whitespace-nowrap"
           style={{
-            width: `${size}rem`,
-            height: `${size}rem`,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(6px)',
+            border: `1px solid ${item.color}50`,
             color: item.color,
-            filter: `drop-shadow(0 0 16px ${item.color}90) drop-shadow(0 0 32px ${item.color}50)`,
+            fontSize: '0.65rem',
+            letterSpacing: '0.04em',
+            textShadow: `0 0 8px ${item.color}`,
+            padding: '2px 8px',
+            borderRadius: '9999px',
           }}
-        />
-        {senderName && (
-          <span
-            className="font-black whitespace-nowrap"
-            style={{
-              background: 'rgba(0,0,0,0.65)',
-              backdropFilter: 'blur(6px)',
-              border: `1px solid ${item.color}50`,
-              color: item.color,
-              fontSize: '0.7rem',
-              letterSpacing: '0.04em',
-              textShadow: `0 0 8px ${item.color}`,
-              padding: '2px 8px',
-              borderRadius: '9999px',
-            }}
-          >
-            {senderName}
-          </span>
-        )}
-      </div>
-    </>
+        >
+          {senderName}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -136,7 +128,11 @@ export function TVFloatingReactions({ roomCode }: TVFloatingReactionsProps) {
     const sway     = (Math.random() - 0.5) * 140;
     const size     = 1.4 + Math.random() * 0.6;
     const duration = 2400 + Math.random() * 800;
-    setParticles((prev) => [...prev, { key, reactionId, x, sway, size, duration, senderName }]);
+    setParticles((prev) => {
+      // Hard cap: drop oldest particles if over limit
+      const trimmed = prev.length >= MAX_PARTICLES ? prev.slice(prev.length - MAX_PARTICLES + 1) : prev;
+      return [...trimmed, { key, reactionId, x, sway, size, duration, senderName }];
+    });
   }, []);
 
   useEffect(() => {
@@ -163,10 +159,11 @@ export function TVFloatingReactions({ roomCode }: TVFloatingReactionsProps) {
       style={{ zIndex: 45 }}
       aria-hidden="true"
     >
+      {/* Single shared keyframe injected once — no per-particle <style> tags */}
+      <style dangerouslySetInnerHTML={{ __html: SHARED_KEYFRAME_CSS }} />
       {particles.map((p) => (
         <TVParticleItem
           key={p.key}
-          animId={p.key}
           reactionId={p.reactionId}
           x={p.x}
           sway={p.sway}
