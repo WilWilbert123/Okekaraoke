@@ -7,6 +7,11 @@ import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/utils/apiHelpers';
 
+// Cache the song list for 5 minutes — the catalog rarely changes mid-session.
+// Admins can force-refresh via the dashboard Refresh button.
+// NOTE: POST (add song) is always dynamic and bypasses this cache.
+export const revalidate = 300;
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

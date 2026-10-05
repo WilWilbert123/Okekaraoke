@@ -7,6 +7,10 @@ import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/utils/apiHelpers';
 
+// Cache settings responses for 60 seconds — settings change rarely.
+// Admins can force-refresh via the dashboard Refresh button.
+export const revalidate = 60;
+
 export async function GET() {
   try {
     const supabase = createAdminClient();

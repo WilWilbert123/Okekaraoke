@@ -1513,10 +1513,9 @@ function FeedbacksTab() {
     }
   }, []);
 
+  // Initial load only — no auto-polling to avoid Vercel CPU overages.
   useEffect(() => {
     fetchFeedbacks();
-    const interval = setInterval(fetchFeedbacks, 8000);
-    return () => clearInterval(interval);
   }, [fetchFeedbacks]);
 
   const updateStatus = async (id: string, status: string) => {
@@ -2096,6 +2095,7 @@ export default function AdminDashboardPage() {
   const [bannerSaveSuccess, setBannerSaveSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const router = useRouter();
 
   // Check auth via Supabase session
@@ -2118,9 +2118,11 @@ export default function AdminDashboardPage() {
     setBanner(newSettings);
   };
 
-  // Fetch all data
+  // Fetch all data — called manually via Refresh button or on mount.
+  // Auto-polling removed to prevent Vercel Fluid Active CPU overages.
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    setIsRefreshing(true);
     try {
       const [analyticsRes, settingsRes, songsRes] = await Promise.all([
         fetch('/api/admin/analytics').catch(() => null),
@@ -2146,13 +2148,13 @@ export default function AdminDashboardPage() {
       console.warn('Dashboard fetch interrupted:', err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
+  // Initial load only — NO auto-polling to avoid Vercel CPU quota overages.
   useEffect(() => {
     fetchData();
-    const interval = setInterval(() => fetchData(true), 4_000);
-    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Save Banner
@@ -2261,11 +2263,17 @@ export default function AdminDashboardPage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => fetchData()}
-            disabled={loading}
-            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
-            title="Refresh Data Immediately"
+            disabled={isRefreshing || loading}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all"
+            style={{
+              background: isRefreshing ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.10)',
+              border: '1px solid rgba(99,102,241,0.3)',
+              color: isRefreshing ? '#a78bfa' : '#94a3b8',
+            }}
+            title="Refresh analytics & settings data"
           >
-            <RefreshCw size={16} className={loading ? 'animate-spin text-indigo-400' : ''} />
+            <RefreshCw size={13} className={isRefreshing ? 'animate-spin' : ''} />
+            <span>{isRefreshing ? 'Refreshing…' : 'Refresh'}</span>
           </button>
 
           <button
