@@ -70,6 +70,25 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const [showUserModal, setShowUserModal] = useState(false);
   const [reactionModal, setReactionModal] = useState<{emoji: string, users: {name: string, session_id: string}[]} | null>(null);
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
+  // Touch long-press handling for iOS & mobile browsers
+  const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTouchStart = (msgId: string) => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    touchTimerRef.current = setTimeout(() => {
+      setActiveReactionPicker((prev) => (prev === msgId ? null : msgId));
+      if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+        window.navigator.vibrate(30);
+      }
+    }, 450); // 450ms long press duration
+  };
+
+  const handleTouchEnd = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+  };
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
@@ -433,10 +452,17 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                 <div
                   onContextMenu={(e) => {
                     e.preventDefault();
-                    setActiveReactionPicker(activeReactionPicker === msg.id ? null : msg.id);
+                    setActiveReactionPicker((prev) => (prev === msg.id ? null : msg.id));
                   }}
-                  onClick={() => setActiveReactionPicker(null)}
-                  className="px-3 py-2 rounded-2xl text-sm leading-snug break-words select-none transition-transform active:scale-[0.98]"
+                  onTouchStart={() => handleTouchStart(msg.id)}
+                  onTouchEnd={handleTouchEnd}
+                  onTouchMove={handleTouchEnd}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Tap on bubble opens or closes reaction picker on mobile/desktop
+                    setActiveReactionPicker((prev) => (prev === msg.id ? null : msg.id));
+                  }}
+                  className="px-3 py-2 rounded-2xl text-sm leading-snug break-words select-none transition-transform active:scale-[0.98] cursor-pointer"
                   style={
                     isMe
                       ? {
@@ -444,12 +470,16 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                           color: '#000000',
                           fontWeight: 600,
                           borderBottomRightRadius: '6px',
+                          WebkitTouchCallout: 'none',
+                          WebkitUserSelect: 'none',
                         }
                       : {
                           background: '#18181b',
                           border: '1px solid #27272a',
                           color: '#f4f4f5',
                           borderBottomLeftRadius: '6px',
+                          WebkitTouchCallout: 'none',
+                          WebkitUserSelect: 'none',
                         }
                   }
                 >
