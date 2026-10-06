@@ -72,10 +72,13 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
   // Touch long-press handling for iOS & mobile browsers
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isLongPressRef = useRef<boolean>(false);
 
   const handleTouchStart = (msgId: string) => {
+    isLongPressRef.current = false;
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     touchTimerRef.current = setTimeout(() => {
+      isLongPressRef.current = true;
       setActiveReactionPicker((prev) => (prev === msgId ? null : msgId));
       if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
         window.navigator.vibrate(30);
@@ -459,6 +462,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                   onTouchMove={handleTouchEnd}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (isLongPressRef.current) return;
                     // Tap on bubble opens or closes reaction picker on mobile/desktop
                     setActiveReactionPicker((prev) => (prev === msg.id ? null : msg.id));
                   }}
