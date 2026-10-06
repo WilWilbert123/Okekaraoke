@@ -44,8 +44,11 @@ import {
   Sun,
   CloudRain,
   Circle,
+  Send,
+  X,
 } from 'lucide-react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
 interface AnalyticsData {
   metrics: {
@@ -115,6 +118,7 @@ interface FeedbackItem {
   message: string;
   guest_name?: string | null;
   room_code?: string | null;
+  session_id?: string | null;
   status: 'unread' | 'read' | 'resolved';
   created_at: string;
 }
@@ -1496,7 +1500,9 @@ function RoomsTab({
 // ─── Panel: Feedbacks & Reports ────────────────────────────────────────────────
 function FeedbacksTab() {
   const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
+  const [supportChats, setSupportChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [subTab, setSubTab] = useState<'feedbacks' | 'live_chats'>('feedbacks');
   const [filter, setFilter] = useState<'all' | 'feedback' | 'bug' | 'song_request'>('all');
 
   const fetchFeedbacks = useCallback(async () => {
@@ -1508,15 +1514,50 @@ function FeedbacksTab() {
       }
     } catch (err) {
       console.error('Failed to load feedbacks:', err);
+    }
+  }, []);
+
+  const fetchSupportChats = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/support-chat');
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setSupportChats(json.data);
+      }
+    } catch (err) {
+      console.error('Failed to load support chats:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Initial load only — no auto-polling to avoid Vercel CPU overages.
   useEffect(() => {
-    fetchFeedbacks();
-  }, [fetchFeedbacks]);
+    Promise.all([fetchFeedbacks(), fetchSupportChats()]).finally(() => setLoading(false));
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel('admin_global_support_chats')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'admin_support_chats',
+        },
+        (payload) => {
+          const newMsg = payload.new;
+          setSupportChats((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchFeedbacks, fetchSupportChats]);
 
   const updateStatus = async (id: string, status: string) => {
     setFeedbacks((prev) => prev.map((f) => (f.id === id ? { ...f, status: status as any } : f)));
@@ -1531,6 +1572,93 @@ function FeedbacksTab() {
     }
   };
 
+  const [activeChatFeedback, setActiveChatFeedback] = useState<FeedbackItem | null>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
+
+  // Fetch & Subscribe to selected feedback chat thread
+  useEffect(() => {
+    if (!activeChatFeedback) return;
+    const targetSessionId = activeChatFeedback.session_id;
+    const targetFeedbackId = activeChatFeedback.id;
+
+    const url = targetSessionId
+      ? `/api/admin/support-chat?session_id=${targetSessionId}`
+      : `/api/admin/support-chat?feedback_id=${targetFeedbackId}`;
+
+    fetch(url)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setChatMessages(json.data);
+        }
+      })
+      .catch(() => {});
+
+    const supabase = createClient();
+    const filterStr = targetSessionId ? `session_id=eq.${targetSessionId}` : `feedback_id=eq.${targetFeedbackId}`;
+
+    const channel = supabase
+      .channel(`admin_chat_thread:${targetFeedbackId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'admin_support_chats',
+          filter: filterStr,
+        },
+        (payload) => {
+          const newMsg = payload.new;
+          setChatMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeChatFeedback]);
+
+  const handleSendAdminReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !activeChatFeedback || sendingChat) return;
+
+    const msg = chatInput.trim();
+    setChatInput('');
+    setSendingChat(true);
+
+    try {
+      const res = await fetch('/api/admin/support-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: activeChatFeedback.session_id || 'ADMIN_DIRECT',
+          feedback_id: activeChatFeedback.id,
+          sender_type: 'admin',
+          sender_name: 'Admin Support',
+          message: msg,
+        }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setChatMessages((prev) => {
+          if (prev.some((m) => m.id === json.data.id)) return prev;
+          return [...prev, json.data];
+        });
+      }
+      fetchSupportChats();
+    } catch (err) {
+      console.error('Failed to send admin reply:', err);
+    } finally {
+      setSendingChat(false);
+    }
+  };
+
   const filtered = feedbacks.filter((f) => (filter === 'all' ? true : f.category === filter));
 
   return (
@@ -1540,34 +1668,119 @@ function FeedbacksTab() {
     >
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 shrink-0">
         <div className="flex items-center gap-2">
-          <MessageSquare size={16} className="text-indigo-400" />
-          <h2 className="text-sm font-bold text-white">
-            User Feedbacks &amp; Reports ({feedbacks.length})
-          </h2>
-        </div>
-
-        {/* Filter buttons */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-          {(['all', 'feedback', 'bug', 'song_request'] as const).map((cat) => (
+          <div className="flex bg-slate-900/90 p-1 rounded-xl border border-slate-800">
             <button
-              key={cat}
-              onClick={() => setFilter(cat)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${
-                filter === cat
+              onClick={() => setSubTab('feedbacks')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                subTab === 'feedbacks'
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              {cat === 'all' ? 'All' : cat === 'song_request' ? 'Song Requests' : cat}
+              <MessageSquare size={14} />
+              <span>Feedbacks &amp; Reports ({feedbacks.length})</span>
             </button>
-          ))}
+
+            <button
+              onClick={() => setSubTab('live_chats')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 relative ${
+                subTab === 'live_chats'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Send size={13} />
+              <span>Live Support Chats ({supportChats.length})</span>
+            </button>
+          </div>
         </div>
+
+        {/* Filter buttons for Feedbacks tab */}
+        {subTab === 'feedbacks' && (
+          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+            {(['all', 'feedback', 'bug', 'song_request'] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFilter(cat)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-colors ${
+                  filter === cat
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {cat === 'all' ? 'All' : cat === 'song_request' ? 'Song Requests' : cat}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-slate-500 text-xs">
-          Loading feedbacks...
+          Loading messages...
         </div>
+      ) : subTab === 'live_chats' ? (
+        supportChats.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
+            <Send size={24} className="text-slate-600" />
+            <p>No active support chats yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+            {/* Group support chats by session_id or feedback_id */}
+            {Array.from(new Set(supportChats.map((c) => c.session_id || c.feedback_id || c.id))).map((threadKey) => {
+              const threadMsgs = supportChats.filter((c) => (c.session_id || c.feedback_id || c.id) === threadKey);
+              const latestMsg = threadMsgs[threadMsgs.length - 1];
+              const firstUserMsg = threadMsgs.find((m) => m.sender_type === 'user') || latestMsg;
+
+              return (
+                <div
+                  key={threadKey}
+                  className="p-4 rounded-xl flex items-center justify-between gap-3 transition-all"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.02)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)',
+                  }}
+                >
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">
+                        {firstUserMsg?.sender_name || 'Guest User'}
+                      </span>
+                      <span className="text-[10px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded">
+                        Session: {threadKey}
+                      </span>
+                      <span className="text-[10px] text-slate-500 ml-auto">
+                        {new Date(latestMsg.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 line-clamp-1">
+                      <strong className="text-slate-400">{latestMsg.sender_name}:</strong> {latestMsg.message}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      setActiveChatFeedback({
+                        id: firstUserMsg.feedback_id || '',
+                        session_id: firstUserMsg.session_id || threadKey,
+                        category: 'feedback',
+                        message: firstUserMsg.message,
+                        guest_name: firstUserMsg.sender_name,
+                        status: 'unread',
+                        created_at: firstUserMsg.created_at,
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-indigo-300 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 transition-all flex items-center gap-1.5 shrink-0"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Open Live Chat ({threadMsgs.length})</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-xs gap-2">
           <MessageSquare size={24} className="text-slate-600" />
@@ -1635,8 +1848,16 @@ function FeedbacksTab() {
                 </p>
               </div>
 
-              {/* Status Action Buttons */}
-              <div className="flex items-center gap-1.5 shrink-0">
+              {/* Status & Chat Reply Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setActiveChatFeedback(item)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all flex items-center gap-1"
+                >
+                  <MessageSquare size={12} />
+                  <span>Reply Chat</span>
+                </button>
+
                 {item.status !== 'resolved' ? (
                   <button
                     onClick={() => updateStatus(item.id, 'resolved')}
@@ -1653,6 +1874,95 @@ function FeedbacksTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Admin Reply Chat Drawer/Modal */}
+      {activeChatFeedback && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col h-[500px] overflow-hidden">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={16} className="text-indigo-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Reply to {activeChatFeedback.guest_name || 'User'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Session: {activeChatFeedback.session_id || 'Anonymous'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveChatFeedback(null)}
+                className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Initial Feedback Context */}
+            <div className="p-3 bg-indigo-950/30 border-b border-indigo-900/40 text-xs text-indigo-200">
+              <span className="font-bold text-indigo-400">Original Feedback:</span> "{activeChatFeedback.message}"
+            </div>
+
+            {/* Chat Log */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar bg-slate-950/40">
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-slate-500 text-xs">
+                  No conversation history yet. Send a message to start chatting!
+                </div>
+              ) : (
+                chatMessages.map((msg) => {
+                  const isAdmin = msg.sender_type === 'admin';
+                  return (
+                    <div
+                      key={msg.id}
+                      className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 px-1">
+                        <span className={`text-[10px] font-bold ${isAdmin ? 'text-indigo-400' : 'text-slate-400'}`}>
+                          {isAdmin ? '🛡️ You (Admin)' : msg.sender_name}
+                        </span>
+                        <span className="text-[9px] text-slate-500">
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div
+                        className={`p-3 rounded-xl max-w-[85%] text-xs leading-relaxed ${
+                          isAdmin
+                            ? 'bg-indigo-600 text-white rounded-tr-none'
+                            : 'bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700'
+                        }`}
+                      >
+                        {msg.message}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Input */}
+            <form onSubmit={handleSendAdminReply} className="p-3 border-t border-slate-800 bg-slate-900 flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type your response to the user..."
+                className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 outline-none focus:border-indigo-500"
+              />
+              <button
+                type="submit"
+                disabled={sendingChat || !chatInput.trim()}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5"
+              >
+                <Send size={13} />
+                <span>Send</span>
+              </button>
+            </form>
+          </div>
         </div>
       )}
     </div>

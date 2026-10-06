@@ -5,7 +5,7 @@ import { apiSuccess, apiError } from '@/lib/utils/apiHelpers';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { category, message, guest_name, room_code } = body;
+    const { category, message, guest_name, room_code, session_id } = body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return apiError('INVALID_MESSAGE', 'Feedback message cannot be empty.', 400);
@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
         message: message.trim(),
         guest_name: guest_name ?? 'Guest',
         room_code: room_code ?? null,
+        session_id: session_id ?? null,
         status: 'unread',
       })
       .select()
