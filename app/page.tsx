@@ -170,7 +170,7 @@ export default function LandingPage() {
   };
 
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-6 sm:py-12 relative overflow-hidden">
+    <main className="min-h-dvh flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-10 relative overflow-x-hidden overflow-y-auto">
       {/* Animated Intro Splash Screen */}
       <IntroSplash />
 
@@ -203,8 +203,8 @@ export default function LandingPage() {
           style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
       </div>
 
-      {/* Outer Content Container */}
-      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md flex flex-col items-center animate-fadeIn">
+      {/* Outer Content Container — my-auto keeps it centered on tall screens, scrolls on short TV screens */}
+      <div className="relative z-10 w-full max-w-[340px] sm:max-w-md flex flex-col items-center animate-fadeIn my-auto">
 
         <div className="flex items-center justify-center gap-2.5 sm:gap-3.5 mb-4 sm:mb-6 filter drop-shadow-[0_10px_25px_rgba(0,0,0,0.8)]">
 

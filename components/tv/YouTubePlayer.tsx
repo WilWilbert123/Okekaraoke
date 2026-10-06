@@ -115,6 +115,13 @@ interface YouTubePlayerProps {
   className?: string;
 }
 
+/** Detect TV / Android TV browsers that block autoplay without a user gesture */
+function isTVBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /TV Bro|SmartTV|SMART-TV|HbbTV|NetCast|Web0S|Tizen|CrKey|AndroidTV|Android.*TV|Roku|BRAVIA|VIZIO|PhilipsTV|SonyBRAVIA|SamsungBrowser.*SmartTV/i.test(ua);
+}
+
 export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(function YouTubePlayer(
   {
     videoId,
@@ -133,6 +140,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   const hasStartedPlayingRef = useRef<boolean>(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
+  // Show tap-to-start overlay when autoplay is blocked (TV browsers need a user gesture)
+  const [needsUserGesture, setNeedsUserGesture] = useState(false);
+  const gestureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
 
@@ -263,8 +273,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             try {
               event.target.mute();
               event.target.playVideo();
+              // On TV browsers autoplay often fails silently — show tap overlay after 2s if not playing
+              if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
+              gestureTimeoutRef.current = setTimeout(() => {
+                if (!hasStartedPlayingRef.current) {
+                  setNeedsUserGesture(true);
+                }
+              }, 2000);
             } catch (e) {
               console.warn('Player onReady play error:', e);
+              setNeedsUserGesture(true);
             }
           },
           onStateChange: (event) => {
@@ -276,6 +294,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.PLAYING:
                 playerStatus = 'playing';
                 hasStartedPlayingRef.current = true;
+                setNeedsUserGesture(false);
+                if (gestureTimeoutRef.current) { clearTimeout(gestureTimeoutRef.current); gestureTimeoutRef.current = null; }
                 try {
                   playerRef.current?.unMute();
                 } catch {}
@@ -352,6 +372,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
     if (!videoId || !playerReady) return;
 
     let endedTriggered = false;
+    // On TV browsers we use a slower poll interval to be less aggressive
+    const pollMs = isTVBrowser() ? 1000 : 250;
 
     const interval = setInterval(() => {
       if (!playerRef.current) return;
@@ -372,8 +394,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           }
         }
 
-        // 2. Initial playback recovery: ONLY until video starts playing for the first time
-        if (!hasStartedPlayingRef.current) {
+        // 2. Initial playback recovery: ONLY until video starts playing for the first time.
+        // Skip retries when the tap-to-play overlay is shown — let the user tap instead.
+        if (!hasStartedPlayingRef.current && !needsUserGesture) {
           if (state === 1) {
             hasStartedPlayingRef.current = true;
             try { playerRef.current.unMute(); } catch {}
@@ -385,17 +408,31 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           }
         }
       } catch {}
-    }, 250);
+    }, pollMs);
 
     return () => clearInterval(interval);
-  }, [videoId, queueItemId, playerReady]);
+  }, [videoId, queueItemId, playerReady, needsUserGesture]);
+
+  // Dismiss gesture overlay and force-play
+  const handleTapToPlay = useCallback(() => {
+    setNeedsUserGesture(false);
+    if (playerRef.current) {
+      try {
+        playerRef.current.mute();
+        playerRef.current.playVideo();
+        setTimeout(() => {
+          try { playerRef.current?.unMute(); } catch {}
+        }, 300);
+      } catch {}
+    }
+  }, []);
 
   return (
     <div className={`relative w-full h-full bg-black overflow-hidden pointer-events-none select-none ${className}`}>
-      {/* YouTube Player Container — scaled slightly to crop YouTube watermark & top controls */}
+      {/* YouTube Player Container — NO scale on TV to prevent over-zoom */}
       <div
         ref={containerRef}
-        className="w-full h-full scale-[1.08] transform origin-center"
+        className="w-full h-full"
       />
 
       {/* Embed blocked overlay */}
@@ -429,6 +466,25 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 ⏭ Skip to Next Song
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Tap-to-play overlay — shown on TV browsers when autoplay is blocked */}
+      {needsUserGesture && videoId && !embedBlocked && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-black/80 z-20 pointer-events-auto cursor-pointer"
+          onClick={handleTapToPlay}
+        >
+          <div className="flex flex-col items-center gap-4 text-center px-8">
+            {/* Big animated play button */}
+            <div className="w-28 h-28 rounded-full bg-white/10 border-4 border-white/60 flex items-center justify-center backdrop-blur-sm animate-pulse">
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="white">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </div>
+            <p className="text-white text-2xl font-bold drop-shadow-lg">Tap to Start Playing</p>
+            <p className="text-white/60 text-sm">Your TV browser requires a tap to enable audio</p>
           </div>
         </div>
       )}

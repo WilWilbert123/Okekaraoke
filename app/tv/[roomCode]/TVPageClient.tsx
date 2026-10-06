@@ -73,7 +73,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   const sessionRef = useRef<string | null>(null);
   const advancingRef = useRef(false);
   const currentSongRef = useRef<EnrichedQueueItem | null>(null);
-  const autoStartQueueRef = useRef<() => void>(() => {});
+  const autoStartQueueRef = useRef<() => void>(() => { });
   // Track queue_item_ids that were stopped/skipped by remote so the YouTube
   // player's onEnded callback does NOT call /api/queue/next for them.
   const skippedByRemoteRef = useRef<Set<string>>(new Set());
@@ -102,7 +102,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         device_type: 'tv',
         guest_name: 'TV Screen',
       }),
-    }).catch(() => {});
+    }).catch(() => { });
 
     advancingRef.current = true;
     try {
@@ -135,7 +135,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   useEffect(() => { autoStartQueueRef.current = autoStartQueue; }, [autoStartQueue]);
 
   // fetchState ref (so autoStartQueue can call it without circular dep)
-  const fetchStateRef = useRef<(triggerAutoStart?: boolean) => void>(() => {});
+  const fetchStateRef = useRef<(triggerAutoStart?: boolean) => void>(() => { });
 
   // Fetch authoritative state from server
   const fetchState = useCallback(async (triggerAutoStart = false) => {
@@ -153,7 +153,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           setError(json.error?.message ?? 'Failed to load room state.');
         }
         setConnectionStatus('offline');
-        fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
+        fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => { }); setLoading(false);
         return;
       }
 
@@ -180,7 +180,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       setQueue(state.queue);
       setError(null);
       setConnectionStatus('connected');
-      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
+      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => { }); setLoading(false);
 
       // Register TV device in DB once so /api/queue/next accepts it as authorized without spamming
       if (!hasRegisteredTVRef.current) {
@@ -199,7 +199,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
             device_type: 'tv',
             guest_name: 'TV Screen',
           }),
-        }).catch(() => {});
+        }).catch(() => { });
       } else {
         sessionRef.current = sessionRef.current || getOrCreateGuestSession().session_id;
       }
@@ -212,7 +212,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
     } catch {
       setConnectionStatus('offline');
-      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => {}); setLoading(false);
+      fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }).catch(() => { }); setLoading(false);
     }
   }, [roomCode]);
 
@@ -408,7 +408,12 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   useEffect(() => {
     const checkMobileAndOrientation = () => {
       const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
-      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || (typeof window !== 'undefined' && window.innerWidth < 768);
+      // Android TV / TV Bro / Smart TV browsers report "Android" in UA — exclude them from mobile detection
+      const isTVAgent = /TV Bro|SmartTV|SMART-TV|HbbTV|AndroidTV|Android.*TV|Tizen|Web0S|NetCast|CrKey|Roku|BRAVIA|VIZIO/i.test(userAgent);
+      const mobile = !isTVAgent && (
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) ||
+        (typeof window !== 'undefined' && window.innerWidth < 768)
+      );
       setIsMobileDevice(mobile);
       setIsPortrait(typeof window !== 'undefined' && window.innerHeight > window.innerWidth);
     };
@@ -457,7 +462,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           } else if (doc.msExitFullscreen) {
             await doc.msExitFullscreen();
           }
-        } catch {}
+        } catch { }
       }
       setIsPseudoFullscreen(false);
       setIsFullscreen(false);
@@ -595,11 +600,11 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       <button
         id="tv-fullscreen-btn"
         onClick={handleFullscreen}
-        className="absolute top-11 sm:top-16 right-3 z-30 p-2 text-white hover:text-white/80 transition-all active:scale-95 flex items-center justify-center pointer-events-auto drop-shadow"
+        className="absolute top-13 right-3 z-30 p-1.5 text-white/50 hover:text-white/90 transition-all active:scale-95 flex items-center justify-center pointer-events-auto drop-shadow"
         aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
         title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
       >
-        {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+        {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
 
       {/* LAYER 2: Floating Corner Widgets (Auto-hidden in fullscreen mode for clean view) */}
