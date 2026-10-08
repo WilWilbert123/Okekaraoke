@@ -10,7 +10,7 @@ import { Smartphone, RotateCw, X, Maximize2, Minimize2 } from 'lucide-react';
 import { TVHeader } from '@/components/tv/TVHeader';
 import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
-import { YouTubePlayer } from '@/components/tv/YouTubePlayer';
+import { YouTubePlayer, type YouTubePlayerRef } from '@/components/tv/YouTubePlayer';
 import { NowPlaying } from '@/components/tv/NowPlaying';
 import { QRPanel } from '@/components/tv/QRPanel';
 import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
@@ -27,6 +27,7 @@ interface TVPageClientProps {
 }
 
 export function TVPageClient({ roomCode }: TVPageClientProps) {
+  const playerRef = useRef<YouTubePlayerRef | null>(null);
   const [instanceState, setInstanceState] = useState<InstanceState | null>(null);
   const [currentSong, setCurrentSong] = useState<EnrichedQueueItem | null>(null);
   const [countdownSong, setCountdownSong] = useState<EnrichedQueueItem | null>(null);
@@ -387,6 +388,14 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       }
       fetchStateRef.current();
     },
+    playback_control: (payload: any) => {
+      if (payload?.action === 'pause') {
+        playerRef.current?.pauseVideo();
+      } else if (payload?.action === 'resume') {
+        playerRef.current?.playVideo();
+      }
+      fetchStateRef.current();
+    },
     instance_updated: () => fetchStateRef.current(),
     banner_updated: (payload: any) => { if (payload) setBannerSettings(payload); else fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }); },
     shoutout_broadcast: (payload: any) => {
@@ -570,6 +579,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       {/* LAYER 0: Fullscreen YouTube Video Player (Corner-to-Corner) */}
       <div className="absolute inset-0 z-0">
         <YouTubePlayer
+          ref={playerRef}
           videoId={currentVideoId}
           queueItemId={currentQueueItemId}
           onEnded={triggerSongEndedScore}

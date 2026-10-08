@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone } from 'lucide-react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone, Tv } from 'lucide-react';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
@@ -16,6 +16,7 @@ import { EmojiReactions } from '@/components/remote/EmojiReactions';
 import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
 import { SettingsModal } from '@/components/remote/SettingsModal';
 import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
+import { MiniTVPlayer } from '@/components/remote/MiniTVPlayer';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
@@ -60,7 +61,28 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [showShoutoutModal, setShowShoutoutModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [isSoloTVMode, setIsSoloTVMode] = useState<boolean>(false);
   const { isInstallable, installApp } = usePWAInstall();
+
+  // Load saved Solo TV preference
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('okekaraoke_solo_tv');
+      if (stored === 'true') {
+        setIsSoloTVMode(true);
+      }
+    }
+  }, []);
+
+  const toggleSoloTVMode = () => {
+    setIsSoloTVMode((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('okekaraoke_solo_tv', String(next));
+      }
+      return next;
+    });
+  };
 
   // Remember last room code for app shortcuts & quick rejoining
   useEffect(() => {
@@ -248,6 +270,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       fetchState();
     },
     song_skipped: fetchState,
+    playback_control: fetchState,
   }).current;
 
   useRealtime({
@@ -419,12 +442,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           </div>
         </div>
 
-        {/* Action Row: Scan TV, Live Shoutout, Guest Name Edit */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-900/80">
-          <div className="flex items-center gap-1.5 min-w-0">
+        {/* Action Row: Scan TV, Solo TV Mode, Live Shoutout, Guest Name Edit */}
+        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-zinc-900/80 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-1.5 min-w-0 shrink-0">
             <button
               onClick={() => setShowScanModal(true)}
-              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1.5 text-[11px] font-bold active:scale-95 transition-all shrink-0 whitespace-nowrap"
+              className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all shrink-0 whitespace-nowrap"
               title="Scan TV / Switch Room"
             >
               <QrCode size={12} className="text-teal-400" />
@@ -432,8 +455,21 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             </button>
 
             <button
+              onClick={toggleSoloTVMode}
+              className={`px-2 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-extrabold active:scale-95 transition-all shrink-0 whitespace-nowrap ${
+                isSoloTVMode
+                  ? 'bg-teal-400 text-black border-teal-300 shadow-sm shadow-teal-500/30'
+                  : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200 hover:text-white'
+              }`}
+              title="Toggle TV + Remote in 1 screen mode (Solo Phone)"
+            >
+              <Tv size={12} className={isSoloTVMode ? 'text-black' : 'text-teal-400'} />
+              <span>{isSoloTVMode ? 'Solo TV ON' : 'Solo TV'}</span>
+            </button>
+
+            <button
               onClick={() => setShowShoutoutModal(true)}
-              className="px-2.5 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center gap-1.5 text-[11px] font-extrabold active:scale-95 transition-all shadow-sm shrink-0 whitespace-nowrap"
+              className="px-2 py-1 rounded-lg bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center gap-1 text-[11px] font-extrabold active:scale-95 transition-all shadow-sm shrink-0 whitespace-nowrap"
               title="Broadcast Live TV Shoutout"
             >
               <Megaphone size={12} className="text-teal-400 animate-pulse" />
@@ -442,7 +478,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           </div>
 
           {/* Guest name — editable inline */}
-          <div className="flex items-center gap-1 shrink-0 max-w-[140px]">
+          <div className="flex items-center gap-1 shrink-0 max-w-[130px]">
             {editingName ? (
               <div className="flex items-center gap-1 bg-zinc-900 border border-teal-500/50 rounded-lg px-2 py-0.5">
                 <input
@@ -465,18 +501,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             ) : (
               <button
                 onClick={startEditName}
-                className="px-2 py-1 rounded-lg bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/80 text-zinc-300 hover:text-white flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-all truncate"
+                className="px-2 py-1 rounded-lg bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800/80 text-zinc-300 hover:text-white flex items-center gap-1 text-xs font-semibold active:scale-95 transition-all truncate"
                 title="Click to edit your display name"
               >
-                <span className="truncate max-w-[90px] text-[11px]">{guestName || 'Your name'}</span>
+                <span className="truncate max-w-[80px] text-[11px]">{guestName || 'Your name'}</span>
                 <Pencil size={11} className="text-zinc-500 shrink-0" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Now playing mini */}
-        {currentSong && (
+        {/* Now playing mini (shown when Solo TV mode is off) */}
+        {!isSoloTVMode && currentSong && (
           <div
             className="mt-2 px-3 py-1.5 rounded-lg flex items-center gap-2 bg-zinc-900/80 border border-zinc-800/60"
           >
@@ -489,6 +525,23 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         )}
       </header>
 
+      {/* Mini TV Player for 1-Phone (Solo TV + Remote) Mode */}
+      {isSoloTVMode && (
+        <MiniTVPlayer
+          roomCode={roomCode}
+          sessionId={sessionId}
+          currentSong={currentSong}
+          queue={queue}
+          onClose={() => {
+            setIsSoloTVMode(false);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('okekaraoke_solo_tv', 'false');
+            }
+          }}
+          onRefreshState={fetchState}
+        />
+      )}
+
       {/* Tab content — relative so emoji overlay stacks correctly */}
       <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
         <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'search' ? 'block' : 'none' }}>
@@ -497,6 +550,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             sessionId={sessionId}
             guestName={guestName}
             onReserved={() => fetchState()}
+            isSoloTVMode={isSoloTVMode}
           />
         </div>
         <div className="flex-1 min-h-0 h-full flex-col overflow-hidden" style={{ display: tab === 'chat' ? 'flex' : 'none' }}>
