@@ -162,7 +162,8 @@ export type RealtimeEventType =
   | 'remote_joined'
   | 'remote_left'
   | 'banner_updated'
-  | 'shoutout_broadcast';
+  | 'shoutout_broadcast'
+  | 'playback_control';
 
 export interface RealtimeEvent {
   type: RealtimeEventType;

@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Play, Music2, User, Trash2, Square, Loader2, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Music2, User, Trash2, Square, Loader2, AlertTriangle, Lock } from 'lucide-react';
 import type { EnrichedQueueItem } from '@/lib/types';
 
 interface RemoteQueueProps {
@@ -20,6 +20,8 @@ interface RemoteQueueProps {
 export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh }: RemoteQueueProps) {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [controllingId, setControllingId] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
 
   const [startingNext, setStartingNext] = useState(false);
@@ -47,6 +49,39 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
       // Error handled silently
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  // Toggle Pause/Resume for user's own song
+  const handleTogglePauseOwnSong = async (queueItemId: string) => {
+    if (!sessionId || !roomCode) return;
+    const targetAction = isPaused ? 'resume' : 'pause';
+    setControllingId(queueItemId);
+    setStopError(null);
+
+    try {
+      const response = await fetch('/api/queue/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode,
+          session_id: sessionId,
+          action: targetAction,
+          queue_item_id: queueItemId,
+        }),
+      });
+
+      const json = await response.json();
+      if (json.success) {
+        setIsPaused(targetAction === 'pause');
+        onRefresh?.();
+      } else {
+        setStopError(json.error?.message ?? 'Only the singer can pause this song.');
+      }
+    } catch (err) {
+      setStopError(`Network error: ${err}`);
+    } finally {
+      setControllingId(null);
     }
   };
 
@@ -155,15 +190,19 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
           <div
             className="flex items-center gap-2.5 p-2.5 rounded-xl"
             style={{
-              background: 'rgba(34, 197, 94, 0.06)',
-              border: '1px solid rgba(34, 197, 94, 0.2)',
+              background: isPaused ? 'rgba(234, 179, 8, 0.06)' : 'rgba(34, 197, 94, 0.06)',
+              border: isPaused ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid rgba(34, 197, 94, 0.2)',
             }}
           >
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'rgba(34, 197, 94, 0.1)' }}
+              style={{ background: isPaused ? 'rgba(234, 179, 8, 0.15)' : 'rgba(34, 197, 94, 0.1)' }}
             >
-              <Play size={13} className="text-green-400 fill-green-400" />
+              {isPaused ? (
+                <Pause size={13} className="text-amber-400 fill-amber-400" />
+              ) : (
+                <Play size={13} className="text-green-400 fill-green-400" />
+              )}
             </div>
 
             {/* Thumbnail */}
@@ -191,31 +230,72 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-xs font-bold text-green-400">PLAYING</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className={`text-xs font-bold ${isPaused ? 'text-amber-400 animate-pulse' : 'text-green-400'}`}>
+                {isPaused ? 'PAUSED' : 'PLAYING'}
+              </span>
 
-              {/* Stop button ONLY for the owner of the currently playing song */}
-              {isCurrentSongMine && (
-                <button
-                  onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
-                  disabled={stoppingId === currentSong.queue_item_id}
-                  className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
-                  style={{
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    color: '#ef4444',
-                  }}
-                  title="Stop your song on TV"
+              {/* Controls ONLY for the owner of the currently playing song ("Your Song, Your Rule") */}
+              {isCurrentSongMine ? (
+                <>
+                  {/* Pause / Resume Button */}
+                  <button
+                    onClick={() => handleTogglePauseOwnSong(currentSong.queue_item_id)}
+                    disabled={controllingId === currentSong.queue_item_id}
+                    className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+                    style={{
+                      background: isPaused ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                      border: isPaused ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                      color: isPaused ? '#22c55e' : '#f59e0b',
+                    }}
+                    title={isPaused ? 'Resume your song on TV' : 'Pause your song on TV'}
+                  >
+                    {controllingId === currentSong.queue_item_id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : isPaused ? (
+                      <>
+                        <Play size={10} className="fill-green-400 text-green-400" />
+                        <span>RESUME</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pause size={10} className="fill-amber-400 text-amber-400" />
+                        <span>PAUSE</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Stop button */}
+                  <button
+                    onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
+                    disabled={stoppingId === currentSong.queue_item_id}
+                    className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#ef4444',
+                    }}
+                    title="Stop your song on TV"
+                  >
+                    {stoppingId === currentSong.queue_item_id ? (
+                      <Loader2 size={12} className="animate-spin text-red-400" />
+                    ) : (
+                      <>
+                        <Square size={10} className="fill-red-500 text-red-500" />
+                        <span>STOP</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              ) : (
+                /* Locked badge for other guests */
+                <div
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 font-semibold"
+                  title={`Only ${currentSong.guest_name || 'the singer'} can pause or stop this song`}
                 >
-                  {stoppingId === currentSong.queue_item_id ? (
-                    <Loader2 size={12} className="animate-spin text-red-400" />
-                  ) : (
-                    <>
-                      <Square size={10} className="fill-red-500 text-red-500" />
-                      <span>STOP</span>
-                    </>
-                  )}
-                </button>
+                  <Lock size={10} className="text-zinc-500 shrink-0" />
+                  <span className="truncate max-w-[75px]">{currentSong.guest_name || 'Guest'}</span>
+                </div>
               )}
             </div>
           </div>
