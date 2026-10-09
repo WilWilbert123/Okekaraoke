@@ -17,6 +17,7 @@ import KaraokeScoreModal from '@/components/tv/KaraokeScoreModal';
 import { SongCountdownModal } from '@/components/tv/SongCountdownModal';
 import { TVShoutoutOverlay, type ShoutoutItem } from '@/components/tv/TVShoutoutOverlay';
 import { TVFloatingReactions } from '@/components/tv/TVFloatingReactions';
+import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -616,6 +617,15 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       >
         {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
+
+      {/* LAYER 1.5: Audio Frequency Bar Spectrum Visualizer at Bottom of TV Screen */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+        <AudioVisualizer
+          isPlaying={playerState.status === 'playing' && !!currentSong}
+          barCount={52}
+          height={28}
+        />
+      </div>
 
       {/* LAYER 2: Floating Corner Widgets (Auto-hidden in fullscreen mode for clean view) */}
       <div className="absolute bottom-4 left-6 right-6 z-20 flex items-end justify-between gap-4 pointer-events-none">

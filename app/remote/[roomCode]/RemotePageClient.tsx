@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone, Tv } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
@@ -16,6 +17,7 @@ import { EmojiReactions } from '@/components/remote/EmojiReactions';
 import { ScanRoomModal } from '@/components/remote/ScanRoomModal';
 import { SettingsModal } from '@/components/remote/SettingsModal';
 import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
+import { TransferRoomModal } from '@/components/remote/TransferRoomModal';
 import { MiniTVPlayer } from '@/components/remote/MiniTVPlayer';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
@@ -56,23 +58,30 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [guestName, setGuestName] = useState<string>('');
   const [sessionId, setSessionId] = useState<string>('');
   const [instanceId, setInstanceId] = useState<string>('');
+  const searchParams = useSearchParams();
   const [showScanModal, setShowScanModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showShoutoutModal, setShowShoutoutModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [isSoloTVMode, setIsSoloTVMode] = useState<boolean>(false);
   const { isInstallable, installApp } = usePWAInstall();
 
-  // Load saved Solo TV preference
+  // Load saved Solo TV preference or URL solotv parameter
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (searchParams?.get('solotv') === 'true' || searchParams?.get('solotv') === '1') {
+      setIsSoloTVMode(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('okekaraoke_solo_tv', 'true');
+      }
+    } else if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('okekaraoke_solo_tv');
       if (stored === 'true') {
         setIsSoloTVMode(true);
       }
     }
-  }, []);
+  }, [searchParams]);
 
   const toggleSoloTVMode = () => {
     setIsSoloTVMode((prev) => {
@@ -382,6 +391,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           }
         }}
         roomCode={roomCode}
+        onOpenTransferModal={() => setShowTransferModal(true)}
       />
 
       {/* Header */}
@@ -539,6 +549,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             }
           }}
           onRefreshState={fetchState}
+          onOpenTransferModal={() => setShowTransferModal(true)}
         />
       )}
 
@@ -608,6 +619,15 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         roomCode={roomCode}
         guestName={guestName}
         sessionId={sessionId}
+      />
+
+      {/* Transfer / Pair Queue to Big TV Screen Modal */}
+      <TransferRoomModal
+        open={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        currentRoomCode={roomCode}
+        sessionId={sessionId}
+        onTransferred={fetchState}
       />
 
       {/* Bottom Navigation Bar */}

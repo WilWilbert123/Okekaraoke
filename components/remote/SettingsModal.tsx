@@ -18,6 +18,7 @@ import {
   Download,
   MessageCircle,
   Headphones,
+  Tv,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { getOrCreateGuestSession } from '@/lib/auth/guestSession';
@@ -39,6 +40,7 @@ interface SettingsModalProps {
   guestName: string;
   onUpdateName: (newName: string) => void;
   roomCode: string;
+  onOpenTransferModal?: () => void;
 }
 
 export function SettingsModal({
@@ -47,6 +49,7 @@ export function SettingsModal({
   guestName,
   onUpdateName,
   roomCode,
+  onOpenTransferModal,
 }: SettingsModalProps) {
   const [feedback, setFeedback] = useState('');
   const [feedbackCategory, setFeedbackCategory] = useState<'feedback' | 'bug' | 'song_request'>('feedback');
@@ -674,6 +677,24 @@ export function SettingsModal({
                 </div>
               )}
             </div>
+
+            {/* 1.5 Pair / Transfer Queue to Big TV Screen */}
+            {onOpenTransferModal && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenTransferModal();
+                }}
+                className="w-full py-2.5 px-3.5 rounded-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 text-[11px] font-extrabold flex items-center justify-between transition-all active:scale-95 shadow"
+              >
+                <div className="flex items-center gap-2">
+                  <Tv size={15} className="text-indigo-400" />
+                  <span>Pair / Transfer Queue to Big TV Room Code</span>
+                </div>
+                <ExternalLink size={12} className="text-indigo-400" />
+              </button>
+            )}
 
             {/* 2. Support Developer Button */}
             <a

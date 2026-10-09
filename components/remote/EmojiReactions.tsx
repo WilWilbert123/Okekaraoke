@@ -81,11 +81,10 @@ function FloatingParticle({
   const keyframeName = `float_${animId}`;
   const css = `
 @keyframes ${keyframeName} {
-  0%   { transform: translate3d(0px, 0px, 0)              scale(0.4); opacity: 0;   }
-  15%  { transform: translate3d(${sway * 0.1}px, -8vh,  0) scale(1.1); opacity: 1;   }
-  50%  { transform: translate3d(${sway * 0.5}px, -45vh, 0) scale(1.25); opacity: 0.95;}
-  80%  { transform: translate3d(${sway * 0.85}px,-70vh, 0) scale(1.1); opacity: 0.6; }
-  100% { transform: translate3d(${sway}px,        -88vh, 0) scale(0.6); opacity: 0;   }
+  0%   { opacity: 0; transform: translate3d(0px, 0px, 0) scale(0.9); }
+  10%  { opacity: 1; transform: translate3d(${sway * 0.1}px, -8vh, 0) scale(1); }
+  85%  { opacity: 1; transform: translate3d(${sway * 0.85}px, -75vh, 0) scale(1); }
+  100% { opacity: 0; transform: translate3d(${sway}px, -88vh, 0) scale(0.95); }
 }`;
 
   return (
@@ -97,7 +96,7 @@ function FloatingParticle({
           left: `${x}%`,
           bottom: '12px',
           willChange: 'transform, opacity',
-          animation: `${keyframeName} ${duration}ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards`,
+          animation: `${keyframeName} ${duration}ms linear forwards`,
         }}
       >
         <Icon style={{ width: `${size * 1.4}rem`, height: `${size * 1.4}rem`, color: item.color, filter: `drop-shadow(0 0 8px ${item.color}90)` }} />
@@ -112,6 +111,8 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
 
   const channelRef  = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
   const supabaseRef = useRef(createClient());
+  const queueRef = useRef<Array<ReactionId>>([]);
+  const isProcessingRef = useRef<boolean>(false);
 
   const removeParticle = useCallback((key: string) => {
     setParticles((prev) => prev.filter((p) => p.key !== key));
@@ -127,6 +128,31 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
     setParticles((prev) => [...prev, { key, reactionId, x, sway, size, duration }]);
   }, []);
 
+  const processQueue = useCallback(() => {
+    if (queueRef.current.length === 0) {
+      isProcessingRef.current = false;
+      return;
+    }
+
+    isProcessingRef.current = true;
+    const nextId = queueRef.current.shift();
+    if (nextId) {
+      spawnParticle(nextId);
+    }
+
+    const delay = 160 + Math.random() * 80;
+    setTimeout(processQueue, delay);
+  }, [spawnParticle]);
+
+  const enqueueParticle = useCallback((reactionId: ReactionId) => {
+    if (queueRef.current.length < 30) {
+      queueRef.current.push(reactionId);
+    }
+    if (!isProcessingRef.current) {
+      processQueue();
+    }
+  }, [processQueue]);
+
   // Realtime listener
   useEffect(() => {
     const supabase = supabaseRef.current;
@@ -139,7 +165,7 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
         const data = payload as ReactionPayload;
         if (data && data.sender_session !== sessionId) {
           const targetId = data.reaction_id || emojiToId(data.emoji);
-          spawnParticle(targetId);
+          enqueueParticle(targetId);
         }
       })
       .subscribe();
@@ -148,11 +174,11 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
       channel.unsubscribe();
       channelRef.current = null;
     };
-  }, [roomCode, sessionId, spawnParticle]);
+  }, [roomCode, sessionId, enqueueParticle]);
 
   // Send reaction action
   const sendReaction = useCallback((reactionId: ReactionId) => {
-    spawnParticle(reactionId);
+    enqueueParticle(reactionId);
 
     if (channelRef.current) {
       channelRef.current.send({
@@ -165,7 +191,7 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
         } satisfies ReactionPayload,
       });
     }
-  }, [sessionId, guestName, spawnParticle]);
+  }, [sessionId, guestName, enqueueParticle]);
 
   return (
     <>
