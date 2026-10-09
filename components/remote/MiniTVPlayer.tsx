@@ -10,6 +10,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Tv, Play, Pause, SkipForward, RotateCcw, Volume2, VolumeX, Maximize2, Minimize2, ChevronUp, ChevronDown, X, Mic2, Music, Sparkles, ExternalLink } from 'lucide-react';
 import { YouTubePlayer, type YouTubePlayerRef } from '@/components/tv/YouTubePlayer';
+import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 import { useRealtime } from '@/hooks/useRealtime';
 import type { EnrichedQueueItem, PlayerState } from '@/lib/types';
 
@@ -20,6 +21,7 @@ interface MiniTVPlayerProps {
   queue: EnrichedQueueItem[];
   onClose: () => void;
   onRefreshState: () => void;
+  onOpenTransferModal?: () => void;
 }
 
 export function MiniTVPlayer({
@@ -29,6 +31,7 @@ export function MiniTVPlayer({
   queue,
   onClose,
   onRefreshState,
+  onOpenTransferModal,
 }: MiniTVPlayerProps) {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -274,6 +277,15 @@ export function MiniTVPlayer({
                 <p className="text-xs text-zinc-400 max-w-[280px]">No song is currently playing in queue.</p>
               </div>
             )}
+
+            {/* Real-time Audio Spectrum Visualizer at Bottom of Fullscreen Video */}
+            <div className="absolute bottom-16 left-0 right-0 z-20 pointer-events-none">
+              <AudioVisualizer
+                isPlaying={isPlaying && !!currentSong}
+                barCount={42}
+                height={24}
+              />
+            </div>
           </div>
 
           {/* Bottom Controls Overlay */}
@@ -431,6 +443,15 @@ export function MiniTVPlayer({
               <span className="text-teal-300 font-extrabold">{currentSong.guest_name}</span>
             </div>
           )}
+
+          {/* Real-time Audio Spectrum Visualizer at Bottom of Mini Video */}
+          <div className="absolute bottom-0 left-0 right-0 z-10 pointer-events-none">
+            <AudioVisualizer
+              isPlaying={isPlaying && !!currentSong}
+              barCount={30}
+              height={18}
+            />
+          </div>
         </div>
 
         {/* Mini Controls Bar (Visible whether collapsed or expanded) */}
