@@ -445,13 +445,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     if (!isNativeFS && !isPseudoFullscreen) {
       try {
         if (docEl.requestFullscreen) {
-          await docEl.requestFullscreen();
+          await docEl.requestFullscreen().catch(() => {});
         } else if (docEl.webkitRequestFullscreen) {
-          await docEl.webkitRequestFullscreen();
+          await docEl.webkitRequestFullscreen().catch(() => {});
         } else if (docEl.mozRequestFullScreen) {
-          await docEl.mozRequestFullScreen();
+          await docEl.mozRequestFullScreen().catch(() => {});
         } else if (docEl.msRequestFullscreen) {
-          await docEl.msRequestFullscreen();
+          await docEl.msRequestFullscreen().catch(() => {});
         } else {
           setIsPseudoFullscreen(true);
         }
@@ -463,13 +463,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       if (isNativeFS) {
         try {
           if (doc.exitFullscreen) {
-            await doc.exitFullscreen();
+            await doc.exitFullscreen().catch(() => {});
           } else if (doc.webkitExitFullscreen) {
-            await doc.webkitExitFullscreen();
+            await doc.webkitExitFullscreen().catch(() => {});
           } else if (doc.mozCancelFullScreen) {
-            await doc.mozCancelFullScreen();
+            await doc.mozCancelFullScreen().catch(() => {});
           } else if (doc.msExitFullscreen) {
-            await doc.msExitFullscreen();
+            await doc.msExitFullscreen().catch(() => {});
           }
         } catch { }
       }
@@ -482,13 +482,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     const docEl = document.documentElement as any;
     try {
       if (docEl.requestFullscreen) {
-        await docEl.requestFullscreen();
+        await docEl.requestFullscreen().catch(() => {});
       } else if (docEl.webkitRequestFullscreen) {
-        await docEl.webkitRequestFullscreen();
+        await docEl.webkitRequestFullscreen().catch(() => {});
       } else if (docEl.mozRequestFullScreen) {
-        await docEl.mozRequestFullScreen();
+        await docEl.mozRequestFullScreen().catch(() => {});
       } else if (docEl.msRequestFullscreen) {
-        await docEl.msRequestFullscreen();
+        await docEl.msRequestFullscreen().catch(() => {});
       } else {
         setIsPseudoFullscreen(true);
       }
@@ -498,7 +498,7 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
     if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).lock) {
       try {
-        await (screen.orientation as any).lock('landscape');
+        await (screen.orientation as any).lock('landscape').catch(() => {});
       } catch (err) {
         console.log('Orientation lock unavailable:', err);
       }

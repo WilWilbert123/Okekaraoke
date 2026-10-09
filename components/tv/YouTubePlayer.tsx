@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from 'react';
-import { VideoOff } from 'lucide-react';
+import { VideoOff, VolumeX } from 'lucide-react';
 import type { PlayerState } from '@/lib/types';
 
 declare global {
@@ -115,6 +115,15 @@ interface YouTubePlayerProps {
   className?: string;
 }
 
+/** Detect iOS (iPhone/iPad/iPod/Mobile Safari) */
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
 /** Detect TV / Android TV browsers that block autoplay without a user gesture */
 function isTVBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -138,13 +147,33 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   const currentVideoIdRef = useRef<string | null>(null);
   const currentQueueItemIdRef = useRef<string | null>(null);
   const hasStartedPlayingRef = useRef<boolean>(false);
+  const userInteractedRef = useRef<boolean>(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
-  // Show tap-to-start overlay when autoplay is blocked (TV browsers need a user gesture)
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
+  const [needsUnmuteGesture, setNeedsUnmuteGesture] = useState(false);
   const gestureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
+
+  // Global user gesture tracking to unlock WebKit/iOS audio
+  useEffect(() => {
+    const handleUserGesture = () => {
+      userInteractedRef.current = true;
+      setNeedsUnmuteGesture(false);
+      if (playerRef.current) {
+        try {
+          playerRef.current.unMute();
+        } catch {}
+      }
+    };
+    window.addEventListener('touchstart', handleUserGesture, { capture: true, passive: true });
+    window.addEventListener('click', handleUserGesture, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener('touchstart', handleUserGesture, { capture: true });
+      window.removeEventListener('click', handleUserGesture, { capture: true });
+    };
+  }, []);
 
   // Expose imperative methods to parent (e.g. countdown modal completion)
   useImperativeHandle(ref, () => ({
@@ -154,7 +183,11 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           playerRef.current.mute();
           playerRef.current.playVideo();
           setTimeout(() => {
-            try { playerRef.current?.unMute(); } catch {}
+            try {
+              if (userInteractedRef.current || !isIOS()) {
+                playerRef.current?.unMute();
+              }
+            } catch {}
           }, 300);
         } catch {}
       }
@@ -296,9 +329,13 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 hasStartedPlayingRef.current = true;
                 setNeedsUserGesture(false);
                 if (gestureTimeoutRef.current) { clearTimeout(gestureTimeoutRef.current); gestureTimeoutRef.current = null; }
-                try {
-                  playerRef.current?.unMute();
-                } catch {}
+                if (userInteractedRef.current || !isIOS()) {
+                  try {
+                    playerRef.current?.unMute();
+                  } catch {}
+                } else {
+                  setNeedsUnmuteGesture(true);
+                }
                 break;
               case YTState.PAUSED:
               case YTState.CUED:
@@ -308,6 +345,12 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                   try {
                     event.target.mute();
                     event.target.playVideo();
+                  } catch {}
+                } else if (isIOS() && currentVideoIdRef.current && !userInteractedRef.current) {
+                  try {
+                    event.target.mute();
+                    event.target.playVideo();
+                    setNeedsUnmuteGesture(true);
                   } catch {}
                 }
                 break;
@@ -487,6 +530,27 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             <p className="text-white/60 text-sm">Your TV browser requires a tap to enable audio</p>
           </div>
         </div>
+      )}
+
+      {/* Tap-to-unmute audio badge — shown on iOS WebKit when audio needs user gesture */}
+      {needsUnmuteGesture && videoId && !embedBlocked && !needsUserGesture && (
+        <button
+          onClick={() => {
+            userInteractedRef.current = true;
+            setNeedsUnmuteGesture(false);
+            if (playerRef.current) {
+              try {
+                playerRef.current.unMute();
+                playerRef.current.playVideo();
+              } catch {}
+            }
+          }}
+          className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-teal-500/90 hover:bg-teal-400 text-black text-xs font-black flex items-center gap-1.5 shadow-xl animate-bounce pointer-events-auto backdrop-blur-md"
+          title="Tap to enable sound"
+        >
+          <VolumeX size={14} />
+          <span>Tap for Sound 🔊</span>
+        </button>
       )}
 
       {/* Empty state idle screen — shown when no active video */}
