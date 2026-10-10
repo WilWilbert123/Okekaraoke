@@ -20,7 +20,7 @@ export default function LandingPage() {
   const [joining, setJoining] = useState(false);
   const [joiningTv, setJoiningTv] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<string>('classic');
+  const [theme, setTheme] = useState<string>('black');
   const [isMobileDevice, setIsMobileDevice] = useState<boolean>(false);
   const { isInstallable, isStandalone, installApp } = usePWAInstall();
 
@@ -34,8 +34,21 @@ export default function LandingPage() {
       if (savedTv) {
         setLastTvRoom(savedTv);
       }
+      const savedTheme = localStorage.getItem('okekaraoke_current_theme');
+      if (savedTheme) {
+        setTheme(savedTheme);
+      }
       setIsMobileDevice(/Mobi|Android|iPhone|iPad|iPod|SmartTV|Tizen|WebOS/i.test(navigator.userAgent));
     }
+
+    const updateTheme = (newTheme: string) => {
+      if (newTheme) {
+        setTheme(newTheme);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('okekaraoke_current_theme', newTheme);
+        }
+      }
+    };
 
     // Fetch initial theme
     const fetchTheme = async () => {
@@ -43,7 +56,7 @@ export default function LandingPage() {
         const res = await fetch('/api/admin/settings');
         const data = await res.json();
         if (data?.success && data?.data?.theme) {
-          setTheme(data.data.theme);
+          updateTheme(data.data.theme);
         }
       } catch (err) { }
     };
@@ -60,7 +73,7 @@ export default function LandingPage() {
         { event: '*', schema: 'public', table: 'app_settings', filter: 'id=eq.global_settings' },
         (payload: any) => {
           if (payload.new?.theme) {
-            setTheme(payload.new.theme);
+            updateTheme(payload.new.theme);
           }
         }
       )
@@ -74,7 +87,7 @@ export default function LandingPage() {
         { event: 'banner_updated' },
         (payload: any) => {
           if (payload.payload?.theme) {
-            setTheme(payload.payload.theme);
+            updateTheme(payload.payload.theme);
           }
         }
       )
