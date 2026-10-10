@@ -256,13 +256,13 @@ export function MyReservations({
                       {statusStyle.label}
                     </span>
 
-                    {/* Stop button for playing song */}
+                    {/* Stop button for playing song (Icon only) */}
                     {isPlaying && (
                       <button
                         id={`stop-btn-${item.queue_item_id}`}
                         onClick={() => handleStopMySong(item.queue_item_id)}
                         disabled={isStopping}
-                        className="px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 shrink-0"
                         style={{
                           background: 'rgba(239, 68, 68, 0.15)',
                           border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -272,12 +272,9 @@ export function MyReservations({
                         aria-label={`Stop playing ${item.song.title}`}
                       >
                         {isStopping ? (
-                          <Loader2 size={12} className="animate-spin text-red-400" />
+                          <Loader2 size={13} className="animate-spin text-red-400" />
                         ) : (
-                          <>
-                            <Square size={10} className="fill-red-500 text-red-500" />
-                            <span>STOP</span>
-                          </>
+                          <Square size={12} className="fill-red-500 text-red-500" />
                         )}
                       </button>
                     )}
