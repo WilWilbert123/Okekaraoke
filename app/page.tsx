@@ -523,7 +523,7 @@ export default function LandingPage() {
                   onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                   placeholder="ENTER TV ROOM CODE (e.g. JU7U)"
                   maxLength={8}
-                  className="w-full pl-10 sm:pl-11 pr-3 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-xs sm:text-sm transition-all focus:bg-white focus:border-black outline-none font-mono"
+                  className="w-full pl-9 sm:pl-11 pr-3 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-wider sm:tracking-widest text-[10px] sm:text-sm transition-all focus:bg-white focus:border-black outline-none font-mono"
                 />
               </div>
 
@@ -561,7 +561,7 @@ export default function LandingPage() {
             </form>
           ) : (
             <form onSubmit={(e) => handleJoinRemote(e, true)} className="relative flex items-center">
-              <Wifi className="w-4 h-4 sm:w-5 sm:h-5 absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
+              <Wifi className="w-3.5 h-3.5 sm:w-5 sm:h-5 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
               <input
                 id="join-code-input"
                 type="text"
@@ -569,23 +569,23 @@ export default function LandingPage() {
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="ENTER ROOM CODE"
                 maxLength={8}
-                className="w-full pl-10 sm:pl-11 pr-28 sm:pr-32 py-3 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-widest text-xs sm:text-sm md:text-base transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none font-mono"
+                className="w-full pl-8 sm:pl-11 pr-24 sm:pr-32 py-2.5 sm:py-3.5 rounded-xl sm:rounded-2xl bg-slate-100 border border-slate-300 text-slate-900 placeholder-slate-400 font-bold tracking-normal sm:tracking-widest text-[10px] sm:text-sm md:text-base transition-all duration-200 focus:bg-white focus:border-black focus:ring-2 focus:ring-slate-300 outline-none font-mono"
               />
               <button
                 id="join-room-btn"
                 type="submit"
                 disabled={creating || creatingSolo || joining || joiningTv || joinCode.length < 4}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-black text-slate-950 text-xs sm:text-sm transition-all duration-200 flex items-center gap-1 sm:gap-1.5 bg-teal-400 hover:bg-teal-300 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl font-black text-slate-950 text-[10px] sm:text-sm transition-all duration-200 flex items-center gap-1 sm:gap-1.5 bg-teal-400 hover:bg-teal-300 active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
               >
                 {joining ? (
                   <>
-                    <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
                     <span>JOINING...</span>
                   </>
                 ) : (
                   <>
                     <span>JOIN SOLO TV</span>
-                    <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </>
                 )}
               </button>
