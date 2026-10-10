@@ -63,9 +63,8 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-zinc-950 transition-all duration-800 ease-in-out ${
-        fadingOut ? 'opacity-0 pointer-events-none scale-105 backdrop-blur-0' : 'opacity-100 backdrop-blur-2xl'
-      }`}
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-zinc-950 transition-all duration-800 ease-in-out ${fadingOut ? 'opacity-0 pointer-events-none scale-105 backdrop-blur-0' : 'opacity-100 backdrop-blur-2xl'
+        }`}
       style={{
         background: 'radial-gradient(circle at center, rgba(18, 18, 28, 0.98) 0%, rgba(9, 9, 11, 1) 100%)',
       }}
@@ -100,9 +99,7 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
           ))}
         </div>
 
-        <p className="text-xs sm:text-sm font-semibold text-zinc-400 uppercase tracking-[0.3em] animate-fade-in-delayed opacity-0 mt-1">
-          Karaoke System
-        </p>
+
       </div>
 
       {/* Custom Keyframe Animations */}
