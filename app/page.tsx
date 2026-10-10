@@ -21,6 +21,7 @@ export default function LandingPage() {
   const [joiningTv, setJoiningTv] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<string>('classic');
+  const [isMobileDevice, setIsMobileDevice] = useState<boolean>(false);
   const { isInstallable, isStandalone, installApp } = usePWAInstall();
 
   useEffect(() => {
@@ -33,6 +34,7 @@ export default function LandingPage() {
       if (savedTv) {
         setLastTvRoom(savedTv);
       }
+      setIsMobileDevice(/Mobi|Android|iPhone|iPad|iPod|SmartTV|Tizen|WebOS/i.test(navigator.userAgent));
     }
 
     // Fetch initial theme
@@ -273,39 +275,54 @@ export default function LandingPage() {
     }
   };
 
+  const solidThemes = ['black', 'dark', 'navy', 'purple', 'none', 'solid_black'];
+  const isSolidTheme = solidThemes.includes(theme);
+
+  const getBackgroundColor = () => {
+    if (theme === 'black' || theme === 'solid_black') return 'bg-black';
+    if (theme === 'dark') return 'bg-[#09090b]';
+    if (theme === 'navy') return 'bg-[#060b19]';
+    if (theme === 'purple') return 'bg-[#0f071b]';
+    return 'bg-black';
+  };
+
   return (
-    <main className="min-h-dvh flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-10 relative overflow-x-hidden overflow-y-auto">
+    <main className={`min-h-dvh flex flex-col items-center justify-start px-3 sm:px-4 py-6 sm:py-10 relative overflow-x-hidden overflow-y-auto ${getBackgroundColor()} transition-colors duration-500`}>
       {/* Animated Intro Splash Screen */}
       <IntroSplash />
 
-      {/* 3D Interactive Auto-Floating Ballpit Background */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <Ballpit
-          count={55}
-          gravity={0}
-          friction={0.9995}
-          wallBounce={0.99}
-          followCursor={true}
-          theme={theme}
-          colors={
-            theme === 'christmas' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
-              theme === '90s' ? [0xFF00FF, 0x00FFFF, 0xFFFF00, 0xFF0055] :
-                theme === 'bubble' ? [0xA5F3FC, 0xFBCFE8, 0xE0E7FF, 0xFFFFFF] :
-                  theme === 'summer' ? [0xF59E0B, 0xEF4444, 0xEC4899, 0xFCD34D] :
-                    theme === 'rainy' ? [0x1E3A8A, 0x3B82F6, 0x64748B, 0x94A3B8, 0x0F172A] :
-                      theme === 'normal' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
-                        [0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff] // classic
-          }
-        />
-      </div>
+      {/* 3D Interactive Auto-Floating Ballpit Background (Only rendered if NOT solid theme) */}
+      {!isSolidTheme && (
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <Ballpit
+            count={isMobileDevice ? 20 : 35}
+            gravity={0}
+            friction={0.9995}
+            wallBounce={0.99}
+            followCursor={!isMobileDevice}
+            theme={theme}
+            colors={
+              theme === 'christmas' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
+                theme === '90s' ? [0xFF00FF, 0x00FFFF, 0xFFFF00, 0xFF0055] :
+                  theme === 'bubble' ? [0xA5F3FC, 0xFBCFE8, 0xE0E7FF, 0xFFFFFF] :
+                    theme === 'summer' ? [0xF59E0B, 0xEF4444, 0xEC4899, 0xFCD34D] :
+                      theme === 'rainy' ? [0x1E3A8A, 0x3B82F6, 0x64748B, 0x94A3B8, 0x0F172A] :
+                        theme === 'normal' ? [0x2DD4BF, 0x8B5CF6, 0x3B82F6, 0xEC4899, 0xA855F7, 0x06B6D4] :
+                          [0x050505, 0xffffff, 0x111111, 0xefefef, 0x000000, 0xffffff] // classic
+            }
+          />
+        </div>
+      )}
 
       {/* Ambient decorative glow overlays */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]" aria-hidden="true">
-        <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-10"
-          style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
-      </div>
+      {!isSolidTheme && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]" aria-hidden="true">
+          <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full opacity-10"
+            style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
+          <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full opacity-10"
+            style={{ background: 'radial-gradient(circle, #ffffff 0%, transparent 70%)' }} />
+        </div>
+      )}
 
       {/* Outer Content Container — my-auto keeps it centered on tall screens, scrolls on short TV screens */}
       <div className="relative z-10 w-full max-w-[340px] sm:max-w-md flex flex-col items-center animate-fadeIn my-auto">

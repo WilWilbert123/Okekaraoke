@@ -606,13 +606,17 @@ function BannerTab({
           </label>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 mb-6">
             {[
-              { id: 'classic', name: 'Classic Theme', desc: 'Sleek black & white grayscale bubbles', Icon: Tv },
-              { id: 'christmas', name: 'Christmas Theme', desc: 'Vibrant colors with blinking lights effect', Icon: Sparkles },
-              { id: '90s', name: '90s Retro', desc: 'Neon colors and synthwave vibes', Icon: Radio },
-              { id: 'bubble', name: 'Soap Bubble', desc: 'Iridescent transparent light cyan and pink', Icon: Circle },
-              { id: 'summer', name: 'Summer Vibes', desc: 'Warm vibrant sunset orange and pink colors', Icon: Sun },
-              { id: 'rainy', name: 'Rainy Night', desc: 'Cool deep blues and slate gray aesthetic', Icon: CloudRain },
-              { id: 'normal', name: 'Normal Theme', desc: 'Standard vibrant colors without blinking', Icon: ImageIcon },
+              { id: 'black', name: 'Solid Black', desc: '⚡ Zero Lag: Pure black background (Fastest for TV & Phones)', Icon: Circle },
+              { id: 'dark', name: 'Solid Dark Slate', desc: '⚡ Zero Lag: Ultra-sleek dark slate background', Icon: Circle },
+              { id: 'navy', name: 'Solid Midnight Navy', desc: '⚡ Zero Lag: Deep midnight blue background', Icon: Circle },
+              { id: 'purple', name: 'Solid Deep Purple', desc: '⚡ Zero Lag: Luxury dark purple background', Icon: Circle },
+              { id: 'classic', name: 'Classic 3D Spheres', desc: '3D animated black & white grayscale bubbles', Icon: Tv },
+              { id: 'christmas', name: 'Christmas 3D Theme', desc: '3D animated colors with blinking lights effect', Icon: Sparkles },
+              { id: '90s', name: '90s Retro 3D', desc: '3D animated neon colors and synthwave vibes', Icon: Radio },
+              { id: 'bubble', name: 'Soap Bubble 3D', desc: '3D animated light cyan and pink bubbles', Icon: Circle },
+              { id: 'summer', name: 'Summer Vibes 3D', desc: '3D animated warm sunset orange & pink', Icon: Sun },
+              { id: 'rainy', name: 'Rainy Night 3D', desc: '3D animated deep blues and slate gray', Icon: CloudRain },
+              { id: 'normal', name: 'Normal 3D Theme', desc: 'Standard 3D vibrant colors without blinking', Icon: ImageIcon },
             ].map((typeOption) => {
               const selected = (banner.theme || 'classic') === typeOption.id;
               const OptionIcon = typeOption.Icon;
