@@ -238,52 +238,45 @@ export function RemoteQueue({ queue, currentSong, sessionId, roomCode, onRefresh
               {/* Controls ONLY for the owner of the currently playing song ("Your Song, Your Rule") */}
               {isCurrentSongMine ? (
                 <>
-                  {/* Pause / Resume Button */}
+                  {/* Pause / Resume Button (Icon only) */}
                   <button
                     onClick={() => handleTogglePauseOwnSong(currentSong.queue_item_id)}
                     disabled={controllingId === currentSong.queue_item_id}
-                    className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center active:scale-95 disabled:opacity-50 transition-all shadow-sm shrink-0"
                     style={{
                       background: isPaused ? 'rgba(34, 197, 94, 0.15)' : 'rgba(245, 158, 11, 0.15)',
                       border: isPaused ? '1px solid rgba(34, 197, 94, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
                       color: isPaused ? '#22c55e' : '#f59e0b',
                     }}
                     title={isPaused ? 'Resume your song on TV' : 'Pause your song on TV'}
+                    aria-label={isPaused ? 'Resume song' : 'Pause song'}
                   >
                     {controllingId === currentSong.queue_item_id ? (
-                      <Loader2 size={12} className="animate-spin" />
+                      <Loader2 size={13} className="animate-spin" />
                     ) : isPaused ? (
-                      <>
-                        <Play size={10} className="fill-green-400 text-green-400" />
-                        <span>RESUME</span>
-                      </>
+                      <Play size={13} className="fill-green-400 text-green-400 ml-0.5" />
                     ) : (
-                      <>
-                        <Pause size={10} className="fill-amber-400 text-amber-400" />
-                        <span>PAUSE</span>
-                      </>
+                      <Pause size={13} className="fill-amber-400 text-amber-400" />
                     )}
                   </button>
 
-                  {/* Stop button */}
+                  {/* Stop button (Icon only) */}
                   <button
                     onClick={() => handleStopOwnSong(currentSong.queue_item_id)}
                     disabled={stoppingId === currentSong.queue_item_id}
-                    className="px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                    className="w-8 h-8 rounded-lg flex items-center justify-center active:scale-95 disabled:opacity-50 shrink-0"
                     style={{
                       background: 'rgba(239, 68, 68, 0.15)',
                       border: '1px solid rgba(239, 68, 68, 0.3)',
                       color: '#ef4444',
                     }}
                     title="Stop your song on TV"
+                    aria-label="Stop song"
                   >
                     {stoppingId === currentSong.queue_item_id ? (
-                      <Loader2 size={12} className="animate-spin text-red-400" />
+                      <Loader2 size={13} className="animate-spin text-red-400" />
                     ) : (
-                      <>
-                        <Square size={10} className="fill-red-500 text-red-500" />
-                        <span>STOP</span>
-                      </>
+                      <Square size={12} className="fill-red-500 text-red-500" />
                     )}
                   </button>
                 </>
