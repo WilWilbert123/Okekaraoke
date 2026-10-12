@@ -66,14 +66,14 @@
   .h4l{font-size:60px;margin-top:40px;color:var(--teal);font-family:var(--display);font-weight:800;text-shadow:0 0 20px rgba(25,230,193,.8),0 0 60px rgba(25,230,193,.5)}
 
   /* ---------- Watermark ---------- */
-  #wm{position:absolute;left:56px;top:44px;display:flex;align-items:center;gap:14px;opacity:0}
+  #wm{position:absolute;right:56px;top:44px;display:flex;align-items:center;gap:14px;opacity:0}
   #wm .tile{width:54px;height:54px;border-radius:16px;background:#fff;display:grid;place-items:center;box-shadow:0 0 24px rgba(25,230,193,.5)}
   #wm .tile img{width:44px;height:44px}
   #wm span{font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:.02em}
   #wm span b{color:var(--teal)}
 
   /* ---------- Phone ---------- */
-  #rig{position:absolute;left:766px;top:70px;width:388px;height:832px;opacity:0;transform-origin:50% 36%}
+  #rig{position:absolute;left:914px;top:70px;width:388px;height:832px;opacity:0;transform-origin:50% 36%}
   .float{width:100%;height:100%;animation:bob 3.2s ease-in-out infinite}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
   .phone{position:relative;width:388px;height:832px;border-radius:58px;padding:14px;
@@ -94,7 +94,29 @@
   @keyframes ping{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.12,1.35);opacity:0}}
 
   /* ---------- Scene 2: Remote ---------- */
-  #remoteLeft{position:absolute;left:110px;top:150px;width:600px;opacity:0}
+  #remoteLeft{position:absolute;left:48px;top:44px;width:800px;opacity:0}
+  #remoteLeft .rl-title{font-size:58px;line-height:1.04}
+  #tvSub{position:absolute;left:48px;top:842px;width:800px;font-size:22px;line-height:1.4;color:var(--dim);opacity:0}
+  #tvSub b{color:#fff;font-weight:700}
+
+  /* ---------- Realistic TV ---------- */
+  #tv{position:absolute;left:28px;top:196px;width:860px;opacity:0;transform-origin:50% 100%}
+  .tv-spill{position:absolute;left:-140px;right:-140px;top:-90px;bottom:-60px;border-radius:50%;
+    background:radial-gradient(ellipse at 50% 45%,rgba(25,230,193,.20),rgba(139,92,246,.12) 45%,transparent 70%);filter:blur(30px);opacity:0}
+  .tv-body{position:relative;padding:11px 11px 13px;border-radius:14px;
+    background:linear-gradient(180deg,#1d1d22 0%,#0a0a0d 12%,#050507 88%,#16161b 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.10),inset 0 1px 0 rgba(255,255,255,.18),0 0 0 1px #000,0 40px 90px rgba(0,0,0,.8),0 10px 30px rgba(0,0,0,.6)}
+  .tv-screen{position:relative;width:838px;height:529px;overflow:hidden;border-radius:3px;background:#000}
+  .tv-screen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+  .tv-screen .tv-off{position:absolute;inset:0;background:#000;opacity:1}
+  .tv-screen .tv-glass{position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(118deg,rgba(255,255,255,.09) 0%,rgba(255,255,255,.03) 22%,transparent 38%,transparent 100%),
+               radial-gradient(ellipse at 50% 120%,rgba(255,255,255,.04),transparent 60%)}
+  .tv-led{position:absolute;left:50%;bottom:4px;width:5px;height:3px;margin-left:-2px;border-radius:2px;background:#ff3b3b;box-shadow:0 0 6px #ff3b3b;opacity:.85}
+  .tv-brand{position:absolute;left:50%;bottom:2px;translate:-50% 0;margin-left:-40px;font:700 6px var(--body);letter-spacing:.3em;color:rgba(255,255,255,.18)}
+  .tv-neck{width:70px;height:46px;margin:0 auto;background:linear-gradient(90deg,#0c0c10,#2a2a33 50%,#0c0c10);clip-path:polygon(30% 0,70% 0,100% 100%,0 100%)}
+  .tv-base{width:330px;height:12px;margin:0 auto;border-radius:6px 6px 10px 10px;background:linear-gradient(180deg,#3a3a46,#111116);box-shadow:0 14px 26px rgba(0,0,0,.7)}
+  .tv-floor{width:700px;height:40px;margin:-6px auto 0;border-radius:50%;background:radial-gradient(ellipse,rgba(25,230,193,.16),transparent 70%);filter:blur(6px)}
   .kicker{font-family:var(--body);font-weight:800;font-size:20px;letter-spacing:.28em;color:var(--teal);text-transform:uppercase;margin-bottom:22px;display:flex;align-items:center;gap:12px}
   .kicker::before{content:'';width:34px;height:3px;background:var(--teal);box-shadow:0 0 12px var(--teal)}
   .rl-title{font-size:70px;line-height:1.03}
@@ -108,15 +130,15 @@
   .step .lbl{font-family:var(--display);font-weight:800;font-size:30px}
   #stepBar{position:absolute;left:0;top:13px;width:6px;height:52px;border-radius:6px;background:var(--teal);box-shadow:0 0 16px var(--teal);opacity:0}
 
-  .card{position:absolute;left:1230px;width:560px;padding:26px 30px 28px;border-radius:26px;opacity:0;
+  .card{position:absolute;left:1364px;width:520px;padding:24px 28px;border-radius:24px;opacity:0;
     background:linear-gradient(160deg,rgba(32,24,58,.82),rgba(14,10,28,.82));
     border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
     box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 40px color-mix(in srgb,var(--c) 22%,transparent)}
-  .card::before{content:'';position:absolute;right:100%;top:42px;width:76px;height:3px;background:linear-gradient(90deg,transparent,var(--c));box-shadow:0 0 10px var(--c)}
-  .card::after{content:'';position:absolute;left:-84px;top:37px;width:13px;height:13px;border-radius:50%;background:var(--c);box-shadow:0 0 14px var(--c)}
-  .card .tag{font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:.2em;color:var(--c)}
-  .card h3{font-family:var(--display);font-weight:900;font-size:44px;line-height:1.08;margin:10px 0 12px}
-  .card p{font-size:25px;line-height:1.42;color:#d6d2ee}
+  .card::before{content:'';position:absolute;right:100%;top:42px;width:62px;height:3px;background:linear-gradient(90deg,transparent,var(--c));box-shadow:0 0 10px var(--c)}
+  .card::after{content:'';position:absolute;left:-70px;top:37px;width:13px;height:13px;border-radius:50%;background:var(--c);box-shadow:0 0 14px var(--c)}
+  .card .tag{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:.2em;color:var(--c)}
+  .card h3{font-family:var(--display);font-weight:900;font-size:40px;line-height:1.1;margin:8px 0 10px}
+  .card p{font-size:23px;line-height:1.4;color:#d6d2ee}
   .card p b{color:var(--c)}
 
   .emoji{position:absolute;font-size:54px;opacity:0;filter:drop-shadow(0 0 14px rgba(255,140,40,.6))}
@@ -237,11 +259,25 @@
 
       <!-- Scene 2: Remote (left copy) -->
       <section id="remoteLeft">
-        <div class="kicker">Party mode</div>
-        <h2 class="display rl-title"><span>Your phone</span><span>is the</span><span class="grad">remote.</span></h2>
-        <p class="rl-sub" id="rlSub">Open the TV page on any big screen. Everyone joins from their phone.</p>
-        <div class="steps" id="steps"><div id="stepBar"></div></div>
+        <h2 class="display rl-title"><span>Your phone is</span><span class="grad">the remote.</span></h2>
       </section>
+
+      <!-- Scene 2: realistic TV showing the real TV view -->
+      <div id="tv">
+        <div class="tv-spill" id="tvSpill"></div>
+        <div class="tv-body">
+          <div class="tv-screen">
+            <img src="assets/tv-view.png" alt="Oke Karaoke TV view playing lyrics on a big screen" />
+            <div class="tv-off" id="tvOff"></div>
+            <div class="tv-glass"></div>
+          </div>
+          <span class="tv-led"></span>
+        </div>
+        <div class="tv-neck"></div>
+        <div class="tv-base"></div>
+        <div class="tv-floor"></div>
+      </div>
+      <p id="tvSub">Open the <b>TV page</b> on any big screen. Everyone joins from their phone.</p>
 
       <!-- Scene 2: callout cards (injected) -->
       <div id="cards"></div>
@@ -390,8 +426,8 @@
   /* ---------------- Phone rig ---------------- */
   const rig = $('rig');
   A(rig, [{ opacity: 1, translate: '0 1150px', rotate: '-12deg' }, { opacity: 1, translate: '0 0', rotate: '0deg' }], 3.9, .95, EASE.out);
-  A(rig, [{ translate: '0 0' }, { translate: '414px 0' }], 15.85, .9, EASE.out);
-  A(rig, [{ translate: '414px 0', scale: 1 }, { translate: '414px 80px', scale: 1.55 }], 20.0, 1.0, EASE.out);
+  A(rig, [{ translate: '0 0' }, { translate: '266px 0' }], 15.85, .9, EASE.out);
+  A(rig, [{ translate: '266px 0', scale: 1 }, { translate: '266px 80px', scale: 1.55 }], 20.0, 1.0, EASE.out);
   A(rig, [{ scale: 1.55, opacity: 1, filter: 'blur(0px)' }, { scale: 2.9, opacity: 0, filter: 'blur(10px)' }], 23.7, .5, EASE.in);
 
   // Screenshots inside the phone - driven deterministically by syncScreens(ms)
@@ -504,21 +540,20 @@
   ];
   const left = $('remoteLeft');
   A(left, [{ opacity: 0, translate: '-60px 0' }, { opacity: 1, translate: '0 0' }], 4.15, .6);
-  left.querySelectorAll('.rl-title span').forEach((s, i) => show(s, 4.25 + i * .14, .55, { translate: '0 50px' }));
-  show($('rlSub'), 4.7, .5, { translate: '0 20px' });
+  left.querySelectorAll('.rl-title span').forEach((s, i) => show(s, 4.25 + i * .14, .55, { translate: '0 40px' }));
   A(left, [{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '-80px 0' }], 15.7, .35, EASE.in);
-  left.querySelector('.kicker').style.opacity = 1;
 
-  const stepsEl = $('steps'), cardsEl = $('cards'), bar = $('stepBar');
+  // TV: rises in, then powers on (screen fades up from black with a soft flash)
+  const tv = $('tv');
+  A(tv, [{ opacity: 0, translate: '-80px 40px', scale: .94 }, { opacity: 1, translate: '0 0', scale: 1 }], 4.0, .8, EASE.out);
+  A($('tvOff'), [{ opacity: 1, background: '#000' }, { opacity: .9, background: '#fff', offset: .25 }, { opacity: 0, background: '#000' }], 4.55, .6, EASE.out);
+  A($('tvSpill'), [{ opacity: 0 }, { opacity: 1 }], 4.7, .8, EASE.out);
+  show($('tvSub'), 4.9, .5, { translate: '0 16px' });
+  A(tv, [{ opacity: 1, translate: '0 0', scale: 1 }, { opacity: 0, translate: '-120px 0', scale: .96 }], 15.65, .4, EASE.in);
+  A($('tvSub'), [{ opacity: 1 }, { opacity: 0 }], 15.65, .3, EASE.in);
+
+  const cardsEl = $('cards');
   steps.forEach((s, i) => {
-    const row = document.createElement('div');
-    row.className = 'step'; row.style.setProperty('--c', s.c);
-    row.innerHTML = `<span class="num">${s.n}</span><span class="ic"><svg viewBox="0 0 24 24">${s.icon}</svg></span><span class="lbl">${s.lbl}</span>`;
-    stepsEl.appendChild(row);
-    A(row, [{ opacity: 0, translate: '-30px 0' }, { opacity: .32, translate: '0 0' }], 4.8 + i * .08, .4);
-    A(row, [{ opacity: .32, translate: '0 0' }, { opacity: 1, translate: '14px 0' }], s.t + .1, .35, EASE.back);
-    if (i < 3) A(row, [{ opacity: 1, translate: '14px 0' }, { opacity: .32, translate: '0 0' }], s.t + 2.95, .3);
-
     const card = document.createElement('div');
     card.className = 'card'; card.style.setProperty('--c', s.c); card.style.top = s.top + 'px';
     card.innerHTML = `<div class="tag">${s.n} · ${s.lbl.toUpperCase()}</div><h3>${s.title}</h3><p>${s.desc}</p>`;
@@ -526,12 +561,6 @@
     A(card, [{ opacity: 0, translate: '60px 0', scale: .96 }, { opacity: 1, translate: '0 0', scale: 1 }], s.t + .35, .5, EASE.out);
     A(card, [{ opacity: 1, translate: '0 0' }, { opacity: 0, translate: '-30px 0' }], s.t + 2.7, .3, EASE.in);
   });
-  A(bar, [{ opacity: 0 }, { opacity: 1 }], 4.1, .3);
-  steps.forEach((s, i) => {
-    if (i) A(bar, [{ translate: `0 ${(i - 1) * 78}px`, background: steps[i - 1].c, boxShadow: `0 0 16px ${steps[i - 1].c}` },
-                   { translate: `0 ${i * 78}px`, background: s.c, boxShadow: `0 0 16px ${s.c}` }], s.t, .45, EASE.out);
-  });
-  A(bar, [{ opacity: 1 }, { opacity: 0 }], 15.7, .3);
 
   // Floating reactions during Chat step (the same reactions shown in the app)
   const emo = ['🔥', '❤️', '🎉', '😂', '👍', '🔥', '🎉', '🔥', '❤️', '😂', '🔥', '👍'];
@@ -540,10 +569,10 @@
     const el = document.createElement('span');
     el.className = 'emoji'; el.textContent = e;
     const sideRight = i % 2 === 0;
-    el.style.left = (sideRight ? 1150 + rnd() * 70 : 650 + rnd() * 90) + 'px';
+    el.style.left = (1304 + rnd() * 45) + 'px';
     el.style.top = '780px';
     $('emojis').appendChild(el);
-    const drift = (rnd() - .5) * 120;
+    const drift = (rnd() - .5) * 50;
     A(el, [{ opacity: 0, translate: '0 0', scale: .4 }, { opacity: 1, translate: `${drift * .4}px -140px`, scale: 1.1, offset: .2 },
            { opacity: 0, translate: `${drift}px -620px`, scale: .9 }], 13.3 + i * .2, 1.8, EASE.lin);
   });
