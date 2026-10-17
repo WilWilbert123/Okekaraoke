@@ -67,6 +67,96 @@ export function MiniTVPlayer({
     currentSongRef.current = currentSong;
   }, [currentSong]);
 
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  const currentTimeRef = useRef(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  const durationRef = useRef(duration);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  // ── Auto-Pause on App Minimize / Backgrounding (Solo Mode) ───
+  // When user minimizes OkeKaraoke, presses Home, or switches to Messenger/Facebook:
+  // 1. Immediately pause the local YouTube video (0ms) so it stops playing & doesn't complete in background
+  // 2. Notify the backend room state in the background with keepalive: true
+  // 3. When returning to OkeKaraoke, song remains paused at exact timestamp
+  // 4. When user clicks Play, it resumes smoothly from that exact spot
+  useEffect(() => {
+    const handlePauseOnBackground = () => {
+      if (document.visibilityState === 'hidden') {
+        if (isPlayingRef.current && currentSongRef.current) {
+          try {
+            playerRef.current?.pauseVideo();
+            setIsPlaying(false);
+            isPlayingRef.current = false;
+          } catch { }
+
+          onProgressChange?.({
+            currentTime: currentTimeRef.current,
+            duration: durationRef.current,
+            isPlaying: false,
+          });
+
+          try {
+            fetch('/api/queue/control', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                room_code: roomCode,
+                session_id: sessionId,
+                action: 'pause',
+                queue_item_id: currentSongRef.current.queue_item_id,
+              }),
+              keepalive: true,
+            }).catch(() => { });
+          } catch { }
+        }
+      } else if (document.visibilityState === 'visible') {
+        // Returned to OkeKaraoke — keep paused and silently reconcile room state
+        onRefreshState();
+      }
+    };
+
+    const handlePageHide = () => {
+      if (isPlayingRef.current && currentSongRef.current) {
+        try {
+          playerRef.current?.pauseVideo();
+          setIsPlaying(false);
+          isPlayingRef.current = false;
+        } catch { }
+
+        try {
+          fetch('/api/queue/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              room_code: roomCode,
+              session_id: sessionId,
+              action: 'pause',
+              queue_item_id: currentSongRef.current.queue_item_id,
+            }),
+            keepalive: true,
+          }).catch(() => { });
+        } catch { }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handlePauseOnBackground);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handlePauseOnBackground);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [roomCode, sessionId, onProgressChange, onRefreshState]);
+
   // Reset progress and ensure playback active when current song changes
   useEffect(() => {
     setCurrentTime(0);
@@ -75,6 +165,7 @@ export function MiniTVPlayer({
     setScrubValue(0);
     if (currentSong?.queue_item_id) {
       setIsPlaying(true);
+      isPlayingRef.current = true;
     }
   }, [currentSong?.queue_item_id]);
 
@@ -300,9 +391,16 @@ export function MiniTVPlayer({
     if (targetAction === 'pause') {
       playerRef.current?.pauseVideo();
       setIsPlaying(false);
+      isPlayingRef.current = false;
     } else {
+      // If position was 0 or iframe reloaded, recover timestamp if known
+      const pos = playerRef.current?.getCurrentTime?.() ?? 0;
+      if (pos === 0 && currentTimeRef.current > 2) {
+        playerRef.current?.seekTo?.(currentTimeRef.current);
+      }
       playerRef.current?.playVideo();
       setIsPlaying(true);
+      isPlayingRef.current = true;
     }
 
     try {
@@ -318,20 +416,28 @@ export function MiniTVPlayer({
       });
       const json = await res.json();
       if (!json.success) {
+        // If the song finished or room state changed, silently refresh state without alert popup
+        if (json.error?.code === 'NO_SONG_PLAYING' || json.error?.code === 'SONG_MISMATCH') {
+          onRefreshState();
+          return;
+        }
+
         // Revert on permission failure
         if (targetAction === 'pause') {
           playerRef.current?.playVideo();
           setIsPlaying(true);
+          isPlayingRef.current = true;
         } else {
           playerRef.current?.pauseVideo();
           setIsPlaying(false);
+          isPlayingRef.current = false;
         }
-        alert(json.error?.message ?? 'Only the singer who reserved this song can pause it.');
+        console.warn('[MiniTV] Playback control rejected:', json.error?.message);
       }
     } catch {
       // Network hiccup - maintain current state
     }
-  }, [currentSong, isPlaying, roomCode, sessionId]);
+  }, [currentSong, isPlaying, onRefreshState, roomCode, sessionId]);
 
   // Immediate local stop in 0ms without duplicate network requests
   const stopLocal = useCallback(() => {

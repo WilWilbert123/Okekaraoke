@@ -537,7 +537,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             onProgressRef.current(currentTime, duration, state === 1);
           }
 
-          if (duration > 0 && currentTime >= duration - 1.2 && !endedTriggered) {
+          if (state === 1 && !isExplicitlyPausedRef.current && duration > 0 && currentTime >= duration - 1.2 && !endedTriggered) {
             endedTriggered = true;
             const targetId = currentQueueItemIdRef.current || queueItemId;
             if (targetId) {
