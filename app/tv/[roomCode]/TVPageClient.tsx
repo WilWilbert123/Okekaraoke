@@ -495,7 +495,6 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       } else if (payload?.action === 'seek') {
         const seconds = typeof payload?.seconds === 'number' ? payload.seconds : 0;
         playerRef.current?.seekTo(seconds);
-        playerRef.current?.playVideo();
         setPlayerState((prev) => ({ ...prev, status: 'playing' }));
         lastProgressBroadcastRef.current = Date.now();
         broadcastRef.current?.('playback_sync', {

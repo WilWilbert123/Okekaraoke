@@ -700,10 +700,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     [isSoloTVMode, roomCode, sessionId, guestName]
   );
 
+  const lastSeekSongTimeRef = useRef<number>(0);
   const handleSeekSong = useCallback(
     async (queueItemId: string, seconds: number) => {
-      // 1. Optimistic seek lock: prevent stale progress broadcasts from snapping back for 2.5s
-      seekLockUntilRef.current = Date.now() + 2500;
+      const now = Date.now();
+      // Prevent duplicate rapid calls within 120ms
+      if (now - lastSeekSongTimeRef.current < 120 && Math.abs(seconds - targetSeekTimeRef.current) < 1) {
+        return;
+      }
+      lastSeekSongTimeRef.current = now;
+
+      // 1. Optimistic seek lock: prevent stale progress broadcasts from snapping back for 1.5s
+      seekLockUntilRef.current = now + 1500;
       targetSeekTimeRef.current = seconds;
       setIsPaused(false);
 
