@@ -89,6 +89,7 @@ export function MyReservations({
   const [scrubTime, setScrubTime] = useState(0);
   const seekLockUntilRef = useRef<number>(0);
   const targetSeekTimeRef = useRef<number>(0);
+  const lastSeekTimeRef = useRef<number>(0);
 
   // Synchronize local playback time when playbackProgress prop updates from TV/Solo mode
   useEffect(() => {
@@ -324,10 +325,16 @@ export function MyReservations({
 
   // Commit seek to target second in the playing song
   const handleSeekCommit = (queueItemId: string, seconds: number) => {
+    const now = Date.now();
+    // Prevent duplicate rapid calls within 120ms (e.g. touchend + pointerup + change firing simultaneously)
+    if (now - lastSeekTimeRef.current < 120 && Math.abs(seconds - targetSeekTimeRef.current) < 1) {
+      return;
+    }
+    lastSeekTimeRef.current = now;
     setIsScrubbing(false);
     setLocalCurrentTime(seconds);
     setScrubTime(seconds);
-    seekLockUntilRef.current = Date.now() + 2500;
+    seekLockUntilRef.current = now + 1500;
     targetSeekTimeRef.current = seconds;
 
     const effectiveQueueItemId = (currentSongId && !currentSongId.startsWith('temp_'))
@@ -714,7 +721,18 @@ export function MyReservations({
                         {formatTime(Math.floor(displayTime))}
                       </span>
 
-                      <div className="flex-1 relative flex items-center">
+                      <div
+                        className="flex-1 relative flex items-center h-6 cursor-pointer group py-1"
+                        onClick={(e) => {
+                          if (duration <= 0) return;
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          if (rect.width <= 0) return;
+                          const clickX = e.clientX - rect.left;
+                          const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+                          const targetSec = Math.round(ratio * duration);
+                          handleSeekCommit(item.queue_item_id, targetSec);
+                        }}
+                      >
                         <input
                           type="range"
                           min={0}
@@ -722,26 +740,25 @@ export function MyReservations({
                           step={1}
                           value={duration > 0 ? Math.min(Math.floor(displayTime), duration) : 0}
                           disabled={duration <= 0}
-                          onPointerDown={() => {
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
                             setIsScrubbing(true);
-                            setScrubTime(localCurrentTime);
                           }}
-                          onTouchStart={() => {
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
                             setIsScrubbing(true);
-                            setScrubTime(localCurrentTime);
                           }}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             setScrubTime(val);
-                            if (!isScrubbing) {
-                              handleSeekCommit(item.queue_item_id, val);
-                            }
                           }}
                           onPointerUp={(e) => {
+                            e.stopPropagation();
                             const val = Number((e.target as HTMLInputElement).value);
                             handleSeekCommit(item.queue_item_id, val);
                           }}
                           onTouchEnd={(e) => {
+                            e.stopPropagation();
                             const val = Number((e.target as HTMLInputElement).value);
                             handleSeekCommit(item.queue_item_id, val);
                           }}

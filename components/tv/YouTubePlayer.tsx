@@ -160,8 +160,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   const hasStartedPlayingRef = useRef<boolean>(false);
   const userInteractedRef = useRef<boolean>(false);
   const isSeekingRef = useRef<boolean>(false);
+  const isExplicitlyPausedRef = useRef<boolean>(false);
   const seekingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
@@ -193,6 +193,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   // Expose imperative methods to parent (e.g. countdown modal completion)
   useImperativeHandle(ref, () => ({
     playVideo: () => {
+      isExplicitlyPausedRef.current = false;
       if (playerRef.current) {
         try {
           if (!hasStartedPlayingRef.current) {
@@ -214,33 +215,34 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       }
     },
     pauseVideo: () => {
+      isExplicitlyPausedRef.current = true;
       try {
         playerRef.current?.pauseVideo();
       } catch { }
     },
     stopVideo: () => {
+      isExplicitlyPausedRef.current = true;
       try {
         playerRef.current?.stopVideo();
       } catch { }
     },
     seekTo: (seconds: number) => {
       try {
+        isExplicitlyPausedRef.current = false;
         isSeekingRef.current = true;
-        setIsSeeking(true);
         playerRef.current?.seekTo(seconds, true);
-
-        // Immediate + staggered playVideo signals to bypass YouTube's internal seek-pause
-        playerRef.current?.playVideo();
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 60);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 160);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 320);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 600);
 
         if (seekingTimeoutRef.current) clearTimeout(seekingTimeoutRef.current);
         seekingTimeoutRef.current = setTimeout(() => {
           isSeekingRef.current = false;
-          setIsSeeking(false);
-        }, 1100);
+          // Ensure playback resumes cleanly if player stalled during seek buffering
+          try {
+            const state = playerRef.current?.getPlayerState?.();
+            if (state !== 1 && state !== 3 && !isExplicitlyPausedRef.current) {
+              playerRef.current?.playVideo();
+            }
+          } catch { }
+        }, 400);
 
         if (!hasStartedPlayingRef.current) {
           playerRef.current?.mute();
@@ -415,7 +417,6 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 playerStatus = 'playing';
                 hasStartedPlayingRef.current = true;
                 isSeekingRef.current = false;
-                setIsSeeking(false);
                 if (seekingTimeoutRef.current) {
                   clearTimeout(seekingTimeoutRef.current);
                   seekingTimeoutRef.current = null;
@@ -434,11 +435,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.CUED:
               case -1: // UNSTARTED
                 if (isSeekingRef.current) {
-                  // While seeking, YouTube fires transient PAUSED or CUED events.
-                  // DO NOT propagate 'paused' to parent or TV! Force play and return early.
-                  try {
-                    playerRef.current?.playVideo();
-                  } catch { }
+                  // While seeking, YouTube fires transient pause while loading new chunk.
+                  // Auto-resume playback cleanly if user did not explicitly pause.
+                  if (!isExplicitlyPausedRef.current) {
+                    setTimeout(() => {
+                      try {
+                        const s = playerRef.current?.getPlayerState?.();
+                        if (s !== 1 && s !== 3 && !isExplicitlyPausedRef.current) {
+                          playerRef.current?.playVideo();
+                        }
+                      } catch { }
+                    }, 80);
+                  }
                   return;
                 }
                 playerStatus = 'paused';
