@@ -165,13 +165,17 @@ export async function POST(request: NextRequest) {
       nextArtist = (songObj as any)?.artist ?? null;
     }
 
-    // 5. Broadcast Realtime events to clear UI and stop player immediately on all devices
-    await broadcastRealtime(normalizedCode, 'playback_control', {
-      type: 'playback_control',
-      action: 'stop',
-      queue_item_id: targetItem.id,
-      timestamp: nowIso,
-    });
+    // 5. Broadcast Realtime events:
+    // If a next song is ready, broadcast song_started and queue_updated.
+    // If no song is left, broadcast playback_control stop, song_skipped, and song_finished.
+    if (!nextQueueItemId) {
+      await broadcastRealtime(normalizedCode, 'playback_control', {
+        type: 'playback_control',
+        action: 'stop',
+        queue_item_id: targetItem.id,
+        timestamp: nowIso,
+      });
+    }
 
     const eventName = nextQueueItemId ? 'song_started' : 'song_skipped';
     await broadcastRealtime(normalizedCode, eventName, {
@@ -185,6 +189,12 @@ export async function POST(request: NextRequest) {
       song_artist: nextArtist,
       guest_name: nextItem?.guest_name ?? null,
       youtube_video_id: nextYoutubeVideoId,
+      timestamp: nowIso,
+    });
+
+    await broadcastRealtime(normalizedCode, 'queue_updated', {
+      instance_id: instance.id,
+      room_code: normalizedCode,
       timestamp: nowIso,
     });
 

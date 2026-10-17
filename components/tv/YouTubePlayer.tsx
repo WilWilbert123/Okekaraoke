@@ -327,6 +327,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           currentVideoIdRef.current = videoId;
           currentQueueItemIdRef.current = queueItemId;
           hasStartedPlayingRef.current = false;
+          isExplicitlyPausedRef.current = false;
           try {
             playerRef.current.mute();
             playerRef.current.loadVideoById(videoId);
@@ -358,6 +359,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       currentVideoIdRef.current = videoId;
       currentQueueItemIdRef.current = queueItemId;
       hasStartedPlayingRef.current = false;
+      isExplicitlyPausedRef.current = false;
       setPlayerReady(false);
 
       if (!containerRef.current) return;
