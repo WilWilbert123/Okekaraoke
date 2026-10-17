@@ -484,7 +484,7 @@ export function SongSearch({
               onClick={() => handleSetLayoutMode('grid')}
               className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'grid' ? 'bg-zinc-800 text-teal-400 shadow' : 'text-zinc-500 hover:text-zinc-300'
                 }`}
-              title="2-Column Grid"
+              title="3-Column Grid"
             >
               <LayoutGrid size={12} />
               <span className="hidden sm:inline">Grid</span>
@@ -513,8 +513,8 @@ export function SongSearch({
 
         {!loading && filteredList.length > 0 && (
           layoutMode === 'grid' ? (
-            /* 2-Column Compact Grid Layout */
-            <div className="grid grid-cols-2 gap-2">
+            /* 3-Column Compact Grid Layout */
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {filteredList.map((song) => {
                 const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
                 const isFav = isSongFavorited(song);
@@ -527,7 +527,7 @@ export function SongSearch({
                 return (
                   <div
                     key={song.id}
-                    className="flex flex-col justify-between p-2 rounded-xl transition-all bg-zinc-900/90 border border-zinc-800 relative min-w-0 shadow-sm hover:border-zinc-700"
+                    className="flex flex-col justify-between p-1.5 rounded-xl transition-all bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 shadow-sm relative group overflow-hidden"
                     style={{
                       borderColor:
                         songStatus.status === 'success'
@@ -537,80 +537,109 @@ export function SongSearch({
                             : undefined,
                     }}
                   >
-                    {/* Top: Thumbnail & Song Info */}
-                    <div className="flex items-start gap-1.5 min-w-0">
-                      <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-800 shrink-0 relative border border-zinc-800/80 flex items-center justify-center">
-                        {thumbnailUrl ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={thumbnailUrl}
-                            alt={song.title}
-                            className="w-full h-full object-cover scale-[1.15]"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <Music2 size={15} className="text-zinc-600" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-white text-[11px] leading-tight truncate">{song.title}</p>
-                        <p className="text-[10px] text-zinc-400 truncate mt-0.5">{song.artist}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          toggleFavoriteSong(song);
-                          setFavTrigger((prev) => prev + 1);
-                        }}
-                        className="p-0.5 rounded text-zinc-500 hover:text-yellow-400 shrink-0"
-                        title={isFav ? 'Remove favorite' : 'Add favorite'}
-                      >
-                        <Star
-                          size={13}
-                          className={isFav ? 'fill-yellow-400 text-yellow-400' : ''}
+                    {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
+                    <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
+                      {thumbnailUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={thumbnailUrl}
+                          alt={song.title}
+                          className="w-full h-full object-cover scale-[1.05] group-hover:scale-110 transition-transform duration-200"
+                          loading="lazy"
                         />
-                      </button>
-                    </div>
+                      ) : (
+                        <Music2 size={16} className="text-zinc-600" />
+                      )}
 
-                    {/* Bottom: Code & Reserve Button */}
-                    <div className="flex items-center justify-between gap-1 mt-2 pt-1.5 border-t border-zinc-800/60">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="text-[9px] font-mono text-zinc-400 truncate">
-                          {song.code && song.code !== 'YT' ? `#${song.code}` : (song.song_type || 'Karaoke')}
-                        </span>
-                        {isAlreadyReserved && (
-                          <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/25 shrink-0 flex items-center gap-0.5">
-                            <CheckCircle size={8} className="text-teal-400" />
-                            <span>Queued</span>
-                          </span>
-                        )}
+                      {/* Top-Right Floating Star / Favorite Toggle Button */}
+                      <div className="absolute top-1 right-1 z-10">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavoriteSong(song);
+                            setFavTrigger((prev) => prev + 1);
+                          }}
+                          className="w-4.5 h-4.5 rounded bg-black/70 backdrop-blur-md flex items-center justify-center text-zinc-400 hover:text-yellow-400 active:scale-90 transition-all border border-white/10 shadow-sm"
+                          title={isFav ? 'Remove favorite' : 'Add favorite'}
+                          aria-label={isFav ? `Remove ${song.title} from favorites` : `Add ${song.title} to favorites`}
+                        >
+                          <Star
+                            size={10}
+                            className={isFav ? 'fill-yellow-400 text-yellow-400' : ''}
+                          />
+                        </button>
                       </div>
 
-                      <button
-                        id={`reserve-btn-${song.id}`}
-                        onClick={() => handleReserve(song)}
-                        disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-                        className={`shrink-0 px-2 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95 text-[10px] font-black tracking-wide shadow-sm ${songStatus.status === 'success'
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                          : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-75'
-                          }`}
-                        title="Reserve song"
-                      >
-                        {songStatus.status === 'reserving' ? (
-                          <Loader2 size={11} className="animate-spin text-black" />
-                        ) : songStatus.status === 'success' ? (
-                          <>
-                            <CheckCircle size={11} className="text-green-400" />
-                            <span>ADDED</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={11} className="stroke-[3]" />
-                            <span>RESERVE</span>
-                          </>
-                        )}
-                      </button>
+                      {/* Top-Left Queued Pill if in Queue */}
+                      {isAlreadyReserved && (
+                        <div className="absolute top-1 left-1 px-1 py-0.2 rounded bg-teal-500/90 text-black text-[7px] font-black flex items-center gap-0.5 shadow-sm">
+                          <CheckCircle size={7} className="stroke-[3]" />
+                          <span>QUEUED</span>
+                        </div>
+                      )}
+
+                      {/* Bottom-Left Song Code / Type Badge */}
+                      {song.code && song.code !== 'YT' ? (
+                        <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 backdrop-blur-md text-[7px] font-mono font-bold text-teal-300 border border-teal-500/30">
+                          #{song.code}
+                        </div>
+                      ) : song.song_type ? (
+                        <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 backdrop-blur-md text-[7px] font-bold text-teal-300 border border-teal-500/30 uppercase truncate max-w-[50px]">
+                          {song.song_type}
+                        </div>
+                      ) : null}
                     </div>
+
+                    {/* Middle: Title & Artist */}
+                    <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
+                      <div>
+                        <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={song.title}>
+                          {song.title}
+                        </p>
+                        <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+                          {song.artist}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Status error notification if any */}
+                    {songStatus.status === 'error' && songStatus.message && (
+                      <p className="text-[8px] text-red-400 text-center mt-1 truncate">
+                        {songStatus.message}
+                      </p>
+                    )}
+
+                    {/* Bottom: Clean "RESERVE" Button */}
+                    <button
+                      id={`reserve-btn-${song.id}`}
+                      onClick={() => handleReserve(song)}
+                      disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
+                      className={`mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 transition-all active:scale-95 text-[9px] font-black tracking-wide shadow-sm disabled:opacity-60 shrink-0 ${
+                        songStatus.status === 'success'
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          : 'bg-teal-400 hover:bg-teal-300 text-black'
+                      }`}
+                      title="Reserve song"
+                      aria-label={`Reserve ${song.title}`}
+                    >
+                      {songStatus.status === 'reserving' ? (
+                        <>
+                          <Loader2 size={10} className="animate-spin text-black" />
+                          <span>...</span>
+                        </>
+                      ) : songStatus.status === 'success' ? (
+                        <>
+                          <CheckCircle size={10} className="text-green-400" />
+                          <span>ADDED</span>
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={10} className="stroke-[3]" />
+                          <span>RESERVE</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 );
               })}

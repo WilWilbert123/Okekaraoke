@@ -1032,7 +1032,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             }}
           />
         </div>
-        <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'my-songs' ? 'block' : 'none' }}>
+        <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'my-songs' ? 'flex' : 'none' }}>
           <MyReservations
             reservations={myReservations}
             currentSongId={currentSong?.queue_item_id}
