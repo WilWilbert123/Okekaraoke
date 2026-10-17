@@ -280,6 +280,10 @@ export function MyReservations({
         if (isSoloTVMode && onSoloTogglePlay) {
           onSoloTogglePlay();
         }
+        if (json.error?.code === 'NO_SONG_PLAYING' || json.error?.code === 'SONG_MISMATCH') {
+          onCancelled();
+          return;
+        }
         setControlError(json.error?.message ?? 'Only the singer can pause this song.');
       } else {
         onCancelled();

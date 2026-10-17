@@ -276,6 +276,21 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     }
   }, [roomCode]);
 
+  // Re-sync room state when returning from background / other apps (Messenger, Facebook)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchState();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', handleVisibility);
+    };
+  }, [fetchState]);
+
   // Register this phone as a remote device
   const registerDevice = useCallback(async (name: string) => {
     const session = getOrCreateGuestSession();
@@ -780,22 +795,25 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         timestamp: new Date().toISOString(),
       });
 
-      try {
-        fetch('/api/queue/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            room_code: roomCode,
-            session_id: sessionId,
-            action,
-            queue_item_id: queueItemId,
-          }),
-        }).catch(() => {});
-      } catch (err) {
-        console.error('[Toggle Pause Error]:', err);
+      // In Solo TV mode, MiniTVPlayer directly controls the local player and sends its own API request
+      if (!isSoloTVMode) {
+        try {
+          fetch('/api/queue/control', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              room_code: roomCode,
+              session_id: sessionId,
+              action,
+              queue_item_id: queueItemId,
+            }),
+          }).catch(() => {});
+        } catch (err) {
+          console.error('[Toggle Pause Error]:', err);
+        }
       }
     },
-    [roomCode, sessionId, guestName]
+    [isSoloTVMode, roomCode, sessionId, guestName]
   );
 
   const handleStopSong = useCallback(
