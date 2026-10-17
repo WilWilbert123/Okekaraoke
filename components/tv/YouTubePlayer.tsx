@@ -84,7 +84,7 @@ function loadYouTubeAPI(): Promise<void> {
       const prevOnReady = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
         if (prevOnReady) {
-          try { prevOnReady(); } catch {}
+          try { prevOnReady(); } catch { }
         }
         checkReady();
       };
@@ -179,7 +179,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
       if (playerRef.current) {
         try {
           playerRef.current.unMute();
-        } catch {}
+        } catch { }
       }
     };
     window.addEventListener('touchstart', handleUserGesture, { capture: true, passive: true });
@@ -204,24 +204,24 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 if (userInteractedRef.current || !isIOS()) {
                   playerRef.current?.unMute();
                 }
-              } catch {}
+              } catch { }
             }, 300);
           } else {
             // Resuming an already started song — play directly without muting to preserve active audio
             playerRef.current.playVideo();
           }
-        } catch {}
+        } catch { }
       }
     },
     pauseVideo: () => {
       try {
         playerRef.current?.pauseVideo();
-      } catch {}
+      } catch { }
     },
     stopVideo: () => {
       try {
         playerRef.current?.stopVideo();
-      } catch {}
+      } catch { }
     },
     seekTo: (seconds: number) => {
       try {
@@ -231,10 +231,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
 
         // Immediate + staggered playVideo signals to bypass YouTube's internal seek-pause
         playerRef.current?.playVideo();
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 60);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 160);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 320);
-        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 600);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 60);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 160);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 320);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch { } }, 600);
 
         if (seekingTimeoutRef.current) clearTimeout(seekingTimeoutRef.current);
         seekingTimeoutRef.current = setTimeout(() => {
@@ -250,10 +250,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               if (userInteractedRef.current || !isIOS()) {
                 playerRef.current?.unMute();
               }
-            } catch {}
+            } catch { }
           }, 300);
         }
-      } catch {}
+      } catch { }
     },
     getCurrentTime: () => {
       try {
@@ -305,7 +305,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             playerRef.current.pauseVideo();
             playerRef.current.stopVideo();
             playerRef.current.destroy();
-          } catch {}
+          } catch { }
           playerRef.current = null;
         }
         if (containerRef.current) {
@@ -335,7 +335,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                   playerRef.current.mute();
                   playerRef.current.playVideo();
                 }
-              } catch {}
+              } catch { }
             }, 250);
           } catch (e) {
             console.warn('Error loading video by ID:', e);
@@ -346,7 +346,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             try {
               playerRef.current.mute();
               playerRef.current.playVideo();
-            } catch {}
+            } catch { }
           }
         }
         return;
@@ -425,7 +425,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                 if (userInteractedRef.current || !isIOS()) {
                   try {
                     playerRef.current?.unMute();
-                  } catch {}
+                  } catch { }
                 } else {
                   setNeedsUnmuteGesture(true);
                 }
@@ -438,7 +438,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                   // DO NOT propagate 'paused' to parent or TV! Force play and return early.
                   try {
                     playerRef.current?.playVideo();
-                  } catch {}
+                  } catch { }
                   return;
                 }
                 playerStatus = 'paused';
@@ -446,7 +446,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                   try {
                     event.target.mute();
                     event.target.playVideo();
-                  } catch {}
+                  } catch { }
                 }
                 break;
               case YTState.BUFFERING:
@@ -455,7 +455,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
                   try {
                     event.target.mute();
                     event.target.playVideo();
-                  } catch {}
+                  } catch { }
                 }
                 break;
               case YTState.ENDED:
@@ -499,7 +499,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   useEffect(() => {
     return () => {
       if (playerRef.current) {
-        try { playerRef.current.destroy(); } catch {}
+        try { playerRef.current.destroy(); } catch { }
         playerRef.current = null;
       }
     };
@@ -541,15 +541,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         if (!hasStartedPlayingRef.current && !needsUserGesture) {
           if (state === 1) {
             hasStartedPlayingRef.current = true;
-            try { playerRef.current.unMute(); } catch {}
+            try { playerRef.current.unMute(); } catch { }
           } else if (state === 5 || state === -1 || state === 2) {
             try {
               playerRef.current.mute();
               playerRef.current.playVideo();
-            } catch {}
+            } catch { }
           }
         }
-      } catch {}
+      } catch { }
     }, pollMs);
 
     return () => clearInterval(interval);
@@ -563,9 +563,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         playerRef.current.mute();
         playerRef.current.playVideo();
         setTimeout(() => {
-          try { playerRef.current?.unMute(); } catch {}
+          try { playerRef.current?.unMute(); } catch { }
         }, 300);
-      } catch {}
+      } catch { }
     }
   }, []);
 
@@ -581,15 +581,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         }
       />
 
-      {/* Seeking Shield: Hides YouTube's native pause card / thumbnail flash while seeking */}
-      {isSeeking && (
-        <div className="absolute inset-0 bg-black/85 z-[15] flex items-center justify-center pointer-events-none transition-opacity duration-200">
-          <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-zinc-900/90 border border-white/20 text-white text-xs font-semibold backdrop-blur-md shadow-2xl animate-pulse">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span>Updating playback...</span>
-          </div>
-        </div>
-      )}
+
 
       {/* Embed blocked overlay */}
       {embedBlocked && videoId && (
@@ -610,7 +602,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               className="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-lg transition-colors flex items-center gap-2"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
               </svg>
               Watch on YouTube
             </a>
@@ -636,7 +628,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
             {/* Big animated play button */}
             <div className="w-28 h-28 rounded-full bg-white/10 border-4 border-white/60 flex items-center justify-center backdrop-blur-sm animate-pulse">
               <svg width="56" height="56" viewBox="0 0 24 24" fill="white">
-                <path d="M8 5v14l11-7z"/>
+                <path d="M8 5v14l11-7z" />
               </svg>
             </div>
             <p className="text-white text-2xl font-bold drop-shadow-lg">Tap to Start Playing</p>
@@ -655,7 +647,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               try {
                 playerRef.current.unMute();
                 playerRef.current.playVideo();
-              } catch {}
+              } catch { }
             }
           }}
           className="absolute bottom-3 right-3 z-30 px-3 py-1.5 rounded-full bg-teal-500/90 hover:bg-teal-400 text-black text-xs font-black flex items-center gap-1.5 shadow-xl animate-bounce pointer-events-auto backdrop-blur-md"

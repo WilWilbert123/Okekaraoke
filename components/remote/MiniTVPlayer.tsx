@@ -104,27 +104,27 @@ export function MiniTVPlayer({
         const docEl = document.documentElement as any;
         try {
           if (docEl.requestFullscreen) {
-            Promise.resolve(docEl.requestFullscreen()).catch(() => {});
+            Promise.resolve(docEl.requestFullscreen()).catch(() => { });
           } else if (docEl.webkitRequestFullscreen) {
-            Promise.resolve(docEl.webkitRequestFullscreen()).catch(() => {});
+            Promise.resolve(docEl.webkitRequestFullscreen()).catch(() => { });
           }
-        } catch {}
+        } catch { }
         if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).lock) {
           try {
-            Promise.resolve((screen.orientation as any).lock('landscape')).catch(() => {});
-          } catch {}
+            Promise.resolve((screen.orientation as any).lock('landscape')).catch(() => { });
+          } catch { }
         }
       } else {
         const doc = document as any;
         try {
           if (doc.exitFullscreen) {
-            Promise.resolve(doc.exitFullscreen()).catch(() => {});
+            Promise.resolve(doc.exitFullscreen()).catch(() => { });
           } else if (doc.webkitExitFullscreen) {
-            Promise.resolve(doc.webkitExitFullscreen()).catch(() => {});
+            Promise.resolve(doc.webkitExitFullscreen()).catch(() => { });
           }
-        } catch {}
+        } catch { }
         if (typeof screen !== 'undefined' && screen.orientation && (screen.orientation as any).unlock) {
-          try { screen.orientation.unlock(); } catch {}
+          try { screen.orientation.unlock(); } catch { }
         }
       }
       return next;
@@ -151,11 +151,11 @@ export function MiniTVPlayer({
       }
     },
     song_skipped: () => {
-      try { playerRef.current?.pauseVideo(); } catch {}
+      try { playerRef.current?.pauseVideo(); } catch { }
       onRefreshState();
     },
     song_finished: () => {
-      try { playerRef.current?.pauseVideo(); } catch {}
+      try { playerRef.current?.pauseVideo(); } catch { }
       onRefreshState();
     },
   }).current;
@@ -182,7 +182,7 @@ export function MiniTVPlayer({
           device_type: 'tv',
           guest_name: '1-Device (Phone)',
         }),
-      }).catch(() => {});
+      }).catch(() => { });
 
       const res = await fetch('/api/queue/next', {
         method: 'POST',
@@ -225,7 +225,7 @@ export function MiniTVPlayer({
     try {
       playerRef.current?.pauseVideo();
       setIsPlaying(false);
-    } catch {}
+    } catch { }
 
     try {
       await fetch('/api/queue/skip', {
@@ -292,7 +292,7 @@ export function MiniTVPlayer({
     try {
       playerRef.current?.pauseVideo();
       setIsPlaying(false);
-    } catch {}
+    } catch { }
   }, []);
 
   // Register controls to parent (e.g. RemotePageClient / RemoteQueue)
@@ -414,9 +414,8 @@ export function MiniTVPlayer({
         className={
           isFullVideo
             ? 'flex-1 relative w-full h-full bg-black overflow-hidden'
-            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${
-                isCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
-              }`
+            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${isCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
+            }`
         }
       >
         {videoId ? (
@@ -472,47 +471,6 @@ export function MiniTVPlayer({
         </div>
       </div>
 
-      {/* ── REAL-TIME PLAYBACK PROGRESS SCRUBBER (Standard Mode) ── */}
-      {currentSong && duration > 0 && !isCollapsed && !isFullVideo && (
-        <div className="px-3 py-1 bg-zinc-950/95 border-t border-zinc-800/60 flex items-center gap-2 select-none">
-          <span className="text-[10px] font-mono font-bold text-teal-400 shrink-0 w-8 text-right">
-            {formatTime(isScrubbing ? scrubValue : currentTime)}
-          </span>
-          <div className="flex-1 relative flex items-center group cursor-pointer py-1">
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              step={0.5}
-              value={isScrubbing ? scrubValue : currentTime}
-              onChange={(e) => {
-                const val = parseFloat(e.target.value);
-                setScrubValue(val);
-              }}
-              onMouseDown={() => {
-                setIsScrubbing(true);
-                setScrubValue(currentTime);
-              }}
-              onTouchStart={() => {
-                setIsScrubbing(true);
-                setScrubValue(currentTime);
-              }}
-              onMouseUp={() => {
-                setIsScrubbing(false);
-                handleSeek(scrubValue);
-              }}
-              onTouchEnd={() => {
-                setIsScrubbing(false);
-                handleSeek(scrubValue);
-              }}
-              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-teal-400 focus:outline-none focus:ring-0 active:h-2 transition-all"
-            />
-          </div>
-          <span className="text-[10px] font-mono text-zinc-500 shrink-0 w-8">
-            {formatTime(duration)}
-          </span>
-        </div>
-      )}
 
       {/* ── BOTTOM CONTROLS BAR ── */}
       {isFullVideo ? (
