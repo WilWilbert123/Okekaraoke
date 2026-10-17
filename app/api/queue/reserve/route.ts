@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { broadcastRealtime } from '@/lib/supabase/realtime';
 import { apiSuccess, apiError, validateRoomCode, validateSessionId } from '@/lib/utils/apiHelpers';
 
 export async function POST(request: NextRequest) {
@@ -27,98 +28,86 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // 1. Find active instance
-    const { data: instance } = await supabase
-      .from('instances')
-      .select('id')
-      .ilike('room_code', normalizedCode)
-      .eq('status', 'active')
-      .maybeSingle();
+    const cleanSongCode = song_code && song_code !== 'YT' ? String(song_code).trim() : null;
+    const cleanYtId = !cleanSongCode && youtube_video_id ? String(youtube_video_id).trim() : null;
 
+    // 1. Concurrently look up instance and existing song in 1 parallel network roundtrip
+    const [instanceRes, existingSongRes] = await Promise.all([
+      supabase
+        .from('instances')
+        .select('id')
+        .ilike('room_code', normalizedCode)
+        .eq('status', 'active')
+        .maybeSingle(),
+      cleanSongCode
+        ? supabase
+            .from('songs')
+            .select('id, title, artist, code, youtube_video_id, thumbnail_url')
+            .eq('code', cleanSongCode)
+            .eq('is_active', true)
+            .maybeSingle()
+        : cleanYtId
+        ? supabase
+            .from('songs')
+            .select('id, title, artist, code, youtube_video_id, thumbnail_url')
+            .eq('youtube_video_id', cleanYtId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    const instance = instanceRes.data;
     if (!instance) {
       return apiError('ROOM_NOT_FOUND', 'This OKEKARAOKE room does not exist or is no longer active.', 404);
     }
 
-    // 2. Verify or auto-register device
-    const { data: device } = await supabase
-      .from('devices')
-      .select('id')
-      .eq('instance_id', instance.id)
-      .eq('session_id', guest_session_id)
-      .maybeSingle();
-
-    if (!device) {
-      await supabase.from('devices').upsert({
+    // Auto-register/touch device session asynchronously in background without blocking reservation
+    Promise.resolve(
+      supabase.from('devices').upsert({
         instance_id: instance.id,
         device_type: 'remote',
         session_id: guest_session_id,
         device_name: guest_name ?? 'Guest',
         is_online: true,
         last_seen_at: new Date().toISOString(),
-      }, { onConflict: 'instance_id,session_id' });
-    }
+      }, { onConflict: 'instance_id,session_id' })
+    ).catch(() => {});
 
-    let song: { id: string; title: string; artist: string; code: string } | null = null;
+    let song: { id: string; title: string; artist: string; code: string; youtube_video_id?: string; thumbnail_url?: string } | null = existingSongRes.data ?? null;
 
-    // 3. Find song by song_code (if valid numeric code)
-    if (song_code && song_code !== 'YT') {
-      const { data: existingSong } = await supabase
-        .from('songs')
-        .select('id, title, artist, code')
-        .eq('code', String(song_code).trim())
-        .eq('is_active', true)
-        .maybeSingle();
-      song = existingSong;
-    }
-
-    // 4. Find or auto-create song by youtube_video_id
+    // 2. If song not found yet but youtube_video_id provided, create or lookup
     if (!song && youtube_video_id) {
-      const cleanYtId = String(youtube_video_id).trim();
-      const { data: existingYtSong } = await supabase
+      const ytId = String(youtube_video_id).trim();
+      // Generate a random unique song code
+      const newCode = String(Math.floor(10000 + Math.random() * 90000));
+      const rawTitle = title ? String(title) : 'YouTube Karaoke Track';
+      const rawArtist = artist ? String(artist) : '';
+      const { songTitle: cleanTitle, artist: cleanArtist } = extractArtistFromTitle(rawTitle, rawArtist);
+      const { data: newSong, error: createError } = await supabase
         .from('songs')
-        .select('id, title, artist, code')
-        .eq('youtube_video_id', cleanYtId)
+        .insert({
+          code: newCode,
+          title: cleanTitle.slice(0, 200),
+          artist: cleanArtist.slice(0, 200),
+          youtube_video_id: ytId,
+          thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${ytId}/mqdefault.jpg`,
+          category: 'YouTube',
+          language: 'Tagalog/English',
+          song_type: 'Karaoke',
+          duration_seconds: 240,
+          is_active: true,
+        })
+        .select('id, title, artist, code, youtube_video_id, thumbnail_url')
         .maybeSingle();
 
-      if (existingYtSong) {
-        song = existingYtSong;
-      } else {
-        // Generate a random unique song code
-        const newCode = String(Math.floor(10000 + Math.random() * 90000));
-        const rawTitle = title ? String(title) : 'YouTube Karaoke Track';
-        const rawArtist = artist ? String(artist) : '';
-        // Extract real artist from the video title; the passed-in artist is
-        // often the YouTube channel name (e.g. "Sing King"), not the actual artist.
-        const { songTitle: cleanTitle, artist: cleanArtist } = extractArtistFromTitle(rawTitle, rawArtist);
-        const { data: newSong, error: createError } = await supabase
+      if (createError) {
+        const { data: retryYt } = await supabase
           .from('songs')
-          .insert({
-            code: newCode,
-            title: cleanTitle.slice(0, 200),
-            artist: cleanArtist.slice(0, 200),
-            youtube_video_id: cleanYtId,
-            thumbnail_url: thumbnail_url ?? `https://img.youtube.com/vi/${cleanYtId}/mqdefault.jpg`,
-            category: 'YouTube',
-            language: 'Tagalog/English',
-            song_type: 'Karaoke',
-            duration_seconds: 240,
-            is_active: true,
-          })
-          .select('id, title, artist, code')
+          .select('id, title, artist, code, youtube_video_id, thumbnail_url')
+          .eq('youtube_video_id', ytId)
           .maybeSingle();
-
-        if (createError) {
-          console.error('Error creating YouTube song record:', createError);
-          // Retry lookup in case of race condition insert
-          const { data: retryYt } = await supabase
-            .from('songs')
-            .select('id, title, artist, code')
-            .eq('youtube_video_id', cleanYtId)
-            .maybeSingle();
-          song = retryYt;
-        } else {
-          song = newSong;
-        }
+        song = retryYt;
+      } else {
+        song = newSong;
       }
     }
 
@@ -199,6 +188,9 @@ export async function POST(request: NextRequest) {
       .eq('status', 'playing')
       .maybeSingle();
 
+    let startedNow = false;
+    let startedQueueItemId: string | null = null;
+
     if (!playingSong) {
       const { data: advanceResult } = await supabase.rpc('advance_queue_atomic', {
         p_instance_id: instance.id,
@@ -207,45 +199,71 @@ export async function POST(request: NextRequest) {
 
       const advRow = Array.isArray(advanceResult) ? advanceResult[0] : advanceResult;
       if (advRow?.success && advRow.next_queue_item_id) {
-        // Broadcast song_started so TV receives it live & starts video immediately
-        await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-          type: 'broadcast',
-          event: 'song_started',
-          payload: {
-            type: 'song_started',
-            instance_id: instance.id,
-            room_code: normalizedCode,
-            queue_item_id: advRow.next_queue_item_id,
-            song_id: advRow.next_song_id,
-            youtube_video_id: advRow.next_youtube_video_id,
-            guest_name: advRow.next_guest_name,
-            position: advRow.next_position,
-            timestamp: new Date().toISOString(),
-          },
+        startedNow = true;
+        startedQueueItemId = advRow.next_queue_item_id;
+        // Broadcast song_started so TV & 1-Device phone receive it live & start video immediately
+        await broadcastRealtime(normalizedCode, 'song_started', {
+          type: 'song_started',
+          instance_id: instance.id,
+          room_code: normalizedCode,
+          queue_item_id: advRow.next_queue_item_id,
+          song_id: advRow.next_song_id || song.id,
+          song_title: song.title,
+          song_artist: song.artist,
+          youtube_video_id: advRow.next_youtube_video_id || (song as any).youtube_video_id || youtube_video_id,
+          thumbnail_url: (song as any).thumbnail_url || thumbnail_url,
+          guest_name: advRow.next_guest_name || guest_name || 'Guest',
+          guest_session_id: guest_session_id,
+          position: advRow.next_position ?? 1,
+          timestamp: new Date().toISOString(),
         });
       }
     }
 
-    // 7. Broadcast Realtime event to TV
-    await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-      type: 'broadcast',
-      event: 'queue_added',
-      payload: {
-        type: 'queue_added',
-        instance_id: instance.id,
-        room_code: normalizedCode,
-        queue_item_id: queueItemId,
-        position: finalPosition,
-        song_title: song.title,
-        song_artist: song.artist,
-        guest_name: guest_name ?? null,
-        timestamp: new Date().toISOString(),
-      },
+    // 7. Broadcast Realtime event to TV & all remotes with full details
+    await broadcastRealtime(normalizedCode, 'queue_added', {
+      type: 'queue_added',
+      instance_id: instance.id,
+      room_code: normalizedCode,
+      queue_item_id: queueItemId,
+      position: finalPosition,
+      song_id: song.id,
+      song_code: song.code,
+      song_title: song.title,
+      song_artist: song.artist,
+      youtube_video_id: (song as any).youtube_video_id || youtube_video_id,
+      thumbnail_url: (song as any).thumbnail_url || thumbnail_url,
+      guest_name: guest_name ?? 'Guest',
+      guest_session_id: guest_session_id,
+      timestamp: new Date().toISOString(),
     });
 
     return apiSuccess({
       queue_item_id: queueItemId,
       position: finalPosition,
+      started_now: startedNow,
+      current_song: startedNow ? {
+        queue_item_id: startedQueueItemId || queueItemId,
+        instance_id: instance.id,
+        guest_name: guest_name ?? 'Guest',
+        guest_session_id: guest_session_id,
+        position: 1,
+        status: 'playing',
+        started_at: new Date().toISOString(),
+        reserved_at: new Date().toISOString(),
+        song: {
+          id: song.id,
+          title: song.title,
+          artist: song.artist,
+          code: song.code,
+          youtube_video_id: (song as any).youtube_video_id || youtube_video_id,
+          thumbnail_url: (song as any).thumbnail_url || thumbnail_url || `https://img.youtube.com/vi/${(song as any).youtube_video_id || youtube_video_id}/mqdefault.jpg`,
+          duration_seconds: 240,
+          category: 'YouTube',
+          language: 'Karaoke',
+          is_active: true,
+        },
+      } : null,
       song: { title: song.title, artist: song.artist, code: song.code },
     }, 201);
   } catch (error) {

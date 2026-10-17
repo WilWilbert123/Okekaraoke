@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     // 1. Find active room instance
     const { data: instance } = await supabase
       .from('instances')
-      .select('id')
+      .select('id, owner_session_id')
       .ilike('room_code', normalizedCode)
       .eq('status', 'active')
       .maybeSingle();
@@ -43,17 +43,19 @@ export async function POST(request: NextRequest) {
 
     const nowIso = new Date().toISOString();
 
-    // Touch device session for this room
-    await supabase.from('devices').upsert(
-      {
-        instance_id: instance.id,
-        device_type: 'remote',
-        session_id: session_id,
-        is_online: true,
-        last_seen_at: nowIso,
-      },
-      { onConflict: 'instance_id,session_id' }
-    );
+    // Touch device session asynchronously in background without blocking stop
+    Promise.resolve(
+      supabase.from('devices').upsert(
+        {
+          instance_id: instance.id,
+          device_type: 'remote',
+          session_id: session_id,
+          is_online: true,
+          last_seen_at: nowIso,
+        },
+        { onConflict: 'instance_id,session_id' }
+      )
+    ).catch(() => {});
 
     // 2. Resolve target item to stop:
     //    Priority 1: The specific queue_item_id requested by client
@@ -103,35 +105,37 @@ export async function POST(request: NextRequest) {
       return apiError('NOTHING_PLAYING', 'No active song to skip in this room.', 404);
     }
 
-    // Ensure caller is the owner of the song OR a TV device
-    const { data: device } = await supabase
-      .from('devices')
-      .select('device_type')
-      .eq('instance_id', instance.id)
-      .eq('session_id', session_id)
-      .maybeSingle();
-
-    const isTV = device?.device_type === 'tv';
+    // Ensure caller is the owner of the song, the room host, or a TV device
     const isOwner = targetItem.guest_session_id === session_id;
+    const isHost = Boolean(instance.owner_session_id && instance.owner_session_id === session_id);
 
-    if (!isTV && !isOwner) {
-      return apiError('UNAUTHORIZED', 'You can only stop or skip your own songs.', 403);
+    if (!isOwner && !isHost) {
+      const { data: device } = await supabase
+        .from('devices')
+        .select('device_type')
+        .eq('instance_id', instance.id)
+        .eq('session_id', session_id)
+        .maybeSingle();
+
+      const isTV = device?.device_type === 'tv';
+      if (!isTV) {
+        return apiError('UNAUTHORIZED', 'You can only stop or skip your own songs.', 403);
+      }
     }
 
-    // 3. Always clean up all 'playing' status rows for this instance
-    await supabase
-      .from('queue_items')
-      .update({ status: 'skipped', cancelled_at: nowIso })
-      .eq('instance_id', instance.id)
-      .eq('status', 'playing');
-
-    if (targetItem) {
-      await supabase
+    // 3. Mark current target and playing items as skipped
+    await Promise.all([
+      supabase
+        .from('queue_items')
+        .update({ status: 'skipped', cancelled_at: nowIso })
+        .eq('instance_id', instance.id)
+        .eq('status', 'playing'),
+      supabase
         .from('queue_items')
         .update({ status: 'skipped', cancelled_at: nowIso })
         .eq('id', targetItem.id)
-        .eq('instance_id', instance.id);
-    }
+        .eq('instance_id', instance.id),
+    ]);
 
     // 4. Start next song in queue if available
     const { data: nextItem } = await supabase
@@ -145,6 +149,8 @@ export async function POST(request: NextRequest) {
 
     let nextQueueItemId: string | null = null;
     let nextYoutubeVideoId: string | null = null;
+    let nextTitle: string | null = null;
+    let nextArtist: string | null = null;
 
     if (nextItem) {
       await supabase
@@ -155,9 +161,18 @@ export async function POST(request: NextRequest) {
       const songObj = Array.isArray(nextItem.songs) ? nextItem.songs[0] : nextItem.songs;
       nextQueueItemId = nextItem.id;
       nextYoutubeVideoId = (songObj as any)?.youtube_video_id ?? null;
+      nextTitle = (songObj as any)?.title ?? null;
+      nextArtist = (songObj as any)?.artist ?? null;
     }
 
-    // 5. Broadcast Realtime events to clear UI on all devices
+    // 5. Broadcast Realtime events to clear UI and stop player immediately on all devices
+    await broadcastRealtime(normalizedCode, 'playback_control', {
+      type: 'playback_control',
+      action: 'stop',
+      queue_item_id: targetItem.id,
+      timestamp: nowIso,
+    });
+
     const eventName = nextQueueItemId ? 'song_started' : 'song_skipped';
     await broadcastRealtime(normalizedCode, eventName, {
       type: eventName,
@@ -165,6 +180,10 @@ export async function POST(request: NextRequest) {
       room_code: normalizedCode,
       skipped_queue_item_id: targetItem?.id ?? null,
       queue_item_id: nextQueueItemId,
+      song_id: nextItem?.song_id ?? null,
+      song_title: nextTitle,
+      song_artist: nextArtist,
+      guest_name: nextItem?.guest_name ?? null,
       youtube_video_id: nextYoutubeVideoId,
       timestamp: nowIso,
     });

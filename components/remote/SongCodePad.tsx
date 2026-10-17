@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { Delete, Music2, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { addSongToHistory } from '@/lib/utils/songHistory';
 import type { Song } from '@/lib/types';
 
 interface SongCodePadProps {
@@ -75,8 +76,17 @@ export function SongCodePad({ roomCode, sessionId, guestName, onReserved }: Song
   const handleReserve = async () => {
     if (!song || !sessionId) return;
 
-    setStatus('reserving');
+    addSongToHistory(song, roomCode);
+
+    // Instant optimistic feedback in 0ms!
+    setStatus('success');
     setErrorMessage('');
+    onReserved();
+    setTimeout(() => {
+      setCode('');
+      setSong(null);
+      setStatus('idle');
+    }, 2000);
 
     try {
       const response = await fetch('/api/queue/reserve', {
@@ -92,15 +102,7 @@ export function SongCodePad({ roomCode, sessionId, guestName, onReserved }: Song
 
       const json = await response.json();
 
-      if (json.success) {
-        setStatus('success');
-        onReserved();
-        setTimeout(() => {
-          setCode('');
-          setSong(null);
-          setStatus('idle');
-        }, 2000);
-      } else {
+      if (!json.success) {
         setStatus('error');
         setErrorMessage(json.error?.message ?? 'Failed to reserve song.');
       }

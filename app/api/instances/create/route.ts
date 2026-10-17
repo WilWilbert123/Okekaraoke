@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
     // Create default instance settings
     await supabase.from('instance_settings').insert({
       instance_id: instance.id,
-      max_queue_size: 30,
-      max_songs_per_guest: 5,
-      allow_duplicates: false,
+      max_queue_size: 50,
+      max_songs_per_guest: 25,
+      allow_duplicates: true,
       allow_cancel: true,
       allow_skip: false,
       autoplay: true,

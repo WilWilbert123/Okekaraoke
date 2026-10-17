@@ -98,6 +98,7 @@ export function ScanRoomModal({ currentRoomCode, isOpen, onClose }: ScanRoomModa
 
       setGuestSessionForInstance(json.data.instance.id, cleanCode, 'remote');
       localStorage.setItem('okekaraoke_last_room', cleanCode);
+      localStorage.setItem('okekaraoke_solo_tv', 'false');
       stopCamera();
       onClose();
       router.push(`/remote/${cleanCode}`);

@@ -13,7 +13,7 @@ import { apiSuccess, apiError, validateRoomCode, validateSessionId } from '@/lib
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { room_code, session_id, action, queue_item_id } = body;
+    const { room_code, session_id, action, queue_item_id, seconds } = body;
 
     if (!room_code) {
       return apiError('MISSING_ROOM_CODE', 'Room code is required.', 400);
@@ -28,8 +28,12 @@ export async function POST(request: NextRequest) {
       return apiError('INVALID_SESSION', 'A valid session ID is required.', 400);
     }
 
-    if (action !== 'pause' && action !== 'resume') {
-      return apiError('INVALID_ACTION', 'Action must be pause or resume.', 400);
+    if (action !== 'pause' && action !== 'resume' && action !== 'restart' && action !== 'seek') {
+      return apiError('INVALID_ACTION', 'Action must be pause, resume, restart, or seek.', 400);
+    }
+
+    if (action === 'seek' && typeof seconds !== 'number') {
+      return apiError('INVALID_SEEK', 'A valid seconds parameter is required for seek action.', 400);
     }
 
     const supabase = createAdminClient();
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest) {
       return apiError('NO_SONG_PLAYING', 'No song is currently playing in this room.', 400);
     }
 
-    if (queue_item_id && currentSong.id !== queue_item_id) {
+    if (queue_item_id && !queue_item_id.startsWith('temp_') && currentSong.id !== queue_item_id) {
       return apiError('SONG_MISMATCH', 'The target song is no longer playing.', 400);
     }
 
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
       const singerName = currentSong.guest_name || 'the singer who reserved this song';
       return apiError(
         'UNAUTHORIZED_CONTROL',
-        `Only ${singerName} can pause or play this song.`,
+        `Only ${singerName} can control playback for this song.`,
         403
       );
     }
@@ -80,6 +84,7 @@ export async function POST(request: NextRequest) {
     await broadcastRealtime(normalizedCode, 'playback_control', {
       type: 'playback_control',
       action,
+      seconds: typeof seconds === 'number' ? seconds : 0,
       queue_item_id: currentSong.id,
       guest_session_id: session_id,
       guest_name: currentSong.guest_name,
@@ -88,8 +93,9 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({
       action,
+      seconds: typeof seconds === 'number' ? seconds : undefined,
       queue_item_id: currentSong.id,
-      message: `Playback ${action}d successfully.`,
+      message: `Playback ${action} executed successfully.`,
     });
   } catch (err: any) {
     console.error('[Queue Control API Error]:', err);

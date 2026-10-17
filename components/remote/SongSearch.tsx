@@ -33,7 +33,9 @@ interface SongSearchProps {
   roomCode: string;
   sessionId: string;
   guestName: string;
-  onReserved: () => void;
+  onReserved: (song?: Song, resultData?: any, tempIdToReplace?: string) => void;
+  onReserveFailed?: (tempId: string) => void;
+  reservedSongIds?: Set<string>;
   isSoloTVMode?: boolean;
 }
 
@@ -61,19 +63,39 @@ function renderSongTypeIcon(type?: string | null) {
   return <Mic size={11} className="text-teal-400 shrink-0" />;
 }
 
-export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloTVMode = false }: SongSearchProps) {
+export function SongSearch({
+  roomCode,
+  sessionId,
+  guestName,
+  onReserved,
+  onReserveFailed,
+  reservedSongIds,
+  isSoloTVMode = false,
+}: SongSearchProps) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [catalog, setCatalog] = useState<SongWithReserving[]>([]);
   const [searchResults, setSearchResults] = useState<SongWithReserving[]>([]);
-  const [layoutMode, setLayoutMode] = useState<'list' | 'grid'>(isSoloTVMode ? 'grid' : 'list');
+  const [layoutMode, setLayoutMode] = useState<'list' | 'grid'>('grid');
 
-  // Automatically default to 2-column grid layout when Solo TV mode is active
+  // Load saved layout preference or default to 2-column grid
   useEffect(() => {
-    if (isSoloTVMode) {
-      setLayoutMode('grid');
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('okekaraoke_song_layout');
+      if (saved === 'list' || saved === 'grid') {
+        setLayoutMode(saved);
+      } else {
+        setLayoutMode('grid');
+      }
     }
-  }, [isSoloTVMode]);
+  }, []);
+
+  const handleSetLayoutMode = (mode: 'list' | 'grid') => {
+    setLayoutMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('okekaraoke_song_layout', mode);
+    }
+  };
   const [loading, setLoading] = useState(true);
   const [searched, setSearched] = useState(false);
   const [reserveStatus, setReserveStatus] = useState<Record<string, { status: 'idle' | 'reserving' | 'success' | 'error'; message?: string }>>({});
@@ -87,24 +109,54 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
     return () => window.removeEventListener('okekaraoke_favorites_updated', handleFavUpdate);
   }, []);
 
-  // Fetch initial database catalog on mount
-  const fetchCatalog = useCallback(async () => {
-    setLoading(true);
+
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [hasMoreCatalog, setHasMoreCatalog] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Fetch initial database catalog on mount or load additional pages
+  const fetchCatalog = useCallback(async (pageToLoad = 1) => {
+    if (pageToLoad === 1) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const response = await fetch('/api/songs/search?limit=50');
+      const response = await fetch(`/api/songs/search?limit=50&page=${pageToLoad}`);
       const json = await response.json();
       if (json.success && Array.isArray(json.data?.songs)) {
-        setCatalog(json.data.songs);
+        if (pageToLoad === 1) {
+          setCatalog(json.data.songs);
+        } else {
+          setCatalog((prev) => {
+            const seen = new Set(prev.map((s) => s.id));
+            const newSongs = json.data.songs.filter((s: Song) => !seen.has(s.id));
+            return [...prev, ...newSongs];
+          });
+        }
+        setCatalogPage(pageToLoad);
+        if (json.data.songs.length < 50) {
+          setHasMoreCatalog(false);
+        }
+      } else {
+        setHasMoreCatalog(false);
       }
     } catch (err) {
       console.error('Failed to load songs catalog:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, []);
 
+  const handleLoadMore = () => {
+    if (loadingMore || !hasMoreCatalog) return;
+    fetchCatalog(catalogPage + 1);
+  };
+
   useEffect(() => {
-    fetchCatalog();
+    fetchCatalog(1);
   }, [fetchCatalog]);
 
   // Perform search when user types
@@ -148,7 +200,23 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
   const handleReserve = async (song: Song) => {
     if (!sessionId) return;
 
-    setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'reserving' } }));
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // Instant optimistic visual feedback on the button in 0ms
+    setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
+
+    // Instant 0ms optimistic addition to queue & Mine tab
+    onReserved(song, null, tempId);
+
+    // Auto-clear success feedback after 1.5s so button automatically reverts to RESERVE
+    setTimeout(() => {
+      setReserveStatus((prev) => {
+        if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
+        const next = { ...prev };
+        delete next[song.id];
+        return next;
+      });
+    }, 1500);
 
     try {
       const response = await fetch('/api/queue/reserve', {
@@ -169,12 +237,9 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
       const json = await response.json();
 
       if (json.success) {
-        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
-        onReserved();
-        setTimeout(() => {
-          setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
-        }, 3000);
+        onReserved(song, json.data, tempId);
       } else {
+        onReserveFailed?.(tempId);
         setReserveStatus((prev) => ({
           ...prev,
           [song.id]: { status: 'error', message: json.error?.message ?? 'Failed to reserve' },
@@ -184,10 +249,14 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
         }, 3000);
       }
     } catch {
+      onReserveFailed?.(tempId);
       setReserveStatus((prev) => ({
         ...prev,
         [song.id]: { status: 'error', message: 'Network error. Try again.' },
       }));
+      setTimeout(() => {
+        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
+      }, 3000);
     }
   };
 
@@ -210,7 +279,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
 
     try {
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
+        try { recognitionRef.current.stop(); } catch { }
       }
 
       const recognition = new SpeechRecognition();
@@ -270,7 +339,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
 
   const stopVoiceSearch = useCallback(() => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch {}
+      try { recognitionRef.current.stop(); } catch { }
     }
     setIsListening(false);
   }, []);
@@ -304,10 +373,9 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
             type="search"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
-            placeholder={isListening ? "Listening... Speak title or artist" : "Search songs, artists, code..."}
-            className={`w-full pl-9 pr-16 rounded-xl text-white placeholder-slate-500 transition-all ${
-              isSoloTVMode ? 'py-2 text-xs' : 'py-3 text-sm'
-            } ${isListening ? 'ring-2 ring-teal-400/80 bg-teal-950/20' : ''}`}
+            placeholder={isListening ? "Listening... Speak title or artist" : "Search 100K+ songs, artists, YouTube..."}
+            className={`w-full pl-9 pr-16 rounded-xl text-white placeholder-slate-500 transition-all ${isSoloTVMode ? 'py-2 text-xs' : 'py-3 text-sm'
+              } ${isListening ? 'ring-2 ring-teal-400/80 bg-teal-950/20' : ''}`}
             style={{
               background: isListening ? 'rgba(20, 184, 166, 0.08)' : 'var(--color-surface-2)',
               border: isListening ? '1px solid rgba(45, 212, 191, 0.5)' : '1px solid var(--color-border)',
@@ -339,11 +407,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
             <button
               type="button"
               onClick={toggleVoiceSearch}
-              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
-                isListening
-                  ? 'bg-red-500 text-white animate-pulse shadow-md scale-105'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-              }`}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${isListening
+                ? 'bg-red-500 text-white animate-pulse shadow-md scale-105'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                }`}
               aria-label={isListening ? 'Stop voice search' : 'Voice search with microphone'}
               title={isListening ? 'Stop voice search' : 'Voice search with microphone'}
             >
@@ -369,11 +436,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`rounded-full font-bold shrink-0 flex items-center gap-1 transition-all ${
-                  isSoloTVMode ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-                } ${isActive
-                  ? 'bg-white text-black font-extrabold shadow'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
+                className={`rounded-full font-bold shrink-0 flex items-center gap-1 transition-all ${isSoloTVMode ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
+                  } ${isActive
+                    ? 'bg-white text-black font-extrabold shadow'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
                   }`}
               >
                 <IconComponent size={isSoloTVMode ? 11 : 13} className={isActive ? 'text-black' : 'text-zinc-400'} />
@@ -388,31 +454,36 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
       <div className={`flex-1 overflow-y-auto pb-4 ${isSoloTVMode ? 'px-2.5' : 'px-4'}`}>
         {/* Header label & View Mode Toggle */}
         <div className="flex items-center justify-between py-1.5 mb-1.5">
-          <span className="text-[10px] font-extrabold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-            {searched
-              ? `Results (${filteredList.length})`
-              : activeFilter !== 'all'
-                ? `${activeFilter.toUpperCase()} (${filteredList.length})`
-                : `Available Songs (${filteredList.length})`}
-          </span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[10px] font-extrabold text-zinc-300 uppercase tracking-wider">
+              {searched
+                ? `Results (${filteredList.length})`
+                : activeFilter !== 'all'
+                  ? `${activeFilter.toUpperCase()} Hits`
+                  : 'Trending Hits'}
+            </span>
+            {!searched && activeFilter === 'all' && (
+              <span className="text-[9px] font-bold text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20 shrink-0">
+                100K+ Karaoke Songs
+              </span>
+            )}
+          </div>
 
           {/* Grid / List Layout Toggle */}
           <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0">
             <button
-              onClick={() => setLayoutMode('list')}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${
-                layoutMode === 'list' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
+              onClick={() => handleSetLayoutMode('list')}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'list' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
               title="1-Column Full Width List"
             >
               <List size={12} />
               <span className="hidden sm:inline">List</span>
             </button>
             <button
-              onClick={() => setLayoutMode('grid')}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${
-                layoutMode === 'grid' ? 'bg-zinc-800 text-teal-400 shadow' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
+              onClick={() => handleSetLayoutMode('grid')}
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'grid' ? 'bg-zinc-800 text-teal-400 shadow' : 'text-zinc-500 hover:text-zinc-300'
+                }`}
               title="2-Column Grid"
             >
               <LayoutGrid size={12} />
@@ -448,6 +519,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                 const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
                 const isFav = isSongFavorited(song);
                 const thumbnailUrl = song.thumbnail_url || (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : null);
+                const isAlreadyReserved =
+                  Boolean(reservedSongIds?.has(song.id)) ||
+                  Boolean(song.youtube_video_id && reservedSongIds?.has(song.youtube_video_id)) ||
+                  Boolean(song.code && reservedSongIds?.has(song.code));
 
                 return (
                   <div
@@ -456,8 +531,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                     style={{
                       borderColor:
                         songStatus.status === 'success'
-                          ? 'rgba(34, 197, 94, 0.5)'
-                          : undefined,
+                          ? 'rgba(45, 212, 191, 0.6)'
+                          : isAlreadyReserved
+                            ? 'rgba(45, 212, 191, 0.3)'
+                            : undefined,
                     }}
                   >
                     {/* Top: Thumbnail & Song Info */}
@@ -497,19 +574,27 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
 
                     {/* Bottom: Code & Reserve Button */}
                     <div className="flex items-center justify-between gap-1 mt-2 pt-1.5 border-t border-zinc-800/60">
-                      <span className="text-[9px] font-mono text-zinc-400 truncate">
-                        {song.code && song.code !== 'YT' ? `#${song.code}` : (song.song_type || 'Karaoke')}
-                      </span>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="text-[9px] font-mono text-zinc-400 truncate">
+                          {song.code && song.code !== 'YT' ? `#${song.code}` : (song.song_type || 'Karaoke')}
+                        </span>
+                        {isAlreadyReserved && (
+                          <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/25 shrink-0 flex items-center gap-0.5">
+                            <CheckCircle size={8} className="text-teal-400" />
+                            <span>Queued</span>
+                          </span>
+                        )}
+                      </div>
 
                       <button
                         id={`reserve-btn-${song.id}`}
                         onClick={() => handleReserve(song)}
                         disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-                        className={`shrink-0 px-2 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95 text-[10px] font-black tracking-wide shadow-sm ${
-                          songStatus.status === 'success'
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                            : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
-                        }`}
+                        className={`shrink-0 px-2 py-1 rounded-lg flex items-center gap-1 transition-all active:scale-95 text-[10px] font-black tracking-wide shadow-sm ${songStatus.status === 'success'
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                          : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-75'
+                          }`}
+                        title="Reserve song"
                       >
                         {songStatus.status === 'reserving' ? (
                           <Loader2 size={11} className="animate-spin text-black" />
@@ -537,6 +622,10 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                 const songStatus = reserveStatus[song.id] ?? { status: 'idle' };
                 const isFav = isSongFavorited(song);
                 const thumbnailUrl = song.thumbnail_url || (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : null);
+                const isAlreadyReserved =
+                  Boolean(reservedSongIds?.has(song.id)) ||
+                  Boolean(song.youtube_video_id && reservedSongIds?.has(song.youtube_video_id)) ||
+                  Boolean(song.code && reservedSongIds?.has(song.code));
 
                 return (
                   <div
@@ -544,8 +633,8 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                     className="flex items-center gap-2.5 p-2.5 rounded-xl transition-all bg-zinc-900 border border-zinc-800"
                     style={{
                       borderColor:
-                        songStatus.status === 'success'
-                          ? 'rgba(34, 197, 94, 0.4)'
+                        isAlreadyReserved || songStatus.status === 'success'
+                          ? 'rgba(45, 212, 191, 0.4)'
                           : 'rgba(255, 255, 255, 0.08)',
                     }}
                   >
@@ -596,6 +685,13 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                           <span className="text-xs text-zinc-400 font-mono">#{song.code}</span>
                         )}
 
+                        {isAlreadyReserved && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-400 border border-teal-500/25 shrink-0 flex items-center gap-1">
+                            <CheckCircle size={10} className="text-teal-400" />
+                            <span>Queued</span>
+                          </span>
+                        )}
+
                         {song.category && (song.category as string) !== 'YouTube' && (
                           <span className="text-xs text-zinc-400">· {song.category}</span>
                         )}
@@ -619,7 +715,7 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
                       disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
                       className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${songStatus.status === 'success'
                         ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                        : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-50'
+                        : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-75'
                         }`}
                       aria-label={`Reserve ${song.title}`}
                     >
@@ -645,6 +741,46 @@ export function SongSearch({ roomCode, sessionId, guestName, onReserved, isSoloT
               })}
             </div>
           )
+        )}
+
+        {/* Load More & Unlimited Songs Reassurance Banner */}
+        {!searched && !loading && filteredList.length > 0 && (
+          <div className="mt-4 pb-4 flex flex-col items-center gap-2.5">
+            {hasMoreCatalog ? (
+              <button
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="w-full py-2.5 px-4 rounded-xl font-bold text-xs bg-zinc-800/90 hover:bg-zinc-700/90 active:scale-[0.98] border border-zinc-700/60 text-zinc-200 transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+              >
+                {loadingMore ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin text-teal-400" />
+                    <span>Loading more songs...</span>
+                  </>
+                ) : (
+                  <>
+
+                    <span>Load More Songs</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <p className="text-[11px] text-zinc-500 font-medium text-center">
+                Showing {catalog.length} curated hits · Search 100K+ songs on YouTube
+              </p>
+            )}
+
+            {/* Reassurance Banner */}
+            <div className="w-full p-2.5 rounded-xl bg-gradient-to-r from-teal-950/30 via-zinc-900 to-indigo-950/30 border border-teal-500/20 text-center">
+              <p className="text-[11px] text-teal-300 font-semibold flex items-center justify-center gap-1.5">
+
+                <span>Can&apos;t find your song?</span>
+              </p>
+              <p className="text-[10px] text-zinc-400 mt-0.5">
+                Type any title, artist, or YouTube song in the search bar above to sing it!
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -279,6 +279,7 @@ export default function LandingPage() {
         localStorage.setItem('okekaraoke_solo_tv', 'true');
         router.push(`/remote/${room_code}?solotv=true`);
       } else {
+        localStorage.setItem('okekaraoke_solo_tv', 'false');
         router.push(`/remote/${room_code}`);
       }
     } catch {
@@ -393,9 +394,9 @@ export default function LandingPage() {
           )}
 
           {/* Clean Action Button & Mode Description */}
-          <div className="mb-4 sm:mb-5">
+          <div className="mb-4 sm:mb-5 transition-all duration-300">
             {selectedMode === 'solo' ? (
-              <div>
+              <div key="action-solo" className="animate-fade-in">
                 <button
                   id="create-solo-tv-btn"
                   onClick={handleCreateSoloTV}
@@ -405,12 +406,12 @@ export default function LandingPage() {
                   {creatingSolo ? (
                     <>
                       <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                      <span>STARTING SOLO TV...</span>
+                      <span>STARTING 1-DEVICE MODE...</span>
                     </>
                   ) : (
                     <>
                       <Smartphone className="w-4 h-4 stroke-[2.5]" />
-                      <span>CREATE SOLO TV ROOM</span>
+                      <span>START 1-DEVICE KARAOKE</span>
                     </>
                   )}
                 </button>
@@ -419,7 +420,7 @@ export default function LandingPage() {
                 </p>
               </div>
             ) : (
-              <div>
+              <div key="action-tv" className="animate-fade-in">
                 <button
                   id="create-room-btn"
                   onClick={handleCreate}
@@ -452,68 +453,84 @@ export default function LandingPage() {
             <div className="flex-1 h-px bg-slate-200" />
           </div>
 
-          {/* Rejoin Bar — Title on top, 3 compact buttons in 1 row */}
+          {/* Mode-Aware Rejoin Bar */}
           {(lastTvRoom || lastRoom) && (
-            <div className="mb-3 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-slate-100/80 border border-slate-200/80 flex flex-col gap-1.5 shadow-sm">
-              <div className="flex items-center justify-between px-0.5">
-                <div className="flex items-center gap-1 sm:gap-1.5">
-                  <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 shrink-0" />
-                  <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
-                    {lastTvRoom && lastRoom && lastTvRoom === lastRoom ? (
-                      <>Rejoin Room <span className="font-mono text-indigo-900 font-black tracking-wider lowercase">({lastRoom})</span></>
-                    ) : (
-                      <>Rejoin Recent Session</>
-                    )}
-                  </span>
+            <div className="mb-3 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-slate-100/80 border border-slate-200/80 flex flex-col gap-1.5 shadow-sm transition-all duration-300">
+              {selectedMode === 'tv' ? (
+                /* TV + Phone Mode Rejoin: ONLY TV and Remote buttons */
+                <div key="rejoin-tv" className="flex flex-col gap-1.5 animate-fade-in">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5">
+                      <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 shrink-0" />
+                      <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
+                        {lastTvRoom && lastRoom && lastTvRoom === lastRoom ? (
+                          <>Rejoin Room <span className="font-mono text-indigo-900 font-black tracking-wider lowercase">({lastRoom})</span></>
+                        ) : (
+                          <>Rejoin Recent Session</>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <button
+                      onClick={() => router.push(`/tv/${lastTvRoom || lastRoom}`)}
+                      className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-950 border border-teal-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                      title={`Resume TV Display (${lastTvRoom || lastRoom})`}
+                    >
+                      <Tv2 size={13} className="text-teal-700 shrink-0" />
+                      <span className="truncate">TV Display</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const targetRoom = lastRoom || lastTvRoom;
+                        setJoinCode(targetRoom || '');
+                        if (typeof window !== 'undefined') {
+                          localStorage.setItem('okekaraoke_solo_tv', 'false');
+                        }
+                        router.push(`/remote/${targetRoom}`);
+                      }}
+                      className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                      title={`Rejoin Phone Remote (${lastRoom || lastTvRoom})`}
+                    >
+                      <History size={13} className="text-indigo-700 shrink-0" />
+                      <span className="truncate">Phone Remote</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* 1-Device Mode Rejoin: ONLY 1-Device button */
+                <div key="rejoin-solo" className="flex flex-col gap-1.5 animate-fade-in">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5">
+                      <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 shrink-0" />
+                      <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
+                        Rejoin 1-Device Room <span className="font-mono text-teal-900 font-black tracking-wider lowercase">({lastRoom || lastTvRoom})</span>
+                      </span>
+                    </div>
+                  </div>
 
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                {lastTvRoom && (
                   <button
-                    onClick={() => router.push(`/tv/${lastTvRoom}`)}
-                    className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-950 border border-teal-400/40 text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 active:scale-95"
-                    title={`Resume TV Display (${lastTvRoom})`}
+                    onClick={() => {
+                      const targetRoom = lastRoom || lastTvRoom;
+                      localStorage.setItem('okekaraoke_solo_tv', 'true');
+                      router.push(`/remote/${targetRoom}?solotv=true`);
+                    }}
+                    className="w-full py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl bg-teal-400/20 hover:bg-teal-400/30 text-teal-950 border border-teal-400/60 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                    title={`Rejoin 1-Device Karaoke (${lastRoom || lastTvRoom})`}
                   >
-                    <Tv2 size={11} className="text-teal-700 shrink-0" />
-                    <span className="truncate">{lastTvRoom === lastRoom ? 'TV' : `TV ${lastTvRoom}`}</span>
+                    <Smartphone size={13} className="text-teal-700 shrink-0" />
+                    <span>REJOIN 1-DEVICE KARAOKE</span>
                   </button>
-                )}
-
-                {lastRoom && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setJoinCode(lastRoom);
-                        router.push(`/remote/${lastRoom}`);
-                      }}
-                      className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 active:scale-95"
-                      title={`Rejoin Phone Remote (${lastRoom})`}
-                    >
-                      <History size={11} className="text-indigo-700 shrink-0" />
-                      <span className="truncate">{lastTvRoom === lastRoom ? 'Remote' : `Remote ${lastRoom}`}</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        localStorage.setItem('okekaraoke_solo_tv', 'true');
-                        router.push(`/remote/${lastRoom}?solotv=true`);
-                      }}
-                      className="flex-1 py-1 sm:py-1.5 px-1.5 sm:px-2 rounded-lg sm:rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-950 border border-emerald-400/40 text-[10px] sm:text-xs font-bold transition-all flex items-center justify-center gap-1 active:scale-95"
-                      title={`Rejoin as Solo TV (${lastRoom})`}
-                    >
-                      <Smartphone size={11} className="text-emerald-700 shrink-0" />
-                      <span className="truncate">Solo TV</span>
-                    </button>
-                  </>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Join Room Form — Mode-Aware TV Display & Remote Room Code Launcher */}
           {selectedMode === 'tv' ? (
-            <form onSubmit={handleJoinTv} className="flex flex-col gap-2">
+            <form key="form-tv" onSubmit={handleJoinTv} className="flex flex-col gap-2 animate-fade-in">
               <div className="relative flex items-center">
                 <Tv2 className="w-4 h-4 sm:w-5 sm:h-5 absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
                 <input
@@ -560,7 +577,7 @@ export default function LandingPage() {
               </div>
             </form>
           ) : (
-            <form onSubmit={(e) => handleJoinRemote(e, true)} className="relative flex items-center">
+            <form key="form-solo" onSubmit={(e) => handleJoinRemote(e, true)} className="relative flex items-center animate-fade-in">
               <Wifi className="w-3.5 h-3.5 sm:w-5 sm:h-5 absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
               <input
                 id="join-code-input"
@@ -584,7 +601,7 @@ export default function LandingPage() {
                   </>
                 ) : (
                   <>
-                    <span>JOIN SOLO TV</span>
+                    <span>JOIN 1-DEVICE</span>
                     <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4" />
                   </>
                 )}
