@@ -161,8 +161,13 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
 
       const state = json.data as InstanceState;
       setInstanceState(state);
-      setCurrentSong(state.current_song);
-      currentSongRef.current = state.current_song;
+      if (state.current_song && skippedByRemoteRef.current.has(state.current_song.queue_item_id)) {
+        setCurrentSong(null);
+        currentSongRef.current = null;
+      } else {
+        setCurrentSong(state.current_song);
+        currentSongRef.current = state.current_song;
+      }
 
       if (state.current_song) {
         if (state.current_song.queue_item_id !== lastCountdownSongIdRef.current) {
@@ -506,6 +511,16 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           timestamp: Date.now(),
         });
       } else if (payload?.action === 'stop') {
+        if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
+          return;
+        }
+        if (payload?.queue_item_id) {
+          skippedByRemoteRef.current.add(payload.queue_item_id);
+        }
+        if (currentSongRef.current?.queue_item_id) {
+          skippedByRemoteRef.current.add(currentSongRef.current.queue_item_id);
+        }
+        setScoreModalData(null);
         try {
           playerRef.current?.stopVideo?.();
           playerRef.current?.pauseVideo?.();

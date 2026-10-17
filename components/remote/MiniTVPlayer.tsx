@@ -59,13 +59,23 @@ export function MiniTVPlayer({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
   const playerRef = useRef<YouTubePlayerRef | null>(null);
+  const skippedItemsRef = useRef<Set<string>>(new Set());
+  const justStoppedUntilRef = useRef<number>(0);
+  const currentSongRef = useRef(currentSong);
 
-  // Reset progress when current song changes
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+
+  // Reset progress and ensure playback active when current song changes
   useEffect(() => {
     setCurrentTime(0);
     setDuration(0);
     setIsScrubbing(false);
     setScrubValue(0);
+    if (currentSong?.queue_item_id) {
+      setIsPlaying(true);
+    }
   }, [currentSong?.queue_item_id]);
 
   const handleSeek = useCallback((newTime: number) => {
@@ -139,6 +149,10 @@ export function MiniTVPlayer({
   // Sync with realtime playback_control events
   const realtimeHandlers = useRef({
     playback_control: (payload: any) => {
+      // If queue_item_id is specified and doesn't match our current song, ignore stale command
+      if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
+        return;
+      }
       if (payload?.action === 'pause') {
         playerRef.current?.pauseVideo();
         setIsPlaying(false);
@@ -150,7 +164,20 @@ export function MiniTVPlayer({
         setIsPlaying(false);
       }
     },
-    song_skipped: () => {
+    song_started: (payload: any) => {
+      if (payload?.skipped_queue_item_id) {
+        skippedItemsRef.current.add(payload.skipped_queue_item_id);
+      }
+      if (currentSongRef.current?.queue_item_id) {
+        skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+      }
+      setIsPlaying(true);
+      onRefreshState();
+    },
+    song_skipped: (payload: any) => {
+      if (payload?.skipped_queue_item_id) {
+        skippedItemsRef.current.add(payload.skipped_queue_item_id);
+      }
       try { playerRef.current?.pauseVideo(); } catch { }
       onRefreshState();
     },
@@ -205,15 +232,30 @@ export function MiniTVPlayer({
     }
   }, [roomCode, sessionId, advancing, onRefreshState]);
 
-  // If active with no current song but queue has items, auto start
+  // If active with no current song but queue has items, auto start (guarded against stop transitions)
   useEffect(() => {
-    if (!currentSong && queue.length > 0 && !advancing) {
-      advanceQueue(null);
+    if (!currentSong && queue.length > 0 && !advancing && Date.now() > justStoppedUntilRef.current) {
+      const timer = setTimeout(() => {
+        if (!currentSongRef.current && queue.length > 0 && !advancing && Date.now() > justStoppedUntilRef.current) {
+          advanceQueue(null);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
     }
   }, [currentSong, queue.length, advancing, advanceQueue]);
 
   // Handle video finished
   const handleEnded = useCallback((completedQueueItemId: string) => {
+    if (!completedQueueItemId) return;
+    // If this song was already manually stopped or skipped, do not advance queue again
+    if (skippedItemsRef.current.has(completedQueueItemId)) {
+      skippedItemsRef.current.delete(completedQueueItemId);
+      return;
+    }
+    // Protect against stale ended events from previously stopped song
+    if (currentSongRef.current?.queue_item_id && completedQueueItemId !== currentSongRef.current.queue_item_id) {
+      return;
+    }
     advanceQueue(completedQueueItemId);
   }, [advanceQueue]);
 
@@ -221,6 +263,10 @@ export function MiniTVPlayer({
   const handleSkip = useCallback(async () => {
     if (advancing) return;
     setAdvancing(true);
+    justStoppedUntilRef.current = Date.now() + 3000;
+    if (currentSongRef.current?.queue_item_id) {
+      skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+    }
     // Instant local pause in 0ms — no delay waiting for network
     try {
       playerRef.current?.pauseVideo();
@@ -289,6 +335,10 @@ export function MiniTVPlayer({
 
   // Immediate local stop in 0ms without duplicate network requests
   const stopLocal = useCallback(() => {
+    justStoppedUntilRef.current = Date.now() + 3000;
+    if (currentSongRef.current?.queue_item_id) {
+      skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+    }
     try {
       playerRef.current?.pauseVideo();
       setIsPlaying(false);

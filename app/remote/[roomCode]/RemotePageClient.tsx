@@ -348,6 +348,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     };
   }, [fetchState]);
 
+  const currentSongRef = useRef<EnrichedQueueItem | null>(null);
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+
   // Realtime handlers with instant state updates from payload
   const realtimeHandlers = useRef({
     queue_added: (payload: any) => {
@@ -427,13 +432,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
       fetchState();
     },
-    song_skipped: () => {
+    song_skipped: (payload?: any) => {
+      if (payload?.skipped_queue_item_id && currentSongRef.current?.queue_item_id && payload.skipped_queue_item_id !== currentSongRef.current.queue_item_id) {
+        fetchState();
+        return;
+      }
       setCurrentSong(null);
       setIsPaused(false);
       setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
       fetchState();
     },
     playback_control: (payload: any) => {
+      if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
+        return;
+      }
       if (payload?.action === 'pause') {
         setIsPaused(true);
         setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: false }));
@@ -786,6 +798,60 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     [roomCode, sessionId, guestName]
   );
 
+  const handleStopSong = useCallback(
+    async (queueItemId: string) => {
+      // 1. Instant 0ms local stop in Solo 1-Device mode
+      if (isSoloTVMode) {
+        soloPlaybackControlsRef.current?.stopSong?.();
+        setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      }
+
+      // 2. Instant 0ms WebSocket broadcast directly to TV screen and room peers
+      broadcastRef.current?.('playback_control', {
+        type: 'playback_control',
+        action: 'stop',
+        queue_item_id: queueItemId,
+        guest_session_id: sessionId,
+        guest_name: guestName,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 3. Instant 0ms optimistic advance to next song (or null if empty)
+      setIsPaused(false);
+      if (queue.length > 0) {
+        const nextSong = queue[0];
+        setCurrentSong({ ...nextSong, status: 'playing' });
+        setQueue((prev) => prev.slice(1));
+        setTvPlaybackProgress({
+          currentTime: 0,
+          duration: nextSong.song?.duration_seconds || 0,
+          isPlaying: true,
+        });
+      } else {
+        setCurrentSong(null);
+        setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      }
+
+      // 4. Background non-blocking sync with database
+      try {
+        fetch('/api/queue/skip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            session_id: sessionId,
+            queue_item_id: queueItemId,
+          }),
+        })
+          .then(() => fetchState())
+          .catch((err) => console.error('[Stop Song Error]:', err));
+      } catch (err) {
+        console.error('[Stop Song Error]:', err);
+      }
+    },
+    [isSoloTVMode, queue, roomCode, sessionId, guestName, fetchState]
+  );
+
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = statusConfig[connectionStatus];
 
   if (error) {
@@ -1010,7 +1076,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Tab content — relative so emoji overlay stacks correctly */}
       <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-        <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'search' ? 'block' : 'none' }}>
+        <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'search' ? 'flex' : 'none' }}>
           <SongSearch
             roomCode={roomCode}
             sessionId={sessionId}
@@ -1052,6 +1118,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             playbackProgress={activePlaybackProgress}
             onRestartSong={handleRestartSong}
             onSeekSong={handleSeekSong}
+            onStopSong={handleStopSong}
           />
         </div>
         <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'queue' ? 'block' : 'none' }}>

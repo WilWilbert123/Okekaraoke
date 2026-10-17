@@ -41,6 +41,7 @@ interface MyReservationsProps {
   };
   onRestartSong?: (queueItemId: string) => Promise<void> | void;
   onSeekSong?: (queueItemId: string, seconds: number) => Promise<void> | void;
+  onStopSong?: (queueItemId: string) => Promise<void> | void;
 }
 
 const statusColors = {
@@ -70,11 +71,12 @@ export function MyReservations({
   playbackProgress,
   onRestartSong,
   onSeekSong,
+  onStopSong,
 }: MyReservationsProps) {
   const [activeTab, setActiveTab] = useState<'reservations' | 'favorites' | 'history'>('reservations');
   const [favorites, setFavorites] = useState<Song[]>([]);
   const [history, setHistory] = useState<SongHistoryItem[]>([]);
-  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [optimisticallyStoppedIds, setOptimisticallyStoppedIds] = useState<Set<string>>(new Set());
   const [restartingId, setRestartingId] = useState<string | null>(null);
   const [controllingId, setControllingId] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
@@ -176,6 +178,13 @@ export function MyReservations({
     }
   }, [propIsPaused]);
 
+  // Reset local playback controls when the currently playing song changes
+  useEffect(() => {
+    setLocalPaused(false);
+    setLocalCurrentTime(0);
+    setScrubTime(0);
+  }, [currentSongId]);
+
   const isPaused = propIsPaused !== undefined ? propIsPaused : localPaused;
 
   // Ensure unique reservations list by queue_item_id to prevent duplicate keys and duplicate entries
@@ -183,11 +192,25 @@ export function MyReservations({
     const seen = new Set<string>();
     return reservations.filter(item => {
       const id = item.queue_item_id;
-      if (!id || seen.has(id)) return false;
+      if (!id || seen.has(id) || optimisticallyStoppedIds.has(id)) return false;
       seen.add(id);
       return true;
     });
-  }, [reservations]);
+  }, [reservations, optimisticallyStoppedIds]);
+
+  // Clean up any stale stopped IDs that are no longer in reservations
+  useEffect(() => {
+    if (optimisticallyStoppedIds.size > 0) {
+      const currentIds = new Set(reservations.map((r) => r.queue_item_id));
+      setOptimisticallyStoppedIds((prev) => {
+        const next = new Set<string>();
+        prev.forEach((id) => {
+          if (currentIds.has(id)) next.add(id);
+        });
+        return next.size === prev.size ? prev : next;
+      });
+    }
+  }, [reservations, optimisticallyStoppedIds.size]);
 
   // Sync favorites on mount & storage update
   useEffect(() => {
@@ -273,19 +296,32 @@ export function MyReservations({
     }
   };
 
-  // Stop own currently playing song and advance to next song (instantaneous 0ms stop)
+  // Stop own currently playing song and advance to next song (instantaneous 0ms realtime stop)
   const handleStopMySong = async (queueItemId: string) => {
     if (!sessionId) return;
-    setStoppingId(queueItemId);
     setControlError(null);
 
-    // Instant local stop in 0ms if in 1-Device mode
+    // 1. Instant 0ms optimistic removal from active playing reservations (no loading delay!)
+    setOptimisticallyStoppedIds((prev) => new Set(prev).add(queueItemId));
+
+    // 2. Instant 0ms local stop in 1-Device mode
     if (isSoloTVMode && onSoloStop) {
       onSoloStop();
     }
 
+    // 3. Delegate to parent's realtime stop handler (broadcasts via WebSocket to TV in 0ms)
+    if (onStopSong) {
+      try {
+        await onStopSong(queueItemId);
+      } catch (err) {
+        console.error('[handleStopMySong error]', err);
+      }
+      return;
+    }
+
+    // 4. Fallback if onStopSong not provided
     try {
-      const response = await fetch('/api/queue/skip', {
+      fetch('/api/queue/skip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -293,17 +329,11 @@ export function MyReservations({
           session_id: sessionId,
           queue_item_id: queueItemId,
         }),
-      });
-      const json = await response.json();
-      if (json.success || json.error?.code === 'NOTHING_PLAYING') {
-        onCancelled();
-      } else {
-        setControlError(json.error?.message ?? 'Could not stop this song.');
-      }
+      })
+        .then(() => onCancelled())
+        .catch((err) => setControlError(`Network error: ${err}`));
     } catch (err) {
       setControlError(`Network error: ${err}`);
-    } finally {
-      setStoppingId(null);
     }
   };
 
@@ -560,7 +590,6 @@ export function MyReservations({
               const isPlaying = item.status === 'playing' || Boolean(currentSongId && item.queue_item_id === currentSongId);
               const effectiveStatus = isPlaying ? 'playing' : (item.status ?? 'queued');
               const statusStyle = statusColors[effectiveStatus] ?? statusColors.queued;
-              const isStopping = stoppingId === item.queue_item_id;
               const isRestarting = restartingId === item.queue_item_id;
               const isControlling = controllingId === item.queue_item_id;
 
@@ -687,11 +716,10 @@ export function MyReservations({
                             )}
                           </button>
 
-                          {/* Stop button (Icon only) */}
+                          {/* Stop button (Icon only) - 0ms Realtime Stop */}
                           <button
                             id={`stop-btn-${item.queue_item_id}`}
                             onClick={() => handleStopMySong(item.queue_item_id)}
-                            disabled={isStopping}
                             className="w-8 h-8 rounded-lg flex items-center justify-center transition-all active:scale-95 disabled:opacity-50 shrink-0"
                             style={{
                               background: 'rgba(239, 68, 68, 0.15)',
@@ -701,11 +729,7 @@ export function MyReservations({
                             title="Stop your song on TV"
                             aria-label={`Stop playing ${item.song.title}`}
                           >
-                            {isStopping ? (
-                              <Loader2 size={13} className="animate-spin text-red-400" />
-                            ) : (
-                              <Square size={12} className="fill-red-500 text-red-500" />
-                            )}
+                            <Square size={12} className="fill-red-500 text-red-500" />
                           </button>
                         </>
                       )}
