@@ -119,7 +119,7 @@ export function TransferRoomModal({
               <span>Transfer to TV Screen</span>
               <Sparkles size={14} className="text-amber-400" />
             </h3>
-            <p className="text-xs text-zinc-400 font-medium">Move from Solo Phone TV to Big TV Display</p>
+            <p className="text-xs text-zinc-400 font-medium">Move from 1-Device (Phone) to Big TV Display</p>
           </div>
         </div>
 

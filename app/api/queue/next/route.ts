@@ -5,6 +5,7 @@
 
 import { NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { broadcastRealtime } from '@/lib/supabase/realtime';
 import { apiSuccess, apiError, validateRoomCode, validateSessionId, validateUUID } from '@/lib/utils/apiHelpers';
 
 export async function POST(request: NextRequest) {
@@ -77,50 +78,57 @@ export async function POST(request: NextRequest) {
 
     // Broadcast appropriate events in real time to all room participants
     if (hasNextSong) {
-      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-        type: 'broadcast',
-        event: 'song_started',
-        payload: {
-          type: 'song_started',
-          instance_id: instance.id,
-          room_code: normalizedCode,
-          queue_item_id: resultRow.next_queue_item_id,
-          song_id: resultRow.next_song_id,
-          youtube_video_id: resultRow.next_youtube_video_id,
-          guest_name: resultRow.next_guest_name,
-          position: resultRow.next_position,
-          timestamp: new Date().toISOString(),
-        },
+      let nextGuestSessionId = '';
+      let nextSongTitle = '';
+      let nextSongArtist = '';
+      let nextThumbnailUrl = '';
+
+      const { data: nextItemData } = await supabase
+        .from('queue_items')
+        .select('guest_session_id, songs(title, artist, thumbnail_url)')
+        .eq('id', resultRow.next_queue_item_id)
+        .maybeSingle();
+
+      if (nextItemData) {
+        nextGuestSessionId = nextItemData.guest_session_id || '';
+        const songObj = Array.isArray(nextItemData.songs) ? nextItemData.songs[0] : nextItemData.songs;
+        nextSongTitle = (songObj as any)?.title || '';
+        nextSongArtist = (songObj as any)?.artist || '';
+        nextThumbnailUrl = (songObj as any)?.thumbnail_url || '';
+      }
+
+      await broadcastRealtime(normalizedCode, 'song_started', {
+        type: 'song_started',
+        instance_id: instance.id,
+        room_code: normalizedCode,
+        queue_item_id: resultRow.next_queue_item_id,
+        song_id: resultRow.next_song_id,
+        song_title: nextSongTitle,
+        song_artist: nextSongArtist,
+        thumbnail_url: nextThumbnailUrl,
+        youtube_video_id: resultRow.next_youtube_video_id,
+        guest_name: resultRow.next_guest_name,
+        guest_session_id: nextGuestSessionId,
+        position: resultRow.next_position,
+        timestamp: new Date().toISOString(),
       });
-      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-        type: 'broadcast',
-        event: 'queue_updated',
-        payload: {
-          instance_id: instance.id,
-          room_code: normalizedCode,
-          timestamp: new Date().toISOString(),
-        },
+      await broadcastRealtime(normalizedCode, 'queue_updated', {
+        instance_id: instance.id,
+        room_code: normalizedCode,
+        timestamp: new Date().toISOString(),
       });
     } else {
-      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-        type: 'broadcast',
-        event: 'song_finished',
-        payload: {
-          type: 'song_finished',
-          instance_id: instance.id,
-          room_code: normalizedCode,
-          queue_item_id: completed_queue_item_id ?? null,
-          timestamp: new Date().toISOString(),
-        },
+      await broadcastRealtime(normalizedCode, 'song_finished', {
+        type: 'song_finished',
+        instance_id: instance.id,
+        room_code: normalizedCode,
+        queue_item_id: completed_queue_item_id ?? null,
+        timestamp: new Date().toISOString(),
       });
-      await supabase.channel(`okekaraoke:instance:${normalizedCode}`).send({
-        type: 'broadcast',
-        event: 'queue_updated',
-        payload: {
-          instance_id: instance.id,
-          room_code: normalizedCode,
-          timestamp: new Date().toISOString(),
-        },
+      await broadcastRealtime(normalizedCode, 'queue_updated', {
+        instance_id: instance.id,
+        room_code: normalizedCode,
+        timestamp: new Date().toISOString(),
       });
     }
 

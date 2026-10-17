@@ -8,7 +8,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Tv, Play, Pause, SkipForward, RotateCcw, Volume2, VolumeX, Maximize2, Minimize2, ChevronUp, ChevronDown, X, Mic2, Music, Sparkles, ExternalLink } from 'lucide-react';
+import { Tv, Smartphone, Play, Pause, SkipForward, RotateCcw, Volume2, VolumeX, Maximize2, Minimize2, ChevronUp, ChevronDown, X, Mic2, Music, Sparkles, ExternalLink } from 'lucide-react';
 import { YouTubePlayer, type YouTubePlayerRef } from '@/components/tv/YouTubePlayer';
 import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 import { useRealtime } from '@/hooks/useRealtime';
@@ -22,6 +22,20 @@ interface MiniTVPlayerProps {
   onClose: () => void;
   onRefreshState: () => void;
   onOpenTransferModal?: () => void;
+  onProgressChange?: (progress: { currentTime: number; duration: number; isPlaying: boolean }) => void;
+  onRegisterControls?: (controls: {
+    seekTo: (sec: number) => void;
+    restartSong: () => void;
+    togglePlay: () => void;
+    stopSong?: () => void;
+  } | null) => void;
+}
+
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 export function MiniTVPlayer({
@@ -32,13 +46,55 @@ export function MiniTVPlayer({
   onClose,
   onRefreshState,
   onOpenTransferModal,
+  onProgressChange,
+  onRegisterControls,
 }: MiniTVPlayerProps) {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isFullVideo, setIsFullVideo] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [advancing, setAdvancing] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [scrubValue, setScrubValue] = useState(0);
   const playerRef = useRef<YouTubePlayerRef | null>(null);
+
+  // Reset progress when current song changes
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+    setIsScrubbing(false);
+    setScrubValue(0);
+  }, [currentSong?.queue_item_id]);
+
+  const handleSeek = useCallback((newTime: number) => {
+    playerRef.current?.seekTo(newTime);
+    playerRef.current?.playVideo();
+    setIsPlaying(true);
+    setCurrentTime(newTime);
+    setScrubValue(newTime);
+  }, []);
+
+  const handleRestart = useCallback(() => {
+    playerRef.current?.seekTo(0);
+    playerRef.current?.playVideo();
+    setCurrentTime(0);
+    setScrubValue(0);
+    setIsPlaying(true);
+  }, []);
+
+  const handleProgress = useCallback((cur: number, dur: number) => {
+    if (!isScrubbing) {
+      setCurrentTime(cur);
+      setDuration(dur);
+    }
+    onProgressChange?.({
+      currentTime: isScrubbing ? scrubValue : cur,
+      duration: dur,
+      isPlaying,
+    });
+  }, [isScrubbing, scrubValue, isPlaying, onProgressChange]);
 
   // Toggle in-app fullscreen video mode without leaving the app
   const toggleFullscreenVideo = () => {
@@ -89,7 +145,18 @@ export function MiniTVPlayer({
       } else if (payload?.action === 'resume') {
         playerRef.current?.playVideo();
         setIsPlaying(true);
+      } else if (payload?.action === 'stop') {
+        playerRef.current?.pauseVideo();
+        setIsPlaying(false);
       }
+    },
+    song_skipped: () => {
+      try { playerRef.current?.pauseVideo(); } catch {}
+      onRefreshState();
+    },
+    song_finished: () => {
+      try { playerRef.current?.pauseVideo(); } catch {}
+      onRefreshState();
     },
   }).current;
 
@@ -113,7 +180,7 @@ export function MiniTVPlayer({
           room_code: roomCode,
           guest_session_id: sessionId,
           device_type: 'tv',
-          guest_name: 'Solo Phone TV',
+          guest_name: '1-Device (Phone)',
         }),
       }).catch(() => {});
 
@@ -150,10 +217,16 @@ export function MiniTVPlayer({
     advanceQueue(completedQueueItemId);
   }, [advanceQueue]);
 
-  // Skip manually
-  const handleSkip = async () => {
+  // Skip / Stop manually (instantaneous 0ms stop)
+  const handleSkip = useCallback(async () => {
     if (advancing) return;
     setAdvancing(true);
+    // Instant local pause in 0ms — no delay waiting for network
+    try {
+      playerRef.current?.pauseVideo();
+      setIsPlaying(false);
+    } catch {}
+
     try {
       await fetch('/api/queue/skip', {
         method: 'POST',
@@ -170,12 +243,22 @@ export function MiniTVPlayer({
     } finally {
       setAdvancing(false);
     }
-  };
+  }, [advancing, currentSong?.queue_item_id, onRefreshState, roomCode, sessionId]);
 
-  // Toggle play/pause (calls /api/queue/control so Real TV & all remotes stay in sync)
-  const togglePlay = async () => {
+  // Toggle play/pause (instantaneous 0ms update with background sync)
+  const togglePlay = useCallback(async () => {
     if (!currentSong) return;
     const targetAction = isPlaying ? 'pause' : 'resume';
+
+    // Instant optimistic update in 0ms!
+    if (targetAction === 'pause') {
+      playerRef.current?.pauseVideo();
+      setIsPlaying(false);
+    } else {
+      playerRef.current?.playVideo();
+      setIsPlaying(true);
+    }
+
     try {
       const res = await fetch('/api/queue/control', {
         method: 'POST',
@@ -188,27 +271,44 @@ export function MiniTVPlayer({
         }),
       });
       const json = await res.json();
-      if (json.success) {
+      if (!json.success) {
+        // Revert on permission failure
         if (targetAction === 'pause') {
-          playerRef.current?.pauseVideo();
-          setIsPlaying(false);
-        } else {
           playerRef.current?.playVideo();
           setIsPlaying(true);
+        } else {
+          playerRef.current?.pauseVideo();
+          setIsPlaying(false);
         }
-      } else {
         alert(json.error?.message ?? 'Only the singer who reserved this song can pause it.');
       }
     } catch {
-      if (isPlaying) {
-        playerRef.current?.pauseVideo();
-        setIsPlaying(false);
-      } else {
-        playerRef.current?.playVideo();
-        setIsPlaying(true);
-      }
+      // Network hiccup - maintain current state
     }
-  };
+  }, [currentSong, isPlaying, roomCode, sessionId]);
+
+  // Immediate local stop in 0ms without duplicate network requests
+  const stopLocal = useCallback(() => {
+    try {
+      playerRef.current?.pauseVideo();
+      setIsPlaying(false);
+    } catch {}
+  }, []);
+
+  // Register controls to parent (e.g. RemotePageClient / RemoteQueue)
+  useEffect(() => {
+    if (onRegisterControls) {
+      onRegisterControls({
+        seekTo: handleSeek,
+        restartSong: handleRestart,
+        togglePlay,
+        stopSong: stopLocal,
+      });
+      return () => {
+        onRegisterControls(null);
+      };
+    }
+  }, [onRegisterControls, handleSeek, handleRestart, togglePlay, stopLocal]);
 
   const videoId = currentSong?.song.youtube_video_id ?? null;
   const queueItemId = currentSong?.queue_item_id ?? null;
@@ -230,8 +330,8 @@ export function MiniTVPlayer({
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-500/30 border border-teal-400/50 text-teal-300 font-black text-[10px] tracking-wider uppercase shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping" />
-              <Tv size={11} className="text-teal-400" />
-              <span>SOLO TV FULLSCREEN</span>
+              <Smartphone size={11} className="text-teal-400" />
+              <span>1 DEVICE FULLSCREEN</span>
             </div>
 
             {currentSong && (
@@ -246,9 +346,9 @@ export function MiniTVPlayer({
             <button
               onClick={navigateToTvPage}
               className="px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700 text-teal-400 hover:text-teal-300 font-extrabold text-[11px] flex items-center gap-1 active:scale-95 transition-all"
-              title="Go to TV Page (In App)"
+              title="Open dedicated TV Display page"
             >
-              <span>TV Page</span>
+              <span>TV Display</span>
               <ExternalLink size={11} />
             </button>
 
@@ -266,8 +366,8 @@ export function MiniTVPlayer({
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 font-extrabold text-[10px] tracking-wider uppercase shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping" />
-              <Tv size={11} className="text-teal-400" />
-              <span>SOLO TV MODE</span>
+              <Smartphone size={11} className="text-teal-400" />
+              <span>1 DEVICE MODE</span>
             </div>
 
             {currentSong && (
@@ -283,7 +383,7 @@ export function MiniTVPlayer({
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all active:scale-95"
-              title={isCollapsed ? 'Expand TV Video' : 'Collapse TV Video'}
+              title={isCollapsed ? 'Expand Video' : 'Collapse Video'}
             >
               {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
@@ -297,11 +397,11 @@ export function MiniTVPlayer({
               <Maximize2 size={13} />
             </button>
 
-            {/* Close Solo TV Mode */}
+            {/* Close 1-Device Mode */}
             <button
               onClick={onClose}
               className="p-1 rounded-lg bg-zinc-900 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 transition-all active:scale-95 ml-1"
-              title="Turn Off Solo TV Mode"
+              title="Turn Off 1-Device Mode"
             >
               <X size={14} />
             </button>
@@ -329,6 +429,8 @@ export function MiniTVPlayer({
               if (state.status === 'playing') setIsPlaying(true);
               if (state.status === 'paused') setIsPlaying(false);
             }}
+            onProgress={handleProgress}
+            cropOverlays={true}
             autoplay={true}
             className="w-full h-full object-cover"
           />
@@ -340,11 +442,12 @@ export function MiniTVPlayer({
               <Mic2 size={24} className="text-teal-400" />
             </div>
             <h3 className="text-sm font-extrabold text-white mb-1 flex items-center gap-1.5">
-              <span>Solo TV Ready</span>
+              <Smartphone size={15} className="text-teal-400" />
+              <span>1-Device Mode Ready</span>
               <Sparkles size={14} className="text-amber-400" />
             </h3>
             <p className="text-[11px] text-zinc-400 max-w-[280px]">
-              Search & reserve any song below on your phone to start playing YouTube karaoke video right here!
+              Sing right on your phone! Search &amp; reserve any song below to play video and lyrics directly on this 1 device (No TV required).
             </p>
             {queue.length > 0 && (
               <button
@@ -359,17 +462,8 @@ export function MiniTVPlayer({
           </div>
         )}
 
-        {/* Singer overlay badge */}
-        {currentSong?.guest_name && (
-          <div className="absolute top-2 left-2 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-white/10 text-[10px] font-black text-white flex items-center gap-1.5 z-10 shadow-lg pointer-events-none">
-            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-            <span>SINGING:</span>
-            <span className="text-teal-300 font-extrabold">{currentSong.guest_name}</span>
-          </div>
-        )}
-
         {/* Real-time Audio Spectrum Visualizer */}
-        <div className={`absolute left-0 right-0 z-10 pointer-events-none ${isFullVideo ? 'bottom-16' : 'bottom-0'}`}>
+        <div className={`absolute left-0 right-0 z-10 pointer-events-none ${isFullVideo ? 'bottom-24' : 'bottom-0'}`}>
           <AudioVisualizer
             isPlaying={isPlaying && !!currentSong}
             barCount={isFullVideo ? 42 : 30}
@@ -378,53 +472,148 @@ export function MiniTVPlayer({
         </div>
       </div>
 
+      {/* ── REAL-TIME PLAYBACK PROGRESS SCRUBBER (Standard Mode) ── */}
+      {currentSong && duration > 0 && !isCollapsed && !isFullVideo && (
+        <div className="px-3 py-1 bg-zinc-950/95 border-t border-zinc-800/60 flex items-center gap-2 select-none">
+          <span className="text-[10px] font-mono font-bold text-teal-400 shrink-0 w-8 text-right">
+            {formatTime(isScrubbing ? scrubValue : currentTime)}
+          </span>
+          <div className="flex-1 relative flex items-center group cursor-pointer py-1">
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              step={0.5}
+              value={isScrubbing ? scrubValue : currentTime}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                setScrubValue(val);
+              }}
+              onMouseDown={() => {
+                setIsScrubbing(true);
+                setScrubValue(currentTime);
+              }}
+              onTouchStart={() => {
+                setIsScrubbing(true);
+                setScrubValue(currentTime);
+              }}
+              onMouseUp={() => {
+                setIsScrubbing(false);
+                handleSeek(scrubValue);
+              }}
+              onTouchEnd={() => {
+                setIsScrubbing(false);
+                handleSeek(scrubValue);
+              }}
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-teal-400 focus:outline-none focus:ring-0 active:h-2 transition-all"
+            />
+          </div>
+          <span className="text-[10px] font-mono text-zinc-500 shrink-0 w-8">
+            {formatTime(duration)}
+          </span>
+        </div>
+      )}
+
       {/* ── BOTTOM CONTROLS BAR ── */}
       {isFullVideo ? (
-        <div className="absolute bottom-0 left-0 right-0 z-30 px-4 py-3 bg-gradient-to-t from-black/95 via-black/60 to-transparent flex items-center justify-between gap-3 pointer-events-auto backdrop-blur-sm">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={togglePlay}
-              disabled={!currentSong}
-              className="w-9 h-9 rounded-full bg-teal-500 hover:bg-teal-400 text-black flex items-center justify-center transition-all disabled:opacity-40 active:scale-90 shadow-lg shrink-0"
-              title={isPlaying ? 'Pause' : 'Play'}
-            >
-              {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
-            </button>
-
-            <button
-              onClick={handleSkip}
-              disabled={!currentSong || advancing}
-              className="p-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-white transition-all disabled:opacity-40 active:scale-90 shrink-0"
-              title="Skip Song"
-            >
-              <SkipForward size={16} />
-            </button>
-
-            <div className="truncate text-xs min-w-0">
-              {currentSong ? (
-                <p className="truncate font-bold text-white text-sm">
-                  {currentSong.song.title}
-                  <span className="text-zinc-400 font-normal"> · {currentSong.song.artist}</span>
-                </p>
-              ) : (
-                <p className="text-xs text-zinc-500">No song playing</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {queue.length > 0 && (
-              <span className="text-xs font-extrabold text-teal-400 bg-teal-500/20 border border-teal-500/40 px-2.5 py-1 rounded-lg font-mono">
-                UP NEXT: {queue.length}
+        <div className="absolute bottom-0 left-0 right-0 z-30 px-4 py-3 bg-gradient-to-t from-black/95 via-black/80 to-transparent flex flex-col gap-2 pointer-events-auto backdrop-blur-sm">
+          {/* Fullscreen Progress Scrubber */}
+          {currentSong && duration > 0 && (
+            <div className="flex items-center gap-2.5 w-full select-none">
+              <span className="text-xs font-mono font-bold text-teal-400 shrink-0 w-9 text-right">
+                {formatTime(isScrubbing ? scrubValue : currentTime)}
               </span>
-            )}
-            <button
-              onClick={toggleFullscreenVideo}
-              className="px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-            >
-              <Minimize2 size={14} />
-              <span>Exit Fullscreen</span>
-            </button>
+              <div className="flex-1 relative flex items-center py-1">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 100}
+                  step={0.5}
+                  value={isScrubbing ? scrubValue : currentTime}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setScrubValue(val);
+                  }}
+                  onMouseDown={() => {
+                    setIsScrubbing(true);
+                    setScrubValue(currentTime);
+                  }}
+                  onTouchStart={() => {
+                    setIsScrubbing(true);
+                    setScrubValue(currentTime);
+                  }}
+                  onMouseUp={() => {
+                    setIsScrubbing(false);
+                    handleSeek(scrubValue);
+                  }}
+                  onTouchEnd={() => {
+                    setIsScrubbing(false);
+                    handleSeek(scrubValue);
+                  }}
+                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-teal-400 focus:outline-none focus:ring-0 active:h-2.5 transition-all"
+                />
+              </div>
+              <span className="text-xs font-mono text-zinc-400 shrink-0 w-9">
+                {formatTime(duration)}
+              </span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <button
+                onClick={togglePlay}
+                disabled={!currentSong}
+                className="w-9 h-9 rounded-full bg-teal-500 hover:bg-teal-400 text-black flex items-center justify-center transition-all disabled:opacity-40 active:scale-90 shadow-lg shrink-0"
+                title={isPlaying ? 'Pause' : 'Play'}
+              >
+                {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+              </button>
+
+              <button
+                onClick={handleRestart}
+                disabled={!currentSong}
+                className="p-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-teal-400 hover:text-teal-300 transition-all disabled:opacity-40 active:scale-90 shrink-0"
+                title="Restart Song from Beginning (0:00)"
+              >
+                <RotateCcw size={16} />
+              </button>
+
+              <button
+                onClick={handleSkip}
+                disabled={!currentSong || advancing}
+                className="p-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-white transition-all disabled:opacity-40 active:scale-90 shrink-0"
+                title="Skip Song"
+              >
+                <SkipForward size={16} />
+              </button>
+
+              <div className="truncate text-xs min-w-0">
+                {currentSong ? (
+                  <p className="truncate font-bold text-white text-sm">
+                    {currentSong.song.title}
+                    <span className="text-zinc-400 font-normal"> · {currentSong.song.artist}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-zinc-500">No song playing</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {queue.length > 0 && (
+                <span className="text-xs font-extrabold text-teal-400 bg-teal-500/20 border border-teal-500/40 px-2.5 py-1 rounded-lg font-mono">
+                  UP NEXT: {queue.length}
+                </span>
+              )}
+              <button
+                onClick={toggleFullscreenVideo}
+                className="px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-zinc-700 text-zinc-300 hover:text-white text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+              >
+                <Minimize2 size={14} />
+                <span>Exit Fullscreen</span>
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -437,6 +626,15 @@ export function MiniTVPlayer({
               title={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
+            </button>
+
+            <button
+              onClick={handleRestart}
+              disabled={!currentSong}
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-teal-400 hover:text-teal-300 transition-all disabled:opacity-40 active:scale-90 shrink-0"
+              title="Restart Song from Beginning (0:00)"
+            >
+              <RotateCcw size={13} />
             </button>
 
             <button

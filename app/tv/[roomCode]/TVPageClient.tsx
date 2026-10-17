@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Smartphone, RotateCw, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Smartphone, RotateCw, X, Maximize2, Minimize2, Pause } from 'lucide-react';
 import { TVHeader } from '@/components/tv/TVHeader';
 import { TVBanner } from '@/components/tv/TVBanner';
 import { TVQueue } from '@/components/tv/TVQueue';
@@ -353,12 +353,14 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
   }, [handleSongEnded]);
 
 
+  const broadcastRef = useRef<((event: string, payload: Record<string, unknown>) => void) | null>(null);
+
   // Realtime subscriptions
   const realtimeHandlers = useRef({
-    queue_added: () => {
+    queue_added: (payload: any) => {
       fetchStateRef.current();
-      if (!currentSongRef.current) {
-        setTimeout(() => autoStartQueueRef.current(), 300);
+      if (!currentSongRef.current && !advancingRef.current && payload?.position === 1) {
+        autoStartQueueRef.current();
       }
     },
     queue_removed: () => fetchStateRef.current(),
@@ -370,16 +372,60 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
       } else if (currentSongRef.current?.queue_item_id) {
         skippedByRemoteRef.current.add(currentSongRef.current.queue_item_id);
       }
+
+      // Instant 0ms transition: if payload has the next song details, start player immediately without waiting for HTTP fetchState!
+      if (payload?.youtube_video_id && payload?.queue_item_id) {
+        const nextSongObj: EnrichedQueueItem = {
+          queue_item_id: payload.queue_item_id,
+          instance_id: payload.instance_id || '',
+          guest_name: payload.guest_name || 'Singer',
+          guest_session_id: payload.guest_session_id || '',
+          position: payload.position ?? 1,
+          status: 'playing',
+          started_at: payload.timestamp || new Date().toISOString(),
+          reserved_at: payload.timestamp || new Date().toISOString(),
+          song: {
+            id: payload.song_id || payload.queue_item_id,
+            title: payload.song_title || 'Karaoke Track',
+            artist: payload.song_artist || '',
+            code: '',
+            youtube_video_id: payload.youtube_video_id,
+            thumbnail_url: payload.thumbnail_url || `https://img.youtube.com/vi/${payload.youtube_video_id}/mqdefault.jpg`,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        };
+        setCurrentSong(nextSongObj);
+        currentSongRef.current = nextSongObj;
+        setPlayerState({
+          status: 'playing',
+          video_id: payload.youtube_video_id,
+          queue_item_id: payload.queue_item_id,
+        });
+      }
+
       fetchStateRef.current();
       setConnectionStatus('connected');
     },
     song_finished: () => {
-      // Keep score modal active for full 10s countdown even when queue becomes empty
+      // Immediately stop playback and clear song
+      try {
+        playerRef.current?.stopVideo?.();
+        playerRef.current?.pauseVideo?.();
+      } catch {}
       setCurrentSong(null);
       currentSongRef.current = null;
       lastCountdownSongIdRef.current = null;
       setCountdownSong(null);
       setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
+      broadcastRef.current?.('playback_sync', {
+        type: 'playback_sync',
+        currentTime: 0,
+        duration: 0,
+        isPlaying: false,
+        queue_item_id: null,
+        timestamp: Date.now(),
+      });
       fetchStateRef.current();
     },
     song_skipped: (payload: any) => {
@@ -387,15 +433,97 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
         skippedByRemoteRef.current.add(payload.skipped_queue_item_id);
         setScoreModalData(null);
       }
+      // Instant 0ms stop of currently playing video — zero delay!
+      try {
+        playerRef.current?.stopVideo?.();
+        playerRef.current?.pauseVideo?.();
+      } catch {}
+
+      if (!payload?.next_queue_item_id) {
+        setCurrentSong(null);
+        currentSongRef.current = null;
+        setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
+      }
+      broadcastRef.current?.('playback_sync', {
+        type: 'playback_sync',
+        currentTime: 0,
+        duration: 0,
+        isPlaying: false,
+        queue_item_id: null,
+        timestamp: Date.now(),
+      });
       fetchStateRef.current();
     },
     playback_control: (payload: any) => {
       if (payload?.action === 'pause') {
         playerRef.current?.pauseVideo();
+        setPlayerState((prev) => ({ ...prev, status: 'paused' }));
+        lastProgressBroadcastRef.current = Date.now();
+        broadcastRef.current?.('playback_sync', {
+          type: 'playback_sync',
+          currentTime: playerRef.current?.getCurrentTime() ?? 0,
+          duration: playerRef.current?.getDuration() ?? 0,
+          isPlaying: false,
+          queue_item_id: currentSongRef.current?.queue_item_id || null,
+          timestamp: Date.now(),
+        });
       } else if (payload?.action === 'resume') {
         playerRef.current?.playVideo();
+        setPlayerState((prev) => ({ ...prev, status: 'playing' }));
+        lastProgressBroadcastRef.current = Date.now();
+        broadcastRef.current?.('playback_sync', {
+          type: 'playback_sync',
+          currentTime: playerRef.current?.getCurrentTime() ?? 0,
+          duration: playerRef.current?.getDuration() ?? 0,
+          isPlaying: true,
+          queue_item_id: currentSongRef.current?.queue_item_id || null,
+          timestamp: Date.now(),
+        });
+      } else if (payload?.action === 'restart') {
+        playerRef.current?.seekTo(0);
+        playerRef.current?.playVideo();
+        setPlayerState((prev) => ({ ...prev, status: 'playing' }));
+        lastProgressBroadcastRef.current = Date.now();
+        broadcastRef.current?.('playback_sync', {
+          type: 'playback_sync',
+          currentTime: 0,
+          duration: playerRef.current?.getDuration() ?? 0,
+          isPlaying: true,
+          queue_item_id: currentSongRef.current?.queue_item_id || null,
+          timestamp: Date.now(),
+        });
+      } else if (payload?.action === 'seek') {
+        const seconds = typeof payload?.seconds === 'number' ? payload.seconds : 0;
+        playerRef.current?.seekTo(seconds);
+        playerRef.current?.playVideo();
+        setPlayerState((prev) => ({ ...prev, status: 'playing' }));
+        lastProgressBroadcastRef.current = Date.now();
+        broadcastRef.current?.('playback_sync', {
+          type: 'playback_sync',
+          currentTime: seconds,
+          duration: playerRef.current?.getDuration() ?? 0,
+          isPlaying: true,
+          queue_item_id: currentSongRef.current?.queue_item_id || null,
+          timestamp: Date.now(),
+        });
+      } else if (payload?.action === 'stop') {
+        try {
+          playerRef.current?.stopVideo?.();
+          playerRef.current?.pauseVideo?.();
+        } catch {}
+        setCurrentSong(null);
+        currentSongRef.current = null;
+        setPlayerState({ status: 'idle', video_id: null, queue_item_id: null });
+        broadcastRef.current?.('playback_sync', {
+          type: 'playback_sync',
+          currentTime: 0,
+          duration: 0,
+          isPlaying: false,
+          queue_item_id: null,
+          timestamp: Date.now(),
+        });
+        fetchStateRef.current();
       }
-      fetchStateRef.current();
     },
     instance_updated: () => fetchStateRef.current(),
     banner_updated: (payload: any) => { if (payload) setBannerSettings(payload); else fetch('/api/admin/settings').then(res => res.json()).then(json => { if (json.success) setBannerSettings(json.data); }); },
@@ -406,11 +534,36 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     },
   }).current;
 
-  useRealtime({
+  const { broadcast } = useRealtime({
     roomCode,
     handlers: realtimeHandlers,
     enabled: true,
   });
+
+  useEffect(() => {
+    broadcastRef.current = broadcast;
+  }, [broadcast]);
+
+  const lastProgressBroadcastRef = useRef<number>(0);
+  const handlePlayerProgress = useCallback((currentTime: number, duration: number, isPlayingFromPlayer?: boolean) => {
+    const now = Date.now();
+    // Throttled live broadcast every ~600ms to remote for ultra-smooth real-time tracking
+    if (now - lastProgressBroadcastRef.current >= 600) {
+      lastProgressBroadcastRef.current = now;
+      const actuallyPlaying = typeof isPlayingFromPlayer === 'boolean'
+        ? isPlayingFromPlayer
+        : (playerRef.current?.getPlayerState?.() === 1 || playerState.status === 'playing');
+
+      broadcastRef.current?.('playback_sync', {
+        type: 'playback_sync',
+        currentTime: Math.round(currentTime * 10) / 10,
+        duration: Math.round(duration * 10) / 10,
+        isPlaying: actuallyPlaying,
+        queue_item_id: currentSongRef.current?.queue_item_id || null,
+        timestamp: now,
+      });
+    }
+  }, [playerState.status]);
 
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
@@ -585,6 +738,8 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           queueItemId={currentQueueItemId}
           onEnded={triggerSongEndedScore}
           onStateChange={handlePlayerStateChange}
+          onProgress={handlePlayerProgress}
+          cropOverlays={true}
           autoplay={instanceState?.settings.autoplay ?? true}
           className="w-full h-full"
         />
@@ -636,6 +791,40 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           <QRPanel roomCode={roomCode} appUrl={process.env.NEXT_PUBLIC_APP_URL} />
         </div>
       </div>
+
+      {/* LAYER 2.5: High-End Videoke Pause Screen (Completely covers native YouTube paused UI) */}
+      {playerState.status === 'paused' && currentSong && !countdownSong && !scoreModalData && (
+        <div className="absolute inset-0 z-15 bg-black/75 backdrop-blur-md flex flex-col items-center justify-center gap-5 p-6 pointer-events-none transition-all duration-300">
+          {/* Animated Pause Badge */}
+          <div className="flex items-center gap-2 px-5 py-2 rounded-full bg-amber-500/20 border-2 border-amber-400/80 text-amber-300 font-black tracking-widest text-sm uppercase shadow-[0_0_25px_rgba(251,191,36,0.3)] animate-pulse">
+            <Pause size={16} className="fill-amber-400" />
+            <span>PLAYBACK PAUSED</span>
+          </div>
+
+          {/* Current Song Details */}
+          <div className="text-center max-w-xl">
+            <h2
+              className="text-3xl md:text-5xl font-black text-white tracking-tight drop-shadow-[0_4px_12px_rgba(0,0,0,0.8)] mb-2 line-clamp-2"
+              style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+            >
+              {currentSong.song.title}
+            </h2>
+            <p className="text-lg md:text-xl font-bold text-amber-200/90 tracking-wide mb-1">
+              {currentSong.song.artist}
+            </p>
+            {currentSong.guest_name && (
+              <p className="text-xs md:text-sm text-zinc-400 font-medium">
+                Singing: <span className="text-teal-400 font-semibold">{currentSong.guest_name}</span>
+              </p>
+            )}
+          </div>
+
+          {/* Subtext instruction */}
+          <p className="text-xs md:text-sm text-zinc-400/80 font-medium tracking-wide">
+            Tap <span className="text-white font-bold">Play</span> or scrub progress on your phone to resume
+          </p>
+        </div>
+      )}
 
       {/* LAYER 3: Authentic Videoke/Karaoke Score Screen Popup Modal */}
       {scoreModalData && (

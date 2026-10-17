@@ -90,6 +90,7 @@ export interface QueueItemWithSong extends QueueItem {
 // ─── Enriched Queue Item (from RPC) ──────────────────────────
 export interface EnrichedQueueItem {
   queue_item_id: string;
+  instance_id?: string;
   position: number;
   status: QueueItemStatus;
   guest_name: string | null;
@@ -163,7 +164,8 @@ export type RealtimeEventType =
   | 'remote_left'
   | 'banner_updated'
   | 'shoutout_broadcast'
-  | 'playback_control';
+  | 'playback_control'
+  | 'playback_sync';
 
 export interface RealtimeEvent {
   type: RealtimeEventType;

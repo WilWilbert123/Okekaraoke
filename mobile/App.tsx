@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   StyleSheet,
   SafeAreaView,
@@ -10,21 +10,58 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
+import type { WebViewErrorEvent, WebViewHttpErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// ── Domain Endpoints ───────────────────────────────────────────
+// Primary custom domain with automatic fallback to Vercel if domain expires or DNS fails
+const PRIMARY_URL = 'https://www.okekaraoke.sbs/';
+const FALLBACK_URL = 'https://okekaraoke.vercel.app/';
+
 export default function App() {
   const webViewRef = useRef<WebView>(null);
+  const [currentUrl, setCurrentUrl] = useState<string>(PRIMARY_URL);
   const [isRetrying, setIsRetrying] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // ── Switch to fallback if primary fails in WebView ───────────
+  const handleDomainFailure = useCallback(() => {
+    if (currentUrl === PRIMARY_URL) {
+      console.warn('[App] Primary domain unreachable in WebView, falling back to Vercel URL:', FALLBACK_URL);
+      setCurrentUrl(FALLBACK_URL);
+      setReloadKey((prev) => prev + 1);
+    }
+  }, [currentUrl]);
+
+  const handleWebViewError = (event: WebViewErrorEvent) => {
+    const { nativeEvent } = event;
+    console.warn('[WebView Error]', nativeEvent.description, nativeEvent.code);
+    // If primary domain fails (DNS error, host not found, network failure)
+    if (currentUrl === PRIMARY_URL) {
+      handleDomainFailure();
+    }
+  };
+
+  const handleHttpError = (event: WebViewHttpErrorEvent) => {
+    const { nativeEvent } = event;
+    // If primary domain returns 404/502/503 (e.g. expired domain or parking page)
+    if (currentUrl === PRIMARY_URL && (nativeEvent.statusCode >= 500 || nativeEvent.statusCode === 404)) {
+      console.warn('[WebView HTTP Error]', nativeEvent.statusCode);
+      handleDomainFailure();
+    }
+  };
+
+  // ── Retry connection button ──────────────────────────────────
   const handleRetry = () => {
     setIsRetrying(true);
+    // Reset to primary URL to try loading again
+    setCurrentUrl(PRIMARY_URL);
     setReloadKey((prev) => prev + 1);
     setTimeout(() => {
       webViewRef.current?.reload();
       setIsRetrying(false);
-    }, 1200);
+    }, 1000);
   };
 
   const renderErrorScreen = () => {
@@ -65,7 +102,9 @@ export default function App() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footerText}>OKEKARAOKE MOBILE</Text>
+        <Text style={styles.footerText}>
+          OKEKARAOKE MOBILE {currentUrl === FALLBACK_URL ? '(BACKUP SERVER)' : ''}
+        </Text>
       </View>
     );
   };
@@ -80,15 +119,17 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#09090b" />
       <WebView
-        key={reloadKey}
+        key={`${currentUrl}-${reloadKey}`}
         ref={webViewRef}
-        source={{ uri: 'https://www.okekaraoke.sbs/' }}
+        source={{ uri: currentUrl }}
         style={styles.webview}
         allowsInlineMediaPlayback={true}
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         startInLoadingState={true}
+        onError={handleWebViewError}
+        onHttpError={handleHttpError}
         renderError={renderErrorScreen}
         renderLoading={renderLoadingScreen}
       />
@@ -207,4 +248,3 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
   },
 });
-

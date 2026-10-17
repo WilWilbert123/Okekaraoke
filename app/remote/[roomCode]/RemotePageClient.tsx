@@ -5,9 +5,9 @@
 // Phone remote: search songs, chat, manage reservations, queue
 // ============================================================
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone, Tv } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Mic2, Wifi, WifiOff, RefreshCw, Search, MessageSquare, ListMusic, Star, Pencil, Check, X, QrCode, Download, Settings, Megaphone, Tv, Smartphone } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { SongSearch } from '@/components/remote/SongSearch';
 import { RoomChat } from '@/components/remote/RoomChat';
 import { MyReservations } from '@/components/remote/MyReservations';
@@ -24,7 +24,8 @@ import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 import { getOrCreateGuestSession, updateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
 import { createClient } from '@/lib/supabase/client';
-import type { EnrichedQueueItem, InstanceState, ConnectionStatus } from '@/lib/types';
+import { addSongToHistory } from '@/lib/utils/songHistory';
+import type { EnrichedQueueItem, InstanceState, ConnectionStatus, Song } from '@/lib/types';
 
 export interface OnlineUser {
   session_id: string;
@@ -48,6 +49,7 @@ const statusConfig = {
 const NAME_CONFIRMED_KEY = 'okekaraoke_name_confirmed';
 
 export function RemotePageClient({ roomCode }: RemotePageClientProps) {
+  const router = useRouter();
   const [tab, setTab] = useState<RemoteTab>('search');
   const [instanceState, setInstanceState] = useState<InstanceState | null>(null);
   const [currentSong, setCurrentSong] = useState<EnrichedQueueItem | null>(null);
@@ -66,20 +68,60 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [isSoloTVMode, setIsSoloTVMode] = useState<boolean>(false);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [soloPlaybackProgress, setSoloPlaybackProgress] = useState<{
+    currentTime: number;
+    duration: number;
+    isPlaying: boolean;
+  }>({ currentTime: 0, duration: 0, isPlaying: true });
+  const [tvPlaybackProgress, setTvPlaybackProgress] = useState<{
+    currentTime: number;
+    duration: number;
+    isPlaying: boolean;
+  }>({ currentTime: 0, duration: 0, isPlaying: true });
+  const soloPlaybackControlsRef = useRef<{
+    seekTo: (sec: number) => void;
+    restartSong: () => void;
+    togglePlay: () => void;
+    stopSong?: () => void;
+  } | null>(null);
   const { isInstallable, installApp } = usePWAInstall();
 
-  // Load saved Solo TV preference or URL solotv parameter
+  const activePlaybackProgress = isSoloTVMode ? soloPlaybackProgress : tvPlaybackProgress;
+
+  // Reset paused and progress state when a new song starts playing
+  const prevSongIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (searchParams?.get('solotv') === 'true' || searchParams?.get('solotv') === '1') {
-      setIsSoloTVMode(true);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('okekaraoke_solo_tv', 'true');
-      }
-    } else if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('okekaraoke_solo_tv');
-      if (stored === 'true') {
-        setIsSoloTVMode(true);
-      }
+    const currentId = currentSong?.queue_item_id;
+    if (!currentId) {
+      prevSongIdRef.current = null;
+      setIsPaused(false);
+      return;
+    }
+    const prevId = prevSongIdRef.current;
+    // Only reset if switching to an entirely different song
+    // (don't wipe pause state if simply reconciling a local temp_ ID to server UUID for the same song)
+    const isNewSong = prevId && prevId !== currentId && !(prevId.startsWith('temp_') && !currentId.startsWith('temp_'));
+    if (isNewSong) {
+      setIsPaused(false);
+      setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: true });
+    }
+    prevSongIdRef.current = currentId;
+  }, [currentSong?.queue_item_id]);
+
+  // Synchronize paused state when in 1-Device (solo TV) mode
+  useEffect(() => {
+    if (isSoloTVMode && soloPlaybackProgress) {
+      setIsPaused(!soloPlaybackProgress.isPlaying);
+    }
+  }, [isSoloTVMode, soloPlaybackProgress.isPlaying]);
+
+  // Set 1-Device Solo mode strictly based on URL solotv parameter
+  useEffect(() => {
+    const isSoloParam = searchParams?.get('solotv') === 'true' || searchParams?.get('solotv') === '1';
+    setIsSoloTVMode(isSoloParam);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('okekaraoke_solo_tv', isSoloParam ? 'true' : 'false');
     }
   }, [searchParams]);
 
@@ -155,6 +197,13 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     };
   }, [roomCode, sessionId, guestName]);
 
+  // Automatically record current user's playing song to history
+  useEffect(() => {
+    if (currentSong?.song && currentSong.guest_session_id === sessionId) {
+      addSongToHistory(currentSong.song, roomCode);
+    }
+  }, [currentSong?.queue_item_id, currentSong?.guest_session_id, sessionId, roomCode]);
+
   // ── Name modal + inline editing ──────────────────────────
   const [showNameModal, setShowNameModal] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -182,8 +231,40 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       const state = json.data as InstanceState;
       setInstanceState(state);
-      setCurrentSong(state.current_song);
-      setQueue(state.queue);
+
+      setCurrentSong((prevCurrent) => {
+        if (state.current_song) {
+          return { ...state.current_song, status: 'playing' as const };
+        }
+        // Keep local optimistic temp item alive while waiting for server confirmation
+        if (prevCurrent?.queue_item_id.startsWith('temp_')) {
+          return prevCurrent;
+        }
+        return null;
+      });
+
+      setQueue((prevQueue) => {
+        const incomingQueue = (state.queue || []).map((item) => ({
+          ...item,
+          status: (item.status || 'queued') as any,
+        }));
+
+        const incomingIds = new Set(incomingQueue.map((item) => item.queue_item_id));
+        const incomingSongIds = new Set(
+          incomingQueue.map((item) => item.song?.id || item.song?.code || item.song?.youtube_video_id).filter(Boolean)
+        );
+
+        // Keep local optimistic items that haven't been reconciled by server yet
+        const pendingOptimistic = prevQueue.filter(
+          (item) =>
+            item.queue_item_id.startsWith('temp_') &&
+            !incomingIds.has(item.queue_item_id) &&
+            !incomingSongIds.has(item.song?.id || item.song?.code || item.song?.youtube_video_id)
+        );
+
+        return [...incomingQueue, ...pendingOptimistic];
+      });
+
       setInstanceId(state.instance.id);
       setError(null);
       setConnectionStatus('connected');
@@ -267,26 +348,152 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     };
   }, [fetchState]);
 
-  // Realtime
+  // Realtime handlers with instant state updates from payload
   const realtimeHandlers = useRef({
-    queue_added: fetchState,
+    queue_added: (payload: any) => {
+      if (payload?.song_title && payload?.queue_item_id) {
+        setQueue((prev) => {
+          if (prev.some((item) => item.queue_item_id === payload.queue_item_id)) return prev;
+          // Reconcile and replace any local temp item for this song
+          const filtered = prev.filter(
+            (item) =>
+              !(
+                item.queue_item_id.startsWith('temp_') &&
+                (item.song.title === payload.song_title ||
+                  (payload.youtube_video_id && item.song.youtube_video_id === payload.youtube_video_id))
+              )
+          );
+          return [
+            ...filtered,
+            {
+              queue_item_id: payload.queue_item_id,
+              instance_id: payload.instance_id || '',
+              guest_name: payload.guest_name || 'Guest',
+              guest_session_id: payload.guest_session_id || '',
+              position: payload.position ?? filtered.length + 1,
+              status: 'queued',
+              started_at: null,
+              reserved_at: payload.timestamp || new Date().toISOString(),
+              song: {
+                id: payload.song_id || payload.queue_item_id,
+                title: payload.song_title,
+                artist: payload.song_artist || '',
+                code: payload.song_code || '',
+                youtube_video_id: payload.youtube_video_id || '',
+                thumbnail_url: payload.thumbnail_url || `https://img.youtube.com/vi/${payload.youtube_video_id}/mqdefault.jpg`,
+                duration_seconds: 240,
+                category: 'YouTube',
+                language: 'Karaoke',
+                is_active: true,
+              },
+            },
+          ];
+        });
+      }
+      fetchState();
+    },
     queue_removed: fetchState,
     queue_updated: fetchState,
-    song_started: fetchState,
+    song_started: (payload: any) => {
+      if (payload?.youtube_video_id && payload?.queue_item_id) {
+        setCurrentSong({
+          queue_item_id: payload.queue_item_id,
+          guest_name: payload.guest_name || 'Singer',
+          guest_session_id: payload.guest_session_id || '',
+          position: payload.position ?? 1,
+          status: 'playing',
+          started_at: payload.timestamp || new Date().toISOString(),
+          reserved_at: payload.timestamp || new Date().toISOString(),
+          song: {
+            id: payload.song_id || payload.queue_item_id,
+            title: payload.song_title || 'Karaoke Track',
+            artist: payload.song_artist || '',
+            code: '',
+            youtube_video_id: payload.youtube_video_id,
+            thumbnail_url: payload.thumbnail_url || `https://img.youtube.com/vi/${payload.youtube_video_id}/mqdefault.jpg`,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        });
+      }
+      setIsPaused(false);
+      setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: true });
+      fetchState();
+    },
     song_finished: () => {
       // Optimistically clear current song on remote immediately for instant UI update
       setCurrentSong(null);
+      setIsPaused(false);
+      setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
       fetchState();
     },
-    song_skipped: fetchState,
-    playback_control: fetchState,
+    song_skipped: () => {
+      setCurrentSong(null);
+      setIsPaused(false);
+      setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      fetchState();
+    },
+    playback_control: (payload: any) => {
+      if (payload?.action === 'pause') {
+        setIsPaused(true);
+        setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: false }));
+      } else if (payload?.action === 'resume') {
+        setIsPaused(false);
+        setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: true }));
+      } else if (payload?.action === 'restart') {
+        seekLockUntilRef.current = Date.now() + 2500;
+        targetSeekTimeRef.current = 0;
+        setIsPaused(false);
+        setTvPlaybackProgress((prev) => ({ ...prev, currentTime: 0, isPlaying: true }));
+      } else if (payload?.action === 'seek') {
+        const sec = typeof payload?.seconds === 'number' ? payload.seconds : 0;
+        seekLockUntilRef.current = Date.now() + 2500;
+        targetSeekTimeRef.current = sec;
+        setTvPlaybackProgress((prev) => ({ ...prev, currentTime: sec, isPlaying: true }));
+      } else if (payload?.action === 'stop') {
+        setIsPaused(false);
+        setCurrentSong(null);
+        setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        fetchState();
+      }
+    },
+    playback_sync: (payload: any) => {
+      if (typeof payload?.currentTime === 'number' && typeof payload?.duration === 'number') {
+        // Optimistic seek lock: ignore stale broadcasts if we just sought
+        const isLocked = Date.now() < seekLockUntilRef.current;
+        if (isLocked) {
+          if (Math.abs(payload.currentTime - targetSeekTimeRef.current) < 2.0) {
+            seekLockUntilRef.current = 0;
+          } else {
+            return;
+          }
+        }
+
+        setTvPlaybackProgress({
+          currentTime: payload.currentTime,
+          duration: payload.duration,
+          isPlaying: payload.isPlaying !== undefined ? Boolean(payload.isPlaying) : true,
+        });
+        if (payload.isPlaying !== undefined) {
+          setIsPaused(!payload.isPlaying);
+        }
+      }
+    },
   }).current;
 
-  useRealtime({
+  const seekLockUntilRef = useRef<number>(0);
+  const targetSeekTimeRef = useRef<number>(0);
+  const broadcastRef = useRef<((event: string, payload: Record<string, unknown>) => void) | null>(null);
+
+  const { broadcast } = useRealtime({
     roomCode,
     handlers: realtimeHandlers,
     enabled: true,
   });
+
+  useEffect(() => {
+    broadcastRef.current = broadcast;
+  }, [broadcast]);
 
   // ── Name modal confirm ────────────────────────────────────
   const handleNameConfirm = useCallback((name: string) => {
@@ -329,6 +536,248 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     if (e.key === 'Escape') cancelEditName();
   };
 
+  const handleReserveFailed = useCallback((tempId: string) => {
+    setQueue((prev) => prev.filter((item) => item.queue_item_id !== tempId));
+    setCurrentSong((prev) => (prev?.queue_item_id === tempId ? null : prev));
+  }, []);
+
+  const handleSongReserved = useCallback(
+    (song?: Song, resultData?: any, tempIdToReplace?: string) => {
+      if (!song) {
+        fetchState();
+        return;
+      }
+
+      // Automatically record to song history in localStorage
+      addSongToHistory(song, roomCode);
+
+      const songThumb =
+        song.thumbnail_url ||
+        (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : '');
+
+      const isFirstSong = !currentSong && queue.length === 0;
+      const isAutoStarted = Boolean(resultData?.started_now) || (!resultData && isFirstSong);
+
+      if (isAutoStarted) {
+        const playingItem: EnrichedQueueItem = resultData?.current_song || {
+          queue_item_id: resultData?.queue_item_id || tempIdToReplace || `temp_${Date.now()}`,
+          instance_id: instanceId || '',
+          guest_name: guestName || 'You',
+          guest_session_id: sessionId,
+          position: 1,
+          status: 'playing',
+          started_at: new Date().toISOString(),
+          reserved_at: new Date().toISOString(),
+          song: {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            code: song.code || '',
+            youtube_video_id: song.youtube_video_id,
+            thumbnail_url: songThumb,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        };
+
+        setCurrentSong(playingItem);
+        if (tempIdToReplace) {
+          setQueue((prev) => prev.filter((q) => q.queue_item_id !== tempIdToReplace));
+        }
+      } else {
+        const queuedItem: EnrichedQueueItem = {
+          queue_item_id: resultData?.queue_item_id || tempIdToReplace || `temp_${Date.now()}`,
+          instance_id: instanceId || '',
+          guest_name: guestName || 'You',
+          guest_session_id: sessionId,
+          position: resultData?.position || queue.length + 1,
+          status: 'queued',
+          started_at: null,
+          reserved_at: new Date().toISOString(),
+          song: {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            code: song.code || '',
+            youtube_video_id: song.youtube_video_id,
+            thumbnail_url: songThumb,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        };
+
+        setQueue((prev) => {
+          if (tempIdToReplace && resultData?.queue_item_id) {
+            const hasMatch = prev.some((item) => item.queue_item_id === tempIdToReplace);
+            if (hasMatch) {
+              return prev.map((item) =>
+                item.queue_item_id === tempIdToReplace
+                  ? { ...queuedItem, queue_item_id: resultData.queue_item_id }
+                  : item
+              );
+            }
+          }
+          if (prev.some((q) => q.queue_item_id === queuedItem.queue_item_id)) return prev;
+          return [...prev, queuedItem];
+        });
+      }
+
+      if (resultData?.queue_item_id) {
+        fetchState();
+      }
+    },
+    [currentSong, queue.length, instanceId, guestName, sessionId, fetchState]
+  );
+
+  const myReservations = useMemo(() => {
+    const list: EnrichedQueueItem[] = [];
+    const seenIds = new Set<string>();
+
+    if (currentSong && (currentSong.guest_session_id === sessionId || currentSong.queue_item_id.startsWith('temp_'))) {
+      list.push({ ...currentSong, status: 'playing' as const });
+      seenIds.add(currentSong.queue_item_id);
+    }
+
+    queue.forEach((item) => {
+      const isMine = item.guest_session_id === sessionId || item.queue_item_id.startsWith('temp_');
+      if (isMine && !seenIds.has(item.queue_item_id)) {
+        seenIds.add(item.queue_item_id);
+        list.push({ ...item, status: (item.status || 'queued') as any });
+      }
+    });
+
+    return list;
+  }, [currentSong, queue, sessionId]);
+
+  const reservedSongIds = useMemo(() => {
+    const set = new Set<string>();
+    myReservations.forEach((item) => {
+      if (item.song?.id) set.add(item.song.id);
+      if (item.song?.youtube_video_id) set.add(item.song.youtube_video_id);
+      if (item.song?.code) set.add(item.song.code);
+    });
+    return set;
+  }, [myReservations]);
+
+  const handleRestartSong = useCallback(
+    async (queueItemId: string) => {
+      seekLockUntilRef.current = Date.now() + 2500;
+      targetSeekTimeRef.current = 0;
+
+      if (isSoloTVMode) {
+        soloPlaybackControlsRef.current?.restartSong?.();
+        setSoloPlaybackProgress((prev) => ({ ...prev, currentTime: 0, isPlaying: true }));
+      }
+      setTvPlaybackProgress((prev) => ({ ...prev, currentTime: 0, isPlaying: true }));
+      setIsPaused(false);
+
+      // Instant 0ms WebSocket broadcast directly to TV
+      broadcastRef.current?.('playback_control', {
+        type: 'playback_control',
+        action: 'restart',
+        seconds: 0,
+        queue_item_id: queueItemId,
+        guest_session_id: sessionId,
+        guest_name: guestName,
+        timestamp: new Date().toISOString(),
+      });
+
+      try {
+        fetch('/api/queue/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            session_id: sessionId,
+            action: 'restart',
+            queue_item_id: queueItemId,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.error('[Restart Song Error]:', err);
+      }
+    },
+    [isSoloTVMode, roomCode, sessionId, guestName]
+  );
+
+  const handleSeekSong = useCallback(
+    async (queueItemId: string, seconds: number) => {
+      // 1. Optimistic seek lock: prevent stale progress broadcasts from snapping back for 2.5s
+      seekLockUntilRef.current = Date.now() + 2500;
+      targetSeekTimeRef.current = seconds;
+      setIsPaused(false);
+
+      if (isSoloTVMode) {
+        soloPlaybackControlsRef.current?.seekTo?.(seconds);
+        setSoloPlaybackProgress((prev) => ({ ...prev, currentTime: seconds, isPlaying: true }));
+      }
+      setTvPlaybackProgress((prev) => ({ ...prev, currentTime: seconds, isPlaying: true }));
+
+      // 2. Instant 0ms WebSocket broadcast directly to TV
+      broadcastRef.current?.('playback_control', {
+        type: 'playback_control',
+        action: 'seek',
+        seconds,
+        queue_item_id: queueItemId,
+        guest_session_id: sessionId,
+        guest_name: guestName,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 3. Notify server in background
+      try {
+        fetch('/api/queue/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            session_id: sessionId,
+            action: 'seek',
+            seconds,
+            queue_item_id: queueItemId,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.error('[Seek Song Error]:', err);
+      }
+    },
+    [isSoloTVMode, roomCode, sessionId, guestName]
+  );
+
+  const handleTogglePauseSong = useCallback(
+    async (queueItemId: string, paused: boolean) => {
+      const action = paused ? 'pause' : 'resume';
+      setIsPaused(paused);
+      setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: !paused }));
+
+      // Instant 0ms WebSocket broadcast directly to TV
+      broadcastRef.current?.('playback_control', {
+        type: 'playback_control',
+        action,
+        queue_item_id: queueItemId,
+        guest_session_id: sessionId,
+        guest_name: guestName,
+        timestamp: new Date().toISOString(),
+      });
+
+      try {
+        fetch('/api/queue/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            session_id: sessionId,
+            action,
+            queue_item_id: queueItemId,
+          }),
+        }).catch(() => {});
+      } catch (err) {
+        console.error('[Toggle Pause Error]:', err);
+      }
+    },
+    [roomCode, sessionId, guestName]
+  );
+
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = statusConfig[connectionStatus];
 
   if (error) {
@@ -355,11 +804,6 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       </div>
     );
   }
-
-  const myReservations = [
-    ...(currentSong && currentSong.guest_session_id === sessionId ? [currentSong] : []),
-    ...queue.filter((item) => item.guest_session_id === sessionId),
-  ];
 
   return (
     /* Root: position:relative so the emoji overlay is scoped here */
@@ -464,18 +908,16 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
               <span>Scan TV</span>
             </button>
 
-            <button
-              onClick={toggleSoloTVMode}
-              className={`px-2 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-extrabold active:scale-95 transition-all shrink-0 whitespace-nowrap ${
-                isSoloTVMode
-                  ? 'bg-teal-400 text-black border-teal-300 shadow-sm shadow-teal-500/30'
-                  : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200 hover:text-white'
-              }`}
-              title="Toggle TV + Remote in 1 screen mode (Solo Phone)"
-            >
-              <Tv size={12} className={isSoloTVMode ? 'text-black' : 'text-teal-400'} />
-              <span>{isSoloTVMode ? 'Solo TV ON' : 'Solo TV'}</span>
-            </button>
+            {/* 1-Device indicator — ONLY visible when 1-Device mode is active */}
+            {isSoloTVMode && (
+              <div
+                className="px-2 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-extrabold shrink-0 whitespace-nowrap bg-teal-400 text-black border-teal-300 shadow-sm shadow-teal-500/30"
+                title="1-Device Karaoke Mode active: Sing & search directly on this phone"
+              >
+                <Smartphone size={12} className="text-black" />
+                <span>1 DEVICE</span>
+              </div>
+            )}
 
             <button
               onClick={() => setShowShoutoutModal(true)}
@@ -547,9 +989,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             if (typeof window !== 'undefined') {
               localStorage.setItem('okekaraoke_solo_tv', 'false');
             }
+            router.replace(`/remote/${roomCode}`);
           }}
           onRefreshState={fetchState}
           onOpenTransferModal={() => setShowTransferModal(true)}
+          onProgressChange={setSoloPlaybackProgress}
+          onRegisterControls={(ctrls) => {
+            soloPlaybackControlsRef.current = ctrls;
+          }}
         />
       )}
 
@@ -560,7 +1007,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             roomCode={roomCode}
             sessionId={sessionId}
             guestName={guestName}
-            onReserved={() => fetchState()}
+            onReserved={handleSongReserved}
+            onReserveFailed={handleReserveFailed}
+            reservedSongIds={reservedSongIds}
             isSoloTVMode={isSoloTVMode}
           />
         </div>
@@ -578,11 +1027,23 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'my-songs' ? 'block' : 'none' }}>
           <MyReservations
             reservations={myReservations}
+            currentSongId={currentSong?.queue_item_id}
             sessionId={sessionId}
             roomCode={roomCode}
             guestName={guestName}
             onCancelled={() => fetchState()}
             allowCancel={instanceState?.settings.allow_cancel ?? true}
+            onReserved={handleSongReserved}
+            onReserveFailed={handleReserveFailed}
+            isSoloTVMode={isSoloTVMode}
+            onSoloStop={() => soloPlaybackControlsRef.current?.stopSong?.()}
+            onSoloTogglePlay={() => soloPlaybackControlsRef.current?.togglePlay?.()}
+            isPaused={isPaused}
+            onTogglePause={(paused) => setIsPaused(paused)}
+            onTogglePauseSong={handleTogglePauseSong}
+            playbackProgress={activePlaybackProgress}
+            onRestartSong={handleRestartSong}
+            onSeekSong={handleSeekSong}
           />
         </div>
         <div className="flex-1 overflow-y-auto pb-2" style={{ display: tab === 'queue' ? 'block' : 'none' }}>
@@ -592,6 +1053,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             sessionId={sessionId}
             roomCode={roomCode}
             onRefresh={() => fetchState()}
+            isPaused={isPaused}
           />
         </div>
       </div>

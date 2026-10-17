@@ -44,6 +44,7 @@ interface YTPlayer {
   playVideo(): void;
   pauseVideo(): void;
   stopVideo(): void;
+  seekTo(seconds: number, allowSeekAhead?: boolean): void;
   getPlayerState(): number;
   getDuration(): number;
   getCurrentTime(): number;
@@ -104,6 +105,12 @@ function loadYouTubeAPI(): Promise<void> {
 export interface YouTubePlayerRef {
   playVideo: () => void;
   pauseVideo: () => void;
+  stopVideo: () => void;
+  seekTo: (seconds: number) => void;
+  getCurrentTime: () => number;
+  getDuration: () => number;
+  getPlayerState: () => number;
+  isPaused: () => boolean;
 }
 
 interface YouTubePlayerProps {
@@ -111,6 +118,8 @@ interface YouTubePlayerProps {
   queueItemId: string | null;
   onEnded: (queueItemId: string) => void;
   onStateChange?: (state: PlayerState) => void;
+  onProgress?: (currentTime: number, duration: number, isPlaying?: boolean) => void;
+  cropOverlays?: boolean;
   autoplay?: boolean;
   className?: string;
 }
@@ -137,6 +146,8 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
     queueItemId,
     onEnded,
     onStateChange,
+    onProgress,
+    cropOverlays = false,
     autoplay = true,
     className = '',
   },
@@ -148,6 +159,9 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   const currentQueueItemIdRef = useRef<string | null>(null);
   const hasStartedPlayingRef = useRef<boolean>(false);
   const userInteractedRef = useRef<boolean>(false);
+  const isSeekingRef = useRef<boolean>(false);
+  const seekingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [embedBlocked, setEmbedBlocked] = useState(false);
   const [needsUserGesture, setNeedsUserGesture] = useState(false);
@@ -155,6 +169,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
   const gestureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEndedRef = useRef(onEnded);
   const onStateChangeRef = useRef(onStateChange);
+  const onProgressRef = useRef(onProgress);
 
   // Global user gesture tracking to unlock WebKit/iOS audio
   useEffect(() => {
@@ -180,15 +195,21 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
     playVideo: () => {
       if (playerRef.current) {
         try {
-          playerRef.current.mute();
-          playerRef.current.playVideo();
-          setTimeout(() => {
-            try {
-              if (userInteractedRef.current || !isIOS()) {
-                playerRef.current?.unMute();
-              }
-            } catch {}
-          }, 300);
+          if (!hasStartedPlayingRef.current) {
+            // Initial auto-play start recovery only
+            playerRef.current.mute();
+            playerRef.current.playVideo();
+            setTimeout(() => {
+              try {
+                if (userInteractedRef.current || !isIOS()) {
+                  playerRef.current?.unMute();
+                }
+              } catch {}
+            }, 300);
+          } else {
+            // Resuming an already started song — play directly without muting to preserve active audio
+            playerRef.current.playVideo();
+          }
         } catch {}
       }
     },
@@ -197,11 +218,77 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
         playerRef.current?.pauseVideo();
       } catch {}
     },
+    stopVideo: () => {
+      try {
+        playerRef.current?.stopVideo();
+      } catch {}
+    },
+    seekTo: (seconds: number) => {
+      try {
+        isSeekingRef.current = true;
+        setIsSeeking(true);
+        playerRef.current?.seekTo(seconds, true);
+
+        // Immediate + staggered playVideo signals to bypass YouTube's internal seek-pause
+        playerRef.current?.playVideo();
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 60);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 160);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 320);
+        setTimeout(() => { try { playerRef.current?.playVideo(); } catch {} }, 600);
+
+        if (seekingTimeoutRef.current) clearTimeout(seekingTimeoutRef.current);
+        seekingTimeoutRef.current = setTimeout(() => {
+          isSeekingRef.current = false;
+          setIsSeeking(false);
+        }, 1100);
+
+        if (!hasStartedPlayingRef.current) {
+          playerRef.current?.mute();
+          playerRef.current?.playVideo();
+          setTimeout(() => {
+            try {
+              if (userInteractedRef.current || !isIOS()) {
+                playerRef.current?.unMute();
+              }
+            } catch {}
+          }, 300);
+        }
+      } catch {}
+    },
+    getCurrentTime: () => {
+      try {
+        return playerRef.current?.getCurrentTime() ?? 0;
+      } catch {
+        return 0;
+      }
+    },
+    getDuration: () => {
+      try {
+        return playerRef.current?.getDuration() ?? 0;
+      } catch {
+        return 0;
+      }
+    },
+    getPlayerState: () => {
+      try {
+        return playerRef.current?.getPlayerState?.() ?? -1;
+      } catch {
+        return -1;
+      }
+    },
+    isPaused: () => {
+      try {
+        return playerRef.current?.getPlayerState?.() === 2;
+      } catch {
+        return false;
+      }
+    },
   }));
 
   // Keep refs current
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
   useEffect(() => { onStateChangeRef.current = onStateChange; }, [onStateChange]);
+  useEffect(() => { onProgressRef.current = onProgress; }, [onProgress]);
   useEffect(() => { currentQueueItemIdRef.current = queueItemId; }, [queueItemId]);
 
   // Load/Recreate/Update player whenever videoId changes
@@ -327,6 +414,12 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.PLAYING:
                 playerStatus = 'playing';
                 hasStartedPlayingRef.current = true;
+                isSeekingRef.current = false;
+                setIsSeeking(false);
+                if (seekingTimeoutRef.current) {
+                  clearTimeout(seekingTimeoutRef.current);
+                  seekingTimeoutRef.current = null;
+                }
                 setNeedsUserGesture(false);
                 if (gestureTimeoutRef.current) { clearTimeout(gestureTimeoutRef.current); gestureTimeoutRef.current = null; }
                 if (userInteractedRef.current || !isIOS()) {
@@ -340,17 +433,19 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
               case YTState.PAUSED:
               case YTState.CUED:
               case -1: // UNSTARTED
+                if (isSeekingRef.current) {
+                  // While seeking, YouTube fires transient PAUSED or CUED events.
+                  // DO NOT propagate 'paused' to parent or TV! Force play and return early.
+                  try {
+                    playerRef.current?.playVideo();
+                  } catch {}
+                  return;
+                }
                 playerStatus = 'paused';
                 if (!hasStartedPlayingRef.current && currentVideoIdRef.current) {
                   try {
                     event.target.mute();
                     event.target.playVideo();
-                  } catch {}
-                } else if (isIOS() && currentVideoIdRef.current && !userInteractedRef.current) {
-                  try {
-                    event.target.mute();
-                    event.target.playVideo();
-                    setNeedsUnmuteGesture(true);
                   } catch {}
                 }
                 break;
@@ -428,6 +523,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
           const duration = playerRef.current.getDuration();
           const currentTime = playerRef.current.getCurrentTime();
 
+          if (duration > 0 && onProgressRef.current) {
+            onProgressRef.current(currentTime, duration, state === 1);
+          }
+
           if (duration > 0 && currentTime >= duration - 1.2 && !endedTriggered) {
             endedTriggered = true;
             const targetId = currentQueueItemIdRef.current || queueItemId;
@@ -472,11 +571,25 @@ export const YouTubePlayer = forwardRef<YouTubePlayerRef, YouTubePlayerProps>(fu
 
   return (
     <div className={`relative w-full h-full bg-black overflow-hidden pointer-events-none select-none ${className}`}>
-      {/* YouTube Player Container — NO scale on TV to prevent over-zoom */}
+      {/* YouTube Player Container — clean cropped overlays when cropOverlays=true */}
       <div
         ref={containerRef}
-        className="w-full h-full"
+        className={
+          cropOverlays
+            ? "absolute -top-[56px] -bottom-[56px] -left-[16px] -right-[16px] w-[calc(100%+32px)] h-[calc(100%+112px)] scale-[1.10] origin-center"
+            : "w-full h-full"
+        }
       />
+
+      {/* Seeking Shield: Hides YouTube's native pause card / thumbnail flash while seeking */}
+      {isSeeking && (
+        <div className="absolute inset-0 bg-black/85 z-[15] flex items-center justify-center pointer-events-none transition-opacity duration-200">
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-zinc-900/90 border border-white/20 text-white text-xs font-semibold backdrop-blur-md shadow-2xl animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>Updating playback...</span>
+          </div>
+        </div>
+      )}
 
       {/* Embed blocked overlay */}
       {embedBlocked && videoId && (
