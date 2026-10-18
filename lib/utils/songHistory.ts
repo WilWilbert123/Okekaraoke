@@ -14,14 +14,33 @@ export interface SongHistoryItem {
 const HISTORY_STORAGE_KEY = 'okekaraoke_song_history';
 const MAX_HISTORY_ITEMS = 100;
 
+let memoryHistory: SongHistoryItem[] | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === HISTORY_STORAGE_KEY) {
+      memoryHistory = null;
+    }
+  });
+  window.addEventListener('okekaraoke_history_updated', () => {
+    memoryHistory = null;
+  });
+}
+
 export function getSongHistory(): SongHistoryItem[] {
   if (typeof window === 'undefined') return [];
+  if (memoryHistory !== null) return memoryHistory;
   try {
     const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      memoryHistory = [];
+      return [];
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    memoryHistory = Array.isArray(parsed) ? parsed : [];
+    return memoryHistory;
   } catch {
+    memoryHistory = [];
     return [];
   }
 }
@@ -83,6 +102,7 @@ export function addSongToHistory(song: HistorySong, roomCode?: string): void {
       history.length = MAX_HISTORY_ITEMS;
     }
 
+    memoryHistory = history;
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
     window.dispatchEvent(new Event('okekaraoke_history_updated'));
   } catch (e) {
@@ -95,6 +115,7 @@ export function removeSongFromHistory(historyId: string): void {
   try {
     const history = getSongHistory();
     const updated = history.filter((item) => item.id !== historyId);
+    memoryHistory = updated;
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event('okekaraoke_history_updated'));
   } catch (e) {
@@ -105,6 +126,7 @@ export function removeSongFromHistory(historyId: string): void {
 export function clearSongHistory(): void {
   if (typeof window === 'undefined') return;
   try {
+    memoryHistory = [];
     localStorage.removeItem(HISTORY_STORAGE_KEY);
     window.dispatchEvent(new Event('okekaraoke_history_updated'));
   } catch (e) {
@@ -112,8 +134,13 @@ export function clearSongHistory(): void {
   }
 }
 
+const dateFormatCache = new Map<number, string>();
+
 export function formatHistoryDate(timestamp: number): string {
   if (!timestamp) return '';
+  const cached = dateFormatCache.get(timestamp);
+  if (cached) return cached;
+
   const date = new Date(timestamp);
   const now = new Date();
 
@@ -124,17 +151,18 @@ export function formatHistoryDate(timestamp: number): string {
 
   const timeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+  let result = '';
   if (isToday) {
-    return `Today at ${timeStr}`;
-  }
-  if (isYesterday) {
-    return `Yesterday at ${timeStr}`;
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
+    result = `Today at ${timeStr}`;
+  } else if (isYesterday) {
+    result = `Yesterday at ${timeStr}`;
+  } else if (date.getFullYear() === now.getFullYear()) {
     const monthStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    return `${monthStr} at ${timeStr}`;
+    result = `${monthStr} at ${timeStr}`;
+  } else {
+    result = date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  dateFormatCache.set(timestamp, result);
+  return result;
 }

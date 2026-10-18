@@ -5,11 +5,11 @@
 // Allows each user to view/manage queued songs and favorite songs
 // ============================================================
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { Star, Loader2, Trash2, Square, Play, Pause, CheckCircle, Plus, Music2, AlertTriangle, RotateCcw, History, Clock, Calendar, X } from 'lucide-react';
 import type { EnrichedQueueItem, Song } from '@/lib/types';
-import { getFavoriteSongs, toggleFavoriteSong, isSongFavorited } from '@/lib/utils/favorites';
-import { getSongHistory, removeSongFromHistory, clearSongHistory, formatHistoryDate, addSongToHistory, type SongHistoryItem } from '@/lib/utils/songHistory';
+import { getFavoriteSongs, toggleFavoriteSong } from '@/lib/utils/favorites';
+import { getSongHistory, removeSongFromHistory, clearSongHistory, formatHistoryDate, addSongToHistory, type SongHistoryItem, type HistorySong } from '@/lib/utils/songHistory';
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -17,6 +17,234 @@ function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
+
+interface FavoriteCardProps {
+  song: Song;
+  isReserving: boolean;
+  onToggleFavorite: (song: Song) => void;
+  onReserve: (song: Song) => void;
+}
+
+const FavoriteCard = memo(function FavoriteCard({
+  song,
+  isReserving,
+  onToggleFavorite,
+  onReserve,
+}: FavoriteCardProps) {
+  const songThumb =
+    song.thumbnail_url ||
+    (song.youtube_video_id
+      ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg`
+      : '');
+
+  return (
+    <div
+      className="flex flex-col justify-between p-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 shadow-sm relative group overflow-hidden"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 160px' }}
+    >
+      {/* Top: Thumbnail with 16:9 Aspect Ratio + Star Toggle Button */}
+      <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
+        {songThumb ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={songThumb}
+            alt={song.title}
+            className="w-full h-full object-cover scale-[1.03] group-hover:scale-105 transition-transform duration-200"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <Music2 size={16} className="text-zinc-600" />
+        )}
+
+        {/* Top-Right Floating Star Button */}
+        <div className="absolute top-1 right-1 z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(song);
+            }}
+            className="w-5 h-5 rounded bg-zinc-950/90 border border-white/10 flex items-center justify-center text-yellow-400 active:scale-90 transition-transform shadow-sm"
+            title="Remove from favorites"
+            aria-label={`Remove ${song.title} from favorites`}
+          >
+            <Star size={10} className="fill-yellow-400 text-yellow-400" />
+          </button>
+        </div>
+
+        {/* Song Code badge or Type (bottom left) */}
+        {song.code && song.code !== 'YT' ? (
+          <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-zinc-950/90 text-[7px] font-mono font-bold text-teal-300 border border-teal-500/30">
+            #{song.code}
+          </div>
+        ) : song.song_type ? (
+          <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-zinc-950/90 text-[7px] font-bold text-teal-300 border border-teal-500/30 uppercase truncate max-w-[50px]">
+            {song.song_type}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Middle: Title & Artist */}
+      <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
+        <div>
+          <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={song.title}>
+            {song.title}
+          </p>
+          <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+            {song.artist}
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom: Clean "RESERVE" Button */}
+      <button
+        id={`reserve-fav-btn-${song.id || song.code}`}
+        onClick={() => onReserve(song)}
+        disabled={isReserving}
+        className="mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 text-black text-[9px] font-black transition-all active:scale-95 shadow-sm disabled:opacity-50 shrink-0"
+        title={`Reserve ${song.title}`}
+        aria-label={`Reserve ${song.title}`}
+      >
+        {isReserving ? (
+          <>
+            <Loader2 size={10} className="animate-spin text-black" />
+            <span>...</span>
+          </>
+        ) : (
+          <>
+            <Plus size={10} className="stroke-[3]" />
+            <span>RESERVE</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+});
+
+interface HistoryCardProps {
+  item: SongHistoryItem & { formattedDate: string };
+  isFavorited: boolean;
+  isReserving: boolean;
+  onToggleFavorite: (song: HistorySong) => void;
+  onRemove: (id: string) => void;
+  onReserve: (song: HistorySong, id: string) => void;
+}
+
+const HistoryCard = memo(function HistoryCard({
+  item,
+  isFavorited,
+  isReserving,
+  onToggleFavorite,
+  onRemove,
+  onReserve,
+}: HistoryCardProps) {
+  const songThumb =
+    item.song.thumbnail_url ||
+    (item.song.youtube_video_id
+      ? `https://img.youtube.com/vi/${item.song.youtube_video_id}/mqdefault.jpg`
+      : '');
+
+  return (
+    <div
+      className="flex flex-col justify-between p-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 shadow-sm relative group overflow-hidden"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 160px' }}
+    >
+      {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
+      <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
+        {songThumb ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={songThumb}
+            alt={item.song.title}
+            className="w-full h-full object-cover scale-[1.03] group-hover:scale-105 transition-transform duration-200"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <Music2 size={16} className="text-zinc-600" />
+        )}
+
+        {/* Top-Right Floating Actions: Favorite & Delete from history */}
+        <div className="absolute top-1 right-1 flex items-center gap-0.5 z-10">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(item.song);
+            }}
+            className="w-5 h-5 rounded bg-zinc-950/90 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-yellow-400 active:scale-90 transition-transform shadow-sm"
+            title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+            aria-label={`Favorite ${item.song.title}`}
+          >
+            <Star
+              size={10}
+              className={isFavorited ? 'fill-yellow-400 text-yellow-400' : ''}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(item.id);
+            }}
+            className="w-5 h-5 rounded bg-zinc-950/90 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-red-400 active:scale-90 transition-transform shadow-sm"
+            title="Remove from history"
+            aria-label={`Remove ${item.song.title} from history`}
+          >
+            <Trash2 size={9} />
+          </button>
+        </div>
+
+        {/* Song Code badge (bottom left) */}
+        {item.song.code && item.song.code !== 'YT' && (
+          <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-zinc-950/90 text-[7px] font-mono font-bold text-teal-300 border border-teal-500/30">
+            #{item.song.code}
+          </div>
+        )}
+      </div>
+
+      {/* Middle: Title, Artist, & Time Played */}
+      <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
+        <div>
+          <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={item.song.title}>
+            {item.song.title}
+          </p>
+          <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={item.song.artist}>
+            {item.song.artist}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-0.5 text-[8px] text-zinc-400 mt-1 truncate">
+          <Clock size={8} className="text-teal-400 shrink-0" />
+          <span className="truncate">{item.formattedDate}</span>
+        </div>
+      </div>
+
+      {/* Bottom: Clean "SING AGAIN" Button */}
+      <button
+        id={`reserve-history-btn-${item.id}`}
+        onClick={() => onReserve(item.song, item.id)}
+        disabled={isReserving}
+        className="mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 text-black text-[9px] font-black transition-all active:scale-95 shadow-sm disabled:opacity-50 shrink-0"
+        title={`Reserve ${item.song.title} again`}
+        aria-label={`Reserve ${item.song.title} again`}
+      >
+        {isReserving ? (
+          <>
+            <Loader2 size={10} className="animate-spin text-black" />
+            <span>...</span>
+          </>
+        ) : (
+          <>
+            <RotateCcw size={9} className="stroke-[2.5]" />
+            <span>SING AGAIN</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+});
 
 interface MyReservationsProps {
   reservations: EnrichedQueueItem[];
@@ -88,46 +316,76 @@ export function MyReservations({
   const [historyDateFilter, setHistoryDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
   const [customDate, setCustomDate] = useState<string>('');
 
-  // Memoized history filtered by selected date
+  // Precomputed Favorite Key Set for O(1) in-memory checks (0ms, 0 disk reads)
+  const favoriteKeySet = useMemo(() => {
+    const set = new Set<string>();
+    for (let i = 0; i < favorites.length; i++) {
+      const fav = favorites[i];
+      if (fav.id) set.add(fav.id);
+      if (fav.code && fav.code !== 'YT') set.add(fav.code);
+    }
+    return set;
+  }, [favorites]);
+
+  const isSongFavoritedFast = useCallback(
+    (song: { id?: string; code?: string }) => {
+      if (song.id && favoriteKeySet.has(song.id)) return true;
+      if (song.code && song.code !== 'YT' && favoriteKeySet.has(song.code)) return true;
+      return false;
+    },
+    [favoriteKeySet]
+  );
+
+  // Optimized history filtered by selected date
   const filteredHistory = useMemo(() => {
     if (historyDateFilter === 'all') return history;
 
     const now = new Date();
+    const nowY = now.getFullYear();
+    const nowM = now.getMonth();
+    const nowD = now.getDate();
 
-    return history.filter((item) => {
-      if (!item.playedAt) return false;
-      const itemDate = new Date(item.playedAt);
+    if (historyDateFilter === 'today') {
+      return history.filter((item) => {
+        if (!item.playedAt) return false;
+        const d = new Date(item.playedAt);
+        return d.getFullYear() === nowY && d.getMonth() === nowM && d.getDate() === nowD;
+      });
+    }
 
-      if (historyDateFilter === 'today') {
-        return (
-          itemDate.getFullYear() === now.getFullYear() &&
-          itemDate.getMonth() === now.getMonth() &&
-          itemDate.getDate() === now.getDate()
-        );
-      }
+    if (historyDateFilter === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yestY = yesterday.getFullYear();
+      const yestM = yesterday.getMonth();
+      const yestD = yesterday.getDate();
 
-      if (historyDateFilter === 'yesterday') {
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        return (
-          itemDate.getFullYear() === yesterday.getFullYear() &&
-          itemDate.getMonth() === yesterday.getMonth() &&
-          itemDate.getDate() === yesterday.getDate()
-        );
-      }
+      return history.filter((item) => {
+        if (!item.playedAt) return false;
+        const d = new Date(item.playedAt);
+        return d.getFullYear() === yestY && d.getMonth() === yestM && d.getDate() === yestD;
+      });
+    }
 
-      if (historyDateFilter === 'custom' && customDate) {
-        const [year, month, day] = customDate.split('-').map(Number);
-        return (
-          itemDate.getFullYear() === year &&
-          itemDate.getMonth() === month - 1 &&
-          itemDate.getDate() === day
-        );
-      }
+    if (historyDateFilter === 'custom' && customDate) {
+      const [customY, customM, customD] = customDate.split('-').map(Number);
+      return history.filter((item) => {
+        if (!item.playedAt) return false;
+        const d = new Date(item.playedAt);
+        return d.getFullYear() === customY && d.getMonth() === customM - 1 && d.getDate() === customD;
+      });
+    }
 
-      return true;
-    });
+    return history;
   }, [history, historyDateFilter, customDate]);
+
+  // Memoized formatted history items to avoid Intl formatting overhead during renders
+  const preparedHistory = useMemo(() => {
+    return filteredHistory.map((item) => ({
+      ...item,
+      formattedDate: formatHistoryDate(item.playedAt),
+    }));
+  }, [filteredHistory]);
 
   // Playback progress scrubber & live ticker state
   const [localCurrentTime, setLocalCurrentTime] = useState(0);
@@ -137,8 +395,9 @@ export function MyReservations({
   const targetSeekTimeRef = useRef<number>(0);
   const lastSeekTimeRef = useRef<number>(0);
 
-  // Synchronize local playback time when playbackProgress prop updates from TV/Solo mode
+  // Synchronize local playback time when playbackProgress prop updates from TV/Solo mode (only on reservations tab)
   useEffect(() => {
+    if (activeTab !== 'reservations') return;
     if (playbackProgress) {
       if (!isScrubbing) {
         // While locked immediately after seeking, ignore stale broadcasts until TV catches up
@@ -156,10 +415,18 @@ export function MyReservations({
         }
       }
     }
-  }, [playbackProgress?.currentTime, playbackProgress?.duration, isScrubbing]);
+  }, [activeTab, playbackProgress?.currentTime, playbackProgress?.duration, isScrubbing]);
 
-  // Smooth local 250ms ticker during active playback for zero stutter
+  // Immediately sync playback time when switching to reservations tab
   useEffect(() => {
+    if (activeTab === 'reservations' && playbackProgress) {
+      setLocalCurrentTime(playbackProgress.currentTime || 0);
+    }
+  }, [activeTab]);
+
+  // Smooth local 250ms ticker during active playback ONLY on reservations tab to prevent re-rendering History tab
+  useEffect(() => {
+    if (activeTab !== 'reservations') return;
     const isPlaying = Boolean(playbackProgress?.isPlaying && !propIsPaused && !localPaused && !isScrubbing);
     const duration = playbackProgress?.duration || 0;
     if (!isPlaying || duration <= 0) return;
@@ -169,7 +436,7 @@ export function MyReservations({
     }, 250);
 
     return () => clearInterval(interval);
-  }, [playbackProgress?.isPlaying, playbackProgress?.duration, propIsPaused, localPaused, isScrubbing]);
+  }, [activeTab, playbackProgress?.isPlaying, playbackProgress?.duration, propIsPaused, localPaused, isScrubbing]);
 
   // Synchronize local paused state when parent prop updates
   useEffect(() => {
@@ -410,10 +677,23 @@ export function MyReservations({
     }
   };
 
+  // Toggle song favorite state (instant O(1))
+  const handleToggleFavorite = useCallback((song: Song | HistorySong) => {
+    toggleFavoriteSong(song);
+    setFavorites(getFavoriteSongs());
+  }, []);
+
+  // Remove song from history (instant optimistic removal)
+  const handleRemoveHistory = useCallback((historyId: string) => {
+    removeSongFromHistory(historyId);
+    setHistory((prev) => prev.filter((item) => item.id !== historyId));
+  }, []);
+
   // Reserve favorite song directly from Favorites tab
-  const handleReserveFavorite = async (song: Song) => {
+  const handleReserveFavorite = useCallback(async (song: Song) => {
     if (!sessionId) return;
-    setReservingFavId(song.id || song.code);
+    const favKey = song.id || song.code;
+    setReservingFavId(favKey);
 
     // Save to history
     addSongToHistory(song, roomCode);
@@ -448,10 +728,10 @@ export function MyReservations({
     } finally {
       setReservingFavId(null);
     }
-  };
+  }, [sessionId, roomCode, guestName, onReserved, onCancelled, onReserveFailed]);
 
   // Reserve song directly from History tab
-  const handleReserveHistory = async (song: SongHistoryItem['song'], historyItemId: string) => {
+  const handleReserveHistory = useCallback(async (song: HistorySong, historyItemId: string) => {
     if (!sessionId) return;
     setReservingHistoryId(historyItemId);
 
@@ -488,7 +768,7 @@ export function MyReservations({
     } finally {
       setReservingHistoryId(null);
     }
-  };
+  }, [sessionId, roomCode, guestName, onReserved, onCancelled, onReserveFailed]);
 
   return (
     <div className="h-full flex flex-col min-h-0 overflow-hidden">
@@ -565,11 +845,9 @@ export function MyReservations({
         </div>
       </div>
 
-      {/* Scrollable Content Container - ONLY this list area scrolls */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 pb-8">
-        {/* TAB 1: MY RESERVATIONS */}
-        {activeTab === 'reservations' && (
-          <div className="space-y-3">
+      {/* TAB 1: MY RESERVATIONS */}
+      {activeTab === 'reservations' && (
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 pb-8 overscroll-contain">
           {/* Error notification for playback controls */}
           {controlError && (
             <div
@@ -820,7 +1098,7 @@ export function MyReservations({
 
       {/* TAB 2: FAVORITES */}
       {activeTab === 'favorites' && (
-        <div className="space-y-3 animate-fade-in">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-3 pb-8 overscroll-contain">
           {favorites.length === 0 ? (
             <div className="text-center py-16 px-4">
               <Star size={40} className="text-zinc-700 mx-auto mb-3" />
@@ -839,100 +1117,16 @@ export function MyReservations({
               </div>
 
               {/* Clean Small 3-Column Grid View */}
-              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                {favorites.map((song, idx) => {
-                  const songKey = song.id || song.code || `fav-${idx}`;
-                  const isReserving = reservingFavId === songKey;
-                  const songThumb =
-                    song.thumbnail_url ||
-                    (song.youtube_video_id
-                      ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg`
-                      : '');
-
-                  return (
-                    <div
-                      key={`${songKey}_${idx}`}
-                      className="flex flex-col justify-between p-1.5 rounded-xl transition-all bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 shadow-sm relative group overflow-hidden"
-                    >
-                      {/* Top: Thumbnail with 16:9 Aspect Ratio + Star Toggle Button */}
-                      <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
-                        {songThumb ? (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img
-                            src={songThumb}
-                            alt={song.title}
-                            className="w-full h-full object-cover scale-[1.05] group-hover:scale-110 transition-transform duration-200"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <Music2 size={16} className="text-zinc-600" />
-                        )}
-
-                        {/* Top-Right Floating Star Button */}
-                        <div className="absolute top-1 right-1 z-10">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFavoriteSong(song);
-                              setFavorites(getFavoriteSongs());
-                            }}
-                            className="w-4.5 h-4.5 rounded bg-black/70 backdrop-blur-md flex items-center justify-center text-yellow-400 active:scale-90 transition-all border border-white/10 shadow-sm"
-                            title="Remove from favorites"
-                            aria-label={`Remove ${song.title} from favorites`}
-                          >
-                            <Star size={10} className="fill-yellow-400 text-yellow-400" />
-                          </button>
-                        </div>
-
-                        {/* Song Code badge or Type (bottom left) */}
-                        {song.code && song.code !== 'YT' ? (
-                          <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 backdrop-blur-md text-[7px] font-mono font-bold text-teal-300 border border-teal-500/30">
-                            #{song.code}
-                          </div>
-                        ) : song.song_type ? (
-                          <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 backdrop-blur-md text-[7px] font-bold text-teal-300 border border-teal-500/30 uppercase truncate max-w-[50px]">
-                            {song.song_type}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {/* Middle: Title & Artist */}
-                      <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
-                        <div>
-                          <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={song.title}>
-                            {song.title}
-                          </p>
-                          <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={song.artist}>
-                            {song.artist}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Bottom: Clean "RESERVE" Button */}
-                      <button
-                        id={`reserve-fav-btn-${songKey}`}
-                        onClick={() => handleReserveFavorite(song)}
-                        disabled={isReserving}
-                        className="mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 text-black text-[9px] font-black transition-all active:scale-95 shadow-sm disabled:opacity-50 shrink-0"
-                        title={`Reserve ${song.title}`}
-                        aria-label={`Reserve ${song.title}`}
-                      >
-                        {isReserving ? (
-                          <>
-                            <Loader2 size={10} className="animate-spin text-black" />
-                            <span>...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={10} className="stroke-[3]" />
-                            <span>RESERVE</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2" style={{ contain: 'paint layout' }}>
+                {favorites.map((song, idx) => (
+                  <FavoriteCard
+                    key={song.id || song.code || `fav-${idx}`}
+                    song={song}
+                    isReserving={reservingFavId === (song.id || song.code)}
+                    onToggleFavorite={handleToggleFavorite}
+                    onReserve={handleReserveFavorite}
+                  />
+                ))}
               </div>
             </>
           )}
@@ -941,9 +1135,9 @@ export function MyReservations({
 
       {/* TAB 3: HISTORY */}
       {activeTab === 'history' && (
-        <div className="space-y-3 animate-fade-in">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {history.length === 0 ? (
-            <div className="text-center py-16 px-4">
+            <div className="flex-1 min-h-0 overflow-y-auto text-center py-16 px-4">
               <History size={40} className="text-zinc-700 mx-auto mb-3" />
               <p className="text-zinc-400 font-bold text-sm">NO HISTORY YET</p>
               <p className="text-xs text-zinc-500 mt-1 max-w-[250px] mx-auto">
@@ -952,259 +1146,164 @@ export function MyReservations({
             </div>
           ) : (
             <>
-              {/* History Top Action Bar */}
-              <div className="flex items-center justify-between px-1 mb-1">
-                <span className="text-[10px] sm:text-[11px] font-extrabold text-zinc-500 uppercase tracking-wider">
-                  Played & Reserved ({filteredHistory.length})
-                </span>
-                <button
-                  onClick={() => {
-                    if (window.confirm('Clear your entire song history?')) {
-                      clearSongHistory();
-                      setHistory([]);
-                    }
-                  }}
-                  className="text-[10px] sm:text-[11px] font-bold text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-1 p-1 active:scale-95"
-                  title="Clear all song history"
-                >
-                  <Trash2 size={11} />
-                  <span>Clear History</span>
-                </button>
-              </div>
-
-              {/* Clean Date Filter Selector */}
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistoryDateFilter('all');
-                    setCustomDate('');
-                  }}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                    historyDateFilter === 'all'
-                      ? 'bg-teal-400 text-black shadow-sm font-black'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                  }`}
-                >
-                  All ({history.length})
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistoryDateFilter('today');
-                    setCustomDate('');
-                  }}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                    historyDateFilter === 'today'
-                      ? 'bg-teal-400 text-black shadow-sm font-black'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                  }`}
-                >
-                  Today
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistoryDateFilter('yesterday');
-                    setCustomDate('');
-                  }}
-                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                    historyDateFilter === 'yesterday'
-                      ? 'bg-teal-400 text-black shadow-sm font-black'
-                      : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                  }`}
-                >
-                  Yesterday
-                </button>
-
-                {/* Custom Date Picker */}
-                <div className="relative shrink-0 flex items-center gap-1">
-                  <input
-                    type="date"
-                    value={customDate}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        setCustomDate(e.target.value);
-                        setHistoryDateFilter('custom');
+              {/* Pinned Top Action & Date Filter Bar (STATIONARY - Will NOT move on scroll) */}
+              <div className="shrink-0 px-4 pt-2.5 pb-2 bg-zinc-950/95 border-b border-zinc-900 space-y-2 z-10 shadow-sm">
+                {/* History Top Action Bar */}
+                <div className="flex items-center justify-between px-0.5">
+                  <span className="text-[10px] sm:text-[11px] font-extrabold text-zinc-400 uppercase tracking-wider">
+                    Played & Reserved ({filteredHistory.length})
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Clear your entire song history?')) {
+                        clearSongHistory();
+                        setHistory([]);
                       }
                     }}
-                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
-                    title="Filter by specific date"
-                  />
-                  <div
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all border pointer-events-none ${
-                      historyDateFilter === 'custom' && customDate
-                        ? 'bg-teal-400 text-black border-teal-400 shadow-sm font-black'
-                        : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                    }`}
+                    className="text-[10px] sm:text-[11px] font-bold text-zinc-500 hover:text-red-400 transition-colors flex items-center gap-1 p-1 active:scale-95"
+                    title="Clear all song history"
                   >
-                    <Calendar size={11} className={historyDateFilter === 'custom' && customDate ? 'text-black' : 'text-zinc-400'} />
-                    <span>
-                      {customDate
-                        ? (() => {
-                            const [y, m, d] = customDate.split('-').map(Number);
-                            return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' });
-                          })()
-                        : 'Pick Date'}
-                    </span>
-                  </div>
-
-                  {historyDateFilter === 'custom' && customDate && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCustomDate('');
-                        setHistoryDateFilter('all');
-                      }}
-                      className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
-                      title="Reset date filter"
-                    >
-                      <X size={11} />
-                    </button>
-                  )}
+                    <Trash2 size={11} />
+                    <span>Clear History</span>
+                  </button>
                 </div>
-              </div>
 
-              {filteredHistory.length === 0 ? (
-                <div className="text-center py-10 px-4 bg-zinc-900/40 rounded-xl border border-zinc-800/60 mt-1">
-                  <History size={28} className="text-zinc-700 mx-auto mb-2" />
-                  <p className="text-zinc-400 font-bold text-xs">NO SONGS ON THIS DATE</p>
-                  <p className="text-[11px] text-zinc-500 mt-1">
-                    No songs found for {historyDateFilter === 'today' ? 'today' : historyDateFilter === 'yesterday' ? 'yesterday' : 'the selected date'}.
-                  </p>
+                {/* Clean Date Filter Selector */}
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 touch-pan-x">
                   <button
                     type="button"
                     onClick={() => {
                       setHistoryDateFilter('all');
                       setCustomDate('');
                     }}
-                    className="mt-3 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold rounded-lg transition-all"
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
+                      historyDateFilter === 'all'
+                        ? 'bg-teal-400 text-black shadow-sm font-black'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                    }`}
                   >
-                    Show All History
+                    All ({history.length})
                   </button>
-                </div>
-              ) : (
-                /* Clean Small 3-Column Grid View */
-                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                  {filteredHistory.map((item, idx) => {
-                    const isReserving = reservingHistoryId === item.id;
-                    const isFavorited = isSongFavorited(item.song);
-                    const songThumb =
-                      item.song.thumbnail_url ||
-                      (item.song.youtube_video_id
-                        ? `https://img.youtube.com/vi/${item.song.youtube_video_id}/mqdefault.jpg`
-                        : '');
 
-                    return (
-                      <div
-                        key={`${item.id}_${idx}`}
-                        className="flex flex-col justify-between p-1.5 rounded-xl transition-all bg-zinc-900/90 border border-zinc-800/80 hover:border-zinc-700 shadow-sm relative group overflow-hidden"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryDateFilter('today');
+                      setCustomDate('');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
+                      historyDateFilter === 'today'
+                        ? 'bg-teal-400 text-black shadow-sm font-black'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                    }`}
+                  >
+                    Today
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryDateFilter('yesterday');
+                      setCustomDate('');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
+                      historyDateFilter === 'yesterday'
+                        ? 'bg-teal-400 text-black shadow-sm font-black'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                    }`}
+                  >
+                    Yesterday
+                  </button>
+
+                  {/* Custom Date Picker */}
+                  <div className="relative shrink-0 flex items-center gap-1">
+                    <input
+                      type="date"
+                      value={customDate}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setCustomDate(e.target.value);
+                          setHistoryDateFilter('custom');
+                        }
+                      }}
+                      className="opacity-0 absolute inset-0 w-full h-full cursor-pointer z-10"
+                      title="Filter by specific date"
+                    />
+                    <div
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all border pointer-events-none ${
+                        historyDateFilter === 'custom' && customDate
+                          ? 'bg-teal-400 text-black border-teal-400 shadow-sm font-black'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      <Calendar size={11} className={historyDateFilter === 'custom' && customDate ? 'text-black' : 'text-zinc-400'} />
+                      <span>
+                        {customDate
+                          ? (() => {
+                              const [y, m, d] = customDate.split('-').map(Number);
+                              return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                            })()
+                          : 'Pick Date'}
+                      </span>
+                    </div>
+
+                    {historyDateFilter === 'custom' && customDate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomDate('');
+                          setHistoryDateFilter('all');
+                        }}
+                        className="p-1 rounded text-zinc-400 hover:text-white transition-colors"
+                        title="Reset date filter"
                       >
-                        {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
-                        <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
-                          {songThumb ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={songThumb}
-                              alt={item.song.title}
-                              className="w-full h-full object-cover scale-[1.05] group-hover:scale-110 transition-transform duration-200"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <Music2 size={16} className="text-zinc-600" />
-                          )}
-
-                          {/* Top-Right Floating Actions: Favorite & Delete from history */}
-                          <div className="absolute top-1 right-1 flex items-center gap-0.5 z-10">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleFavoriteSong(item.song);
-                                setFavorites(getFavoriteSongs());
-                              }}
-                              className="w-4.5 h-4.5 rounded bg-black/70 backdrop-blur-md flex items-center justify-center text-zinc-400 hover:text-yellow-400 active:scale-90 transition-all border border-white/10 shadow-sm"
-                              title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-                              aria-label={`Favorite ${item.song.title}`}
-                            >
-                              <Star
-                                size={10}
-                                className={isFavorited ? 'fill-yellow-400 text-yellow-400' : ''}
-                              />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeSongFromHistory(item.id);
-                                setHistory(getSongHistory());
-                              }}
-                              className="w-4.5 h-4.5 rounded bg-black/70 backdrop-blur-md flex items-center justify-center text-zinc-400 hover:text-red-400 active:scale-90 transition-all border border-white/10 shadow-sm"
-                              title="Remove from history"
-                              aria-label={`Remove ${item.song.title} from history`}
-                            >
-                              <Trash2 size={9} />
-                            </button>
-                          </div>
-
-                          {/* Song Code badge (bottom left) */}
-                          {item.song.code && item.song.code !== 'YT' && (
-                            <div className="absolute bottom-1 left-1 px-1 py-0.2 rounded bg-black/80 backdrop-blur-md text-[7px] font-mono font-bold text-teal-300 border border-teal-500/30">
-                              #{item.song.code}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Middle: Title, Artist, & Time Played */}
-                        <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
-                          <div>
-                            <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={item.song.title}>
-                              {item.song.title}
-                            </p>
-                            <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={item.song.artist}>
-                              {item.song.artist}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-0.5 text-[8px] text-zinc-400 mt-1 truncate">
-                            <Clock size={8} className="text-teal-400 shrink-0" />
-                            <span className="truncate">{formatHistoryDate(item.playedAt)}</span>
-                          </div>
-                        </div>
-
-                        {/* Bottom: Clean "SING AGAIN" Button */}
-                        <button
-                          id={`reserve-history-btn-${item.id}`}
-                          onClick={() => handleReserveHistory(item.song, item.id)}
-                          disabled={isReserving}
-                          className="mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 text-black text-[9px] font-black transition-all active:scale-95 shadow-sm disabled:opacity-50 shrink-0"
-                          title={`Reserve ${item.song.title} again`}
-                          aria-label={`Reserve ${item.song.title} again`}
-                        >
-                          {isReserving ? (
-                            <>
-                              <Loader2 size={10} className="animate-spin text-black" />
-                              <span>...</span>
-                            </>
-                          ) : (
-                            <>
-                              <RotateCcw size={9} className="stroke-[2.5]" />
-                              <span>SING AGAIN</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Scrollable Content: ONLY THE GRID SCROLLS! */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 pb-8 overscroll-contain [transform:translateZ(0)] [-webkit-overflow-scrolling:touch]">
+                {preparedHistory.length === 0 ? (
+                  <div className="text-center py-10 px-4 bg-zinc-900/40 rounded-xl border border-zinc-800/60 mt-1">
+                    <History size={28} className="text-zinc-700 mx-auto mb-2" />
+                    <p className="text-zinc-400 font-bold text-xs">NO SONGS ON THIS DATE</p>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      No songs found for {historyDateFilter === 'today' ? 'today' : historyDateFilter === 'yesterday' ? 'yesterday' : 'the selected date'}.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHistoryDateFilter('all');
+                        setCustomDate('');
+                      }}
+                      className="mt-3 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold rounded-lg transition-all"
+                    >
+                      Show All History
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2" style={{ contain: 'paint layout' }}>
+                    {preparedHistory.map((item) => (
+                      <HistoryCard
+                        key={item.id}
+                        item={item}
+                        isFavorited={isSongFavoritedFast(item.song)}
+                        isReserving={reservingHistoryId === item.id}
+                        onToggleFavorite={handleToggleFavorite}
+                        onRemove={handleRemoveHistory}
+                        onReserve={handleReserveHistory}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
       )}
-      </div>
     </div>
   );
 }
