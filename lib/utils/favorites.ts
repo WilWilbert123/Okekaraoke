@@ -6,14 +6,33 @@ export type FavoritableSong = Song | EnrichedQueueItem['song'];
 
 const FAVORITES_STORAGE_KEY = 'okekaraoke_favorite_songs';
 
+let memoryFavorites: Song[] | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === FAVORITES_STORAGE_KEY) {
+      memoryFavorites = null;
+    }
+  });
+  window.addEventListener('okekaraoke_favorites_updated', () => {
+    memoryFavorites = null;
+  });
+}
+
 export function getFavoriteSongs(): Song[] {
   if (typeof window === 'undefined') return [];
+  if (memoryFavorites !== null) return memoryFavorites;
   try {
     const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) {
+      memoryFavorites = [];
+      return [];
+    }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    memoryFavorites = Array.isArray(parsed) ? parsed : [];
+    return memoryFavorites;
   } catch {
+    memoryFavorites = [];
     return [];
   }
 }
@@ -60,6 +79,7 @@ export function toggleFavoriteSong(song: FavoritableSong): boolean {
   }
 
   try {
+    memoryFavorites = favorites;
     localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
     window.dispatchEvent(new Event('okekaraoke_favorites_updated'));
   } catch (e) {

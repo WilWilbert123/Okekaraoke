@@ -2,32 +2,41 @@
 
 // ============================================================
 // OKEKARAOKE — Premium Animated Intro Splash Screen
-// Icon falls from top with spring motion, O-K-E-K-A-R-A-O-K-E
-// letters slide in per-letter from left with staggered delay.
+// Clean white studio background, smooth spring icon entry,
+// staggered per-letter text, and hardware-accelerated 60/120fps motion.
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface IntroSplashProps {
   onComplete?: () => void;
 }
 
 const LETTERS = [
-  { char: 'O', color: '#2dd4bf' },
-  { char: 'K', color: '#2dd4bf' },
-  { char: 'E', color: '#2dd4bf' },
-  { char: 'K', color: '#ffffff' },
-  { char: 'A', color: '#ffffff' },
-  { char: 'R', color: '#ffffff' },
-  { char: 'A', color: '#ffffff' },
-  { char: 'O', color: '#ffffff' },
-  { char: 'K', color: '#ffffff' },
-  { char: 'E', color: '#ffffff' },
+  { char: 'O', color: '#0d9488' },
+  { char: 'K', color: '#0d9488' },
+  { char: 'E', color: '#0d9488' },
+  { char: 'K', color: '#09090b' },
+  { char: 'A', color: '#09090b' },
+  { char: 'R', color: '#09090b' },
+  { char: 'A', color: '#09090b' },
+  { char: 'O', color: '#09090b' },
+  { char: 'K', color: '#09090b' },
+  { char: 'E', color: '#09090b' },
 ];
 
 export function IntroSplash({ onComplete }: IntroSplashProps) {
   const [visible, setVisible] = useState(true);
   const [fadingOut, setFadingOut] = useState(false);
+
+  const handleSkip = useCallback(() => {
+    if (fadingOut) return;
+    setFadingOut(true);
+    setTimeout(() => {
+      setVisible(false);
+      onComplete?.();
+    }, 450);
+  }, [fadingOut, onComplete]);
 
   useEffect(() => {
     // Play intro on fresh open & browser refresh
@@ -42,16 +51,16 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
       sessionStorage.setItem('okekaraoke_intro_played', '1');
     }
 
-    // Start smooth fade out after 3.2 seconds
+    // Start smooth fade out after 2.4 seconds
     const fadeTimer = setTimeout(() => {
       setFadingOut(true);
-    }, 3200);
+    }, 2400);
 
-    // Unmount component after fade completes (4.0 seconds total)
+    // Unmount component after fade completes
     const hideTimer = setTimeout(() => {
       setVisible(false);
       onComplete?.();
-    }, 4000);
+    }, 2900);
 
     return () => {
       clearTimeout(fadeTimer);
@@ -63,35 +72,45 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-zinc-950 transition-all duration-800 ease-in-out ${fadingOut ? 'opacity-0 pointer-events-none scale-105 backdrop-blur-0' : 'opacity-100 backdrop-blur-2xl'
-        }`}
+      onClick={handleSkip}
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white cursor-pointer select-none transition-opacity duration-500 ease-out [transform:translateZ(0)] ${
+        fadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      }`}
       style={{
-        background: 'radial-gradient(circle at center, rgba(18, 18, 28, 0.98) 0%, rgba(9, 9, 11, 1) 100%)',
+        background: 'radial-gradient(circle at center, #ffffff 0%, #f8fafc 100%)',
       }}
     >
-      <div className="flex flex-col items-center justify-center gap-6 px-4 select-none text-center">
-        {/* Falling Icon from top with spring motion */}
-        <div className="relative animate-fall-down">
-          {/* Ambient Glow behind icon */}
-          <div className="absolute inset-0 rounded-full bg-teal-400/25 blur-3xl scale-150 animate-pulse" />
+      <div className="flex flex-col items-center justify-center gap-4 px-4 select-none text-center">
+        {/* Falling Logo with smooth spring motion */}
+        <div
+          className="relative animate-fall-down"
+          style={{ willChange: 'transform, opacity' }}
+        >
+          {/* Subtle ambient glow behind logo */}
+          <div className="absolute inset-0 rounded-full bg-teal-500/10 blur-xl scale-125 pointer-events-none" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/icon.png"
-            alt="OKEKARAOKE"
-            className="w-20 h-20 md:w-28 md:h-28 object-contain filter drop-shadow-[0_12px_30px_rgba(45,212,191,0.5)] relative z-10"
+            src="/okekaraokelogo.png"
+            alt="OKEKARAOKE Logo"
+            className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 object-contain relative z-10 drop-shadow-[0_10px_25px_rgba(0,0,0,0.12)]"
+            loading="eager"
+            decoding="async"
           />
         </div>
 
         {/* Staggered Per-Letter Text Entry from Left */}
-        <div className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
+        <div
+          className="flex items-center gap-0.5 sm:gap-1 md:gap-1.5 tracking-tight"
+          style={{ fontFamily: 'Space Grotesk, sans-serif', letterSpacing: '-0.02em' }}
+        >
           {LETTERS.map((item, idx) => (
             <span
               key={idx}
-              className="text-2xl sm:text-3xl md:text-5xl font-black inline-block animate-slide-left-stagger opacity-0"
+              className="text-3xl sm:text-4xl md:text-5xl font-black inline-block animate-slide-left-stagger opacity-0"
               style={{
                 color: item.color,
-                animationDelay: `${550 + idx * 90}ms`,
-                textShadow: item.color === '#2dd4bf' ? '0 0 18px rgba(45,212,191,0.5)' : 'none',
+                animationDelay: `${350 + idx * 50}ms`,
+                willChange: 'transform, opacity',
               }}
             >
               {item.char}
@@ -99,61 +118,71 @@ export function IntroSplash({ onComplete }: IntroSplashProps) {
           ))}
         </div>
 
-
+        {/* Tagline */}
+        <div className="animate-subtitle-fade opacity-0">
+          <span className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.25em] text-slate-400">
+            Interactive Karaoke System
+          </span>
+        </div>
       </div>
 
-      {/* Custom Keyframe Animations */}
+      {/* Subtle tap-to-skip hint */}
+      <span className="absolute bottom-6 text-[10px] sm:text-[11px] font-semibold text-slate-400/80 tracking-wider uppercase select-none pointer-events-none">
+        Tap anywhere to skip
+      </span>
+
+      {/* Custom Keyframe Animations - Hardware accelerated translate3d */}
       <style jsx global>{`
         @keyframes fallDown {
           0% {
-            transform: translateY(-160px) scale(0.5);
+            transform: translate3d(0, -90px, 0) scale(0.65);
             opacity: 0;
           }
-          60% {
-            transform: translateY(10px) scale(1.06);
+          65% {
+            transform: translate3d(0, 6px, 0) scale(1.04);
             opacity: 1;
           }
-          80% {
-            transform: translateY(-3px) scale(0.98);
+          85% {
+            transform: translate3d(0, -2px, 0) scale(0.99);
           }
           100% {
-            transform: translateY(0) scale(1);
+            transform: translate3d(0, 0, 0) scale(1);
             opacity: 1;
           }
         }
 
         @keyframes slideLeftStagger {
           0% {
-            transform: translateX(-50px) scale(0.85);
+            transform: translate3d(-30px, 0, 0) scale(0.9);
             opacity: 0;
           }
           100% {
-            transform: translateX(0) scale(1);
+            transform: translate3d(0, 0, 0) scale(1);
             opacity: 1;
           }
         }
 
-        @keyframes fadeInDelayed {
+        @keyframes subtitleFade {
           0% {
             opacity: 0;
-            transform: translateY(12px);
+            transform: translate3d(0, 8px, 0);
           }
           100% {
-            opacity: 0.8;
-            transform: translateY(0);
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
           }
         }
 
         .animate-fall-down {
-          animation: fallDown 1100ms cubic-bezier(0.175, 0.885, 0.32, 1.25) forwards;
+          animation: fallDown 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
         .animate-slide-left-stagger {
-          animation: slideLeftStagger 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          animation: slideLeftStagger 450ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
 
-        .animate-fade-in-delayed {
-          animation: fadeInDelayed 800ms ease-out 1900ms forwards;
+        .animate-subtitle-fade {
+          animation: subtitleFade 500ms ease-out 1000ms forwards;
         }
       `}</style>
     </div>
