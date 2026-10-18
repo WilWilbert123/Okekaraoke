@@ -960,8 +960,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
               <button
                 onClick={installApp}
                 className="p-1.5 rounded-lg bg-teal-400 hover:bg-teal-300 text-black flex items-center justify-center transition-all active:scale-95 shadow-sm shrink-0"
-                title="Install App"
-                aria-label="Install App"
+                title="Install App (Google Play)"
+                aria-label="Install App (Google Play)"
               >
                 <Download size={14} />
               </button>
