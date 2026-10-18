@@ -1,0 +1,25 @@
+{
+  "fps": 60,
+  "duration": 25,
+  "bpm": 120,
+  "scenes": [
+    { "id": "hook",   "start": 0.0,  "end": 3.0,  "label": "01 / HOOK" },
+    { "id": "brand",  "start": 3.0,  "end": 5.0,  "label": "02 / IDENTITY" },
+    { "id": "screen", "start": 5.0,  "end": 9.0,  "label": "03 / BIG SCREEN" },
+    { "id": "search", "start": 9.0,  "end": 12.0, "label": "04 / SEARCH" },
+    { "id": "queue",  "start": 12.0, "end": 14.5, "label": "05 / LIVE QUEUE" },
+    { "id": "chat",   "start": 14.5, "end": 17.0, "label": "06 / CHAT" },
+    { "id": "solo",   "start": 17.0, "end": 21.0, "label": "07 / SOLO MODE" },
+    { "id": "outro",  "start": 21.0, "end": 25.0, "label": "08 / SIGN-OFF" }
+  ],
+  "vo": [
+    { "id": "l1", "at": 0.30 },
+    { "id": "l2", "at": 3.25 },
+    { "id": "l3", "at": 6.10 },
+    { "id": "l4", "at": 9.05 },
+    { "id": "l5", "at": 12.10 },
+    { "id": "l6", "at": 14.50 },
+    { "id": "l7", "at": 17.25 },
+    { "id": "l8", "at": 21.40 }
+  ]
+}
