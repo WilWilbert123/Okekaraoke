@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OKEKARAOKE — Motion Showreel '26</title>
+<meta name="description" content="A 25-second motion graphics showreel for OKEKARAOKE.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Outfit:wght@700;800;900&display=block" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas {
+    width: min(100vw, 177.78vh);
+    height: min(56.25vw, 100vh);
+    display: block;
+    cursor: pointer;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  }
+  #hint {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #2dd4bf;
+    background: rgba(5, 5, 8, 0.85);
+    border: 1px solid rgba(45, 212, 191, 0.3);
+    padding: 8px 18px;
+    border-radius: 9999px;
+    font: 700 12px "JetBrains Mono", monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    backdrop-filter: blur(8px);
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+<h1 style="position:absolute;left:-9999px">OKEKARAOKE Showreel</h1>
+<canvas id="c" width="1920" height="1080"></canvas>
+<div id="hint">CLICK TO PLAY WITH SOUND</div>
+<script type="module" src="reel.js"></script>
+</body>
+</html>
