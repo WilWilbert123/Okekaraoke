@@ -25,9 +25,20 @@ import {
   Star,
   LayoutGrid,
   List,
+  Download,
+  HardDrive,
+  Check,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import type { Song } from '@/lib/types';
 import { getFavoriteSongs, toggleFavoriteSong } from '@/lib/utils/favorites';
+import {
+  getDownloadedSongs,
+  downloadAndSaveSong,
+  DOWNLOADS_CHANGED_EVENT,
+} from '@/lib/utils/offlineStorage';
+import { OfflineSongThumbnail } from '@/components/remote/OfflineSongThumbnail';
 
 interface SongSearchProps {
   roomCode: string;
@@ -68,17 +79,132 @@ interface SongCardProps {
   songStatus: { status: 'idle' | 'reserving' | 'success' | 'error'; message?: string };
   isFav: boolean;
   isAlreadyReserved: boolean;
+  isDownloaded?: boolean;
+  isDownloading?: boolean;
+  downloadProgress?: number;
   onToggleFav: (song: Song) => void;
   onReserve: (song: Song) => void;
+  onDownload?: (song: Song) => void;
 }
+
+interface CircularDownloadButtonProps {
+  isDownloaded: boolean;
+  isDownloading: boolean;
+  progress: number;
+  onClick?: () => void;
+  title?: string;
+  size?: number;
+}
+
+const CircularDownloadButton = memo(function CircularDownloadButton({
+  isDownloaded,
+  isDownloading,
+  progress,
+  onClick,
+  title,
+  size = 32,
+}: CircularDownloadButtonProps) {
+  const strokeWidth = size >= 30 ? 2.5 : 2;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  // Progress clamped between 10% and 99% while downloading, and 100% when complete
+  const clampedProgress = Math.min(99, Math.max(10, progress));
+  const strokeDashoffset = circumference - (clampedProgress / 100) * circumference;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isDownloading}
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`relative rounded-full flex items-center justify-center transition-all active:scale-90 shrink-0 select-none group ${isDownloaded
+        ? 'bg-teal-500/15 text-teal-400'
+        : isDownloading
+          ? 'bg-zinc-950 text-teal-300 shadow-md'
+          : 'bg-zinc-800/90 hover:bg-zinc-700 text-zinc-400 hover:text-white'
+        }`}
+      title={title}
+      aria-label={title}
+    >
+      {/* SVG Circular Border Ring */}
+      <svg
+        width={size}
+        height={size}
+        className="absolute inset-0 pointer-events-none -rotate-90"
+        style={{ transformOrigin: '50% 50%' }}
+      >
+        {/* Background track circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={
+            isDownloaded
+              ? 'rgba(45, 212, 191, 0.4)'
+              : isDownloading
+                ? 'rgba(255, 255, 255, 0.12)'
+                : 'rgba(255, 255, 255, 0.16)'
+          }
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+
+        {/* Animated Progress filling around circular border */}
+        {isDownloading && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#2dd4bf"
+            strokeWidth={strokeWidth}
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            fill="none"
+            className="transition-all duration-300 ease-out"
+          />
+        )}
+
+        {/* Complete state check ring */}
+        {isDownloaded && !isDownloading && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="#2dd4bf"
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+        )}
+      </svg>
+
+      {/* Center Content: Percent 10%-99%, Checkmark when done, or Download arrow */}
+      <div className="relative z-10 flex items-center justify-center pointer-events-none">
+        {isDownloading ? (
+          <span className="text-[7.5px] sm:text-[8.5px] font-mono font-black text-teal-300 leading-none tracking-tighter">
+            {clampedProgress}%
+          </span>
+        ) : isDownloaded ? (
+          <Check size={size >= 30 ? 14 : 11} className="text-teal-400 stroke-[3]" />
+        ) : (
+          <Download size={size >= 30 ? 13 : 10} className="transition-transform group-hover:scale-110" />
+        )}
+      </div>
+    </button>
+  );
+});
 
 const SongGridCard = memo(function SongGridCard({
   song,
   songStatus,
   isFav,
   isAlreadyReserved,
+  isDownloaded = false,
+  isDownloading = false,
+  downloadProgress = 0,
   onToggleFav,
   onReserve,
+  onDownload,
 }: SongCardProps) {
   const thumbnailUrl = song.thumbnail_url || (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : null);
 
@@ -98,18 +224,7 @@ const SongGridCard = memo(function SongGridCard({
     >
       {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
       <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
-        {thumbnailUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={thumbnailUrl}
-            alt={song.title}
-            className="w-full h-full object-cover scale-[1.05] group-hover:scale-110 transition-transform duration-200"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <Music2 size={16} className="text-zinc-600" />
-        )}
+        <OfflineSongThumbnail song={song} layoutMode="grid-3" />
 
         {/* Top-Right Floating Star / Favorite Toggle Button */}
         <div className="absolute top-1 right-1 z-10">
@@ -169,36 +284,53 @@ const SongGridCard = memo(function SongGridCard({
         </p>
       )}
 
-      {/* Bottom: Clean "RESERVE" Button */}
-      <button
-        id={`reserve-btn-${song.id}`}
-        onClick={() => onReserve(song)}
-        disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-        className={`mt-1.5 w-full h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 transition-all active:scale-95 text-[9px] font-black tracking-wide shadow-sm disabled:opacity-60 shrink-0 ${
-          songStatus.status === 'success'
+      {/* Bottom: Action Buttons (Reserve + Download to Phone) */}
+      <div className="mt-1.5 flex items-center gap-1 shrink-0">
+        <button
+          id={`reserve-btn-${song.id}`}
+          onClick={() => onReserve(song)}
+          disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
+          className={`flex-1 h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 transition-all active:scale-95 text-[9px] font-black tracking-wide shadow-sm disabled:opacity-60 shrink-0 ${songStatus.status === 'success'
             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
             : 'bg-teal-400 hover:bg-teal-300 text-black'
-        }`}
-        title="Reserve song"
-        aria-label={`Reserve ${song.title}`}
-      >
-        {songStatus.status === 'reserving' ? (
-          <>
-            <Loader2 size={10} className="animate-spin text-black" />
-            <span>...</span>
-          </>
-        ) : songStatus.status === 'success' ? (
-          <>
-            <CheckCircle size={10} className="text-green-400" />
-            <span>ADDED</span>
-          </>
-        ) : (
-          <>
-            <Plus size={10} className="stroke-[3]" />
-            <span>RESERVE</span>
-          </>
-        )}
-      </button>
+            }`}
+          title="Reserve song"
+          aria-label={`Reserve ${song.title}`}
+        >
+          {songStatus.status === 'reserving' ? (
+            <>
+              <Loader2 size={10} className="animate-spin text-black" />
+              <span>...</span>
+            </>
+          ) : songStatus.status === 'success' ? (
+            <>
+              <CheckCircle size={10} className="text-green-400" />
+              <span>ADDED</span>
+            </>
+          ) : (
+            <>
+              <Plus size={10} className="stroke-[3]" />
+              <span>RESERVE</span>
+            </>
+          )}
+        </button>
+
+        {/* Circular Download Button with Border Progress */}
+        <CircularDownloadButton
+          isDownloaded={isDownloaded}
+          isDownloading={isDownloading}
+          progress={downloadProgress}
+          onClick={() => onDownload?.(song)}
+          size={26}
+          title={
+            isDownloaded
+              ? 'Saved on phone (Tap to re-download MP4)'
+              : isDownloading
+                ? `Downloading (${downloadProgress}%)...`
+                : 'Save MP4 to device storage for offline play'
+          }
+        />
+      </div>
     </div>
   );
 });
@@ -208,8 +340,12 @@ const SongListCard = memo(function SongListCard({
   songStatus,
   isFav,
   isAlreadyReserved,
+  isDownloaded = false,
+  isDownloading = false,
+  downloadProgress = 0,
   onToggleFav,
   onReserve,
+  onDownload,
 }: SongCardProps) {
   const thumbnailUrl = song.thumbnail_url || (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : null);
 
@@ -241,18 +377,7 @@ const SongListCard = memo(function SongListCard({
 
       {/* Video Thumbnail */}
       <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden bg-zinc-800 shrink-0 relative border border-zinc-800 flex items-center justify-center">
-        {thumbnailUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={thumbnailUrl}
-            alt={song.title}
-            className="w-full h-full object-cover scale-[1.18]"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <Music2 size={18} className="text-zinc-600" />
-        )}
+        <OfflineSongThumbnail song={song} layoutMode="list" />
       </div>
 
       {/* Song Info */}
@@ -293,35 +418,52 @@ const SongListCard = memo(function SongListCard({
         </div>
       )}
 
-      {/* Reserve button */}
-      <button
-        id={`reserve-btn-${song.id}`}
-        onClick={() => onReserve(song)}
-        disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
-        className={`shrink-0 h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${
-          songStatus.status === 'success'
+      {/* Action buttons (Download + Reserve) */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Circular Download Button with Border Progress */}
+        <CircularDownloadButton
+          isDownloaded={isDownloaded}
+          isDownloading={isDownloading}
+          progress={downloadProgress}
+          onClick={() => onDownload?.(song)}
+          size={32}
+          title={
+            isDownloaded
+              ? 'Saved on phone (Tap to re-download MP4)'
+              : isDownloading
+                ? `Downloading (${downloadProgress}%)...`
+                : 'Save MP4 to device storage for offline play'
+          }
+        />
+
+        <button
+          id={`reserve-btn-${song.id}`}
+          onClick={() => onReserve(song)}
+          disabled={songStatus.status === 'reserving' || songStatus.status === 'success'}
+          className={`h-8.5 px-3 rounded-xl flex items-center gap-1 transition-all active:scale-95 text-[11px] font-black tracking-wide shadow-sm ${songStatus.status === 'success'
             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
             : 'bg-teal-400 hover:bg-teal-300 text-black disabled:opacity-75'
-        }`}
-        aria-label={`Reserve ${song.title}`}
-      >
-        {songStatus.status === 'reserving' ? (
-          <>
-            <Loader2 size={13} className="animate-spin text-black" />
-            <span>...</span>
-          </>
-        ) : songStatus.status === 'success' ? (
-          <>
-            <CheckCircle size={13} className="text-green-400" />
-            <span>ADDED</span>
-          </>
-        ) : (
-          <>
-            <Plus size={14} className="stroke-[3]" />
-            <span>RESERVE</span>
-          </>
-        )}
-      </button>
+            }`}
+          aria-label={`Reserve ${song.title}`}
+        >
+          {songStatus.status === 'reserving' ? (
+            <>
+              <Loader2 size={13} className="animate-spin text-black" />
+              <span>...</span>
+            </>
+          ) : songStatus.status === 'success' ? (
+            <>
+              <CheckCircle size={13} className="text-green-400" />
+              <span>ADDED</span>
+            </>
+          ) : (
+            <>
+              <Plus size={14} className="stroke-[3]" />
+              <span>RESERVE</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 });
@@ -365,6 +507,105 @@ export const SongSearch = memo(function SongSearch({
   const [favTrigger, setFavTrigger] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Offline detection state
+  const [isOffline, setIsOffline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? !navigator.onLine : false;
+  });
+  const [downloadedSongsList, setDownloadedSongsList] = useState<Song[]>([]);
+
+  // Downloaded song IDs cache & live progress tracking
+  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
+  const [downloadingMap, setDownloadingMap] = useState<Record<string, number>>({});
+  const [downloadToast, setDownloadToast] = useState<{ title: string; message: string; success: boolean } | null>(null);
+
+  // Sync downloads live across components from IndexedDB
+  const refreshDownloads = useCallback(async () => {
+    try {
+      const downloaded = await getDownloadedSongs();
+      const ids = new Set<string>();
+      const list: Song[] = [];
+      for (const item of downloaded) {
+        if (item.id) ids.add(item.id);
+        if (item.code && item.code !== 'YT') ids.add(item.code);
+        if (item.youtube_video_id) ids.add(item.youtube_video_id);
+        list.push({
+          id: item.id,
+          code: item.code || 'DOWNLOADED',
+          title: item.title,
+          artist: item.artist,
+          youtube_video_id: item.youtube_video_id || '',
+          thumbnail_url: item.thumbnail_url || '',
+          duration_seconds: item.duration_seconds || 180,
+          genre: 'Downloaded',
+          play_count: 0,
+        } as unknown as Song);
+      }
+      setDownloadedIds(ids);
+      setDownloadedSongsList(list);
+    } catch (err) {
+      console.warn('Failed to load downloaded songs:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshDownloads();
+    window.addEventListener(DOWNLOADS_CHANGED_EVENT, refreshDownloads);
+    return () => window.removeEventListener(DOWNLOADS_CHANGED_EVENT, refreshDownloads);
+  }, [refreshDownloads]);
+
+  const handleDownload = useCallback(async (song: Song) => {
+    const key = song.id || song.youtube_video_id || song.code;
+    if (!key) return;
+
+    // If already downloaded, notify user that re-download will update the offline video file
+    if (
+      downloadedIds.has(key) ||
+      (song.code && downloadedIds.has(song.code)) ||
+      (song.youtube_video_id && downloadedIds.has(song.youtube_video_id))
+    ) {
+      setDownloadToast({
+        title: 'Updating Video File... ⬇️',
+        message: `Downloading latest full MP4 video for "${song.title}"...`,
+        success: true,
+      });
+    }
+
+    setDownloadingMap((prev) => ({ ...prev, [song.id]: 10 }));
+
+    try {
+      await downloadAndSaveSong(song, (progress) => {
+        setDownloadingMap((prev) => ({ ...prev, [song.id]: progress }));
+      });
+
+      setDownloadingMap((prev) => {
+        const next = { ...prev };
+        delete next[song.id];
+        return next;
+      });
+
+      await refreshDownloads();
+
+      setDownloadToast({
+        title: 'Saved to Device! ⬇️',
+        message: `"${song.title}" saved locally. Play anytime offline in Mine → Downloads tab!`,
+        success: true,
+      });
+      setTimeout(() => setDownloadToast(null), 4000);
+    } catch (err: any) {
+      setDownloadingMap((prev) => {
+        const next = { ...prev };
+        delete next[song.id];
+        return next;
+      });
+      setDownloadToast({
+        title: 'Download Failed',
+        message: err?.message || 'Could not save song to local storage. Check available storage.',
+        success: false,
+      });
+      setTimeout(() => setDownloadToast(null), 4000);
+    }
+  }, [downloadedIds, refreshDownloads]);
+
   // Sync favorites live across components
   useEffect(() => {
     const handleFavUpdate = () => setFavTrigger((prev) => prev + 1);
@@ -379,6 +620,14 @@ export const SongSearch = memo(function SongSearch({
 
   // Fetch initial database catalog on mount or load additional pages
   const fetchCatalog = useCallback(async (pageToLoad = 1) => {
+    const isClientOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isClientOffline) {
+      setIsOffline(true);
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+
     if (pageToLoad === 1) {
       setLoading(true);
     } else {
@@ -387,8 +636,9 @@ export const SongSearch = memo(function SongSearch({
 
     try {
       const response = await fetch(`/api/songs/search?limit=50&page=${pageToLoad}`);
-      const json = await response.json();
-      if (json.success && Array.isArray(json.data?.songs)) {
+      const json = await response.json().catch(() => null);
+      if (json?.success && Array.isArray(json.data?.songs)) {
+        setIsOffline(false);
         if (pageToLoad === 1) {
           setCatalog(json.data.songs);
         } else {
@@ -403,10 +653,16 @@ export const SongSearch = memo(function SongSearch({
           setHasMoreCatalog(false);
         }
       } else {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setIsOffline(true);
+        }
         setHasMoreCatalog(false);
       }
     } catch (err) {
-      console.error('Failed to load songs catalog:', err);
+      console.warn('Failed to load songs catalog:', err);
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setIsOffline(true);
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -422,6 +678,49 @@ export const SongSearch = memo(function SongSearch({
     fetchCatalog(1);
   }, [fetchCatalog]);
 
+  // Online / offline event listeners to auto-refresh catalog in real-time
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      setLoading(true);
+      fetchCatalog(1);
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+      setLoading(false);
+      refreshDownloads();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Real-time heartbeat: immediately catches network changes in Airplane Mode / WebViews
+    const timer = setInterval(() => {
+      if (typeof navigator !== 'undefined') {
+        const currentlyOffline = !navigator.onLine;
+        setIsOffline((prev) => {
+          if (prev !== currentlyOffline) {
+            if (currentlyOffline) {
+              setLoading(false);
+              refreshDownloads();
+            } else {
+              setLoading(true);
+              fetchCatalog(1);
+            }
+            return currentlyOffline;
+          }
+          return prev;
+        });
+      }
+    }, 2000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(timer);
+    };
+  }, [fetchCatalog, refreshDownloads]);
+
   // Perform search when user types
   const search = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -431,15 +730,24 @@ export const SongSearch = memo(function SongSearch({
       return;
     }
 
+    const isClientOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isClientOffline) {
+      setIsOffline(true);
+      setLoading(false);
+      setSearched(true);
+      return;
+    }
+
     setLoading(true);
     setSearched(true);
 
     try {
       const params = new URLSearchParams({ q: q.trim(), limit: '30' });
       const response = await fetch(`/api/songs/search?${params.toString()}`);
-      const json = await response.json();
+      const json = await response.json().catch(() => null);
 
-      if (json.success && Array.isArray(json.data?.songs)) {
+      if (json?.success && Array.isArray(json.data?.songs)) {
+        setIsOffline(false);
         setSearchResults(json.data.songs);
       } else {
         setSearchResults([]);
@@ -485,6 +793,29 @@ export const SongSearch = memo(function SongSearch({
         return next;
       });
     }, 1500);
+
+    const isDownloadedSong = Boolean(
+      downloadedIds.has(song.id) ||
+      (song.code && downloadedIds.has(song.code)) ||
+      (song.youtube_video_id && downloadedIds.has(song.youtube_video_id))
+    );
+
+    // If offline (Airplane Mode / Wi-Fi off), play downloaded song locally without network call
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (isDownloadedSong) {
+        onReserved(song, null, `offline_${song.id}`);
+        return;
+      } else {
+        setReserveStatus((prev) => ({
+          ...prev,
+          [song.id]: { status: 'error', message: 'Offline.' },
+        }));
+        setTimeout(() => {
+          setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
+        }, 3000);
+        return;
+      }
+    }
 
     try {
       const response = await fetch('/api/queue/reserve', {
@@ -633,7 +964,22 @@ export const SongSearch = memo(function SongSearch({
 
   // Determine list of displayed songs with useMemo to avoid re-filtering on every tick
   const filteredList = useMemo(() => {
-    const baseList = searched ? searchResults : catalog;
+    // ── 1. REALTIME OFFLINE MODE: AUTOMATICALLY SHOW ONLY DOWNLOADED SONGS ──────────
+    if (isOffline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+      if (!query.trim()) {
+        return downloadedSongsList as SongWithReserving[];
+      }
+      const q = query.toLowerCase().trim();
+      return downloadedSongsList.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          s.artist.toLowerCase().includes(q) ||
+          (s.code && s.code.toLowerCase().includes(q))
+      ) as SongWithReserving[];
+    }
+
+    // ── 2. ONLINE MODE: SHOW CATALOG OR SEARCH RESULTS ────────────────────
+    let baseList = searched ? searchResults : catalog;
     if (activeFilter === 'all') return baseList;
     const filterKey = activeFilter.toLowerCase();
     return baseList.filter((song) => {
@@ -641,7 +987,7 @@ export const SongSearch = memo(function SongSearch({
       const type = (song.song_type || '').toLowerCase();
       return cat.includes(filterKey) || type.includes(filterKey);
     });
-  }, [searched, searchResults, catalog, activeFilter]);
+  }, [searched, searchResults, catalog, activeFilter, isOffline, downloadedSongsList, query]);
 
   return (
     <div className="flex flex-col h-full">
@@ -654,7 +1000,13 @@ export const SongSearch = memo(function SongSearch({
             type="search"
             value={query}
             onChange={(e) => handleInput(e.target.value)}
-            placeholder={isListening ? "Listening... Speak title or artist" : "Search 100K+ songs, artists, YouTube..."}
+            placeholder={
+              isListening
+                ? "Listening... Speak title or artist"
+                : isOffline
+                  ? `Search ${downloadedSongsList.length} downloaded songs...`
+                  : "Search 100K+ songs, artists, YouTube..."
+            }
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -747,50 +1099,114 @@ export const SongSearch = memo(function SongSearch({
         <div className="flex items-center justify-between py-1.5 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-[10px] font-extrabold text-zinc-300 uppercase tracking-wider">
-              {searched
-                ? `Results (${filteredList.length})`
-                : activeFilter !== 'all'
-                  ? `${activeFilter.toUpperCase()} Hits`
-                  : 'Trending Hits'}
+              {isOffline
+                ? `Downloaded Songs (${filteredList.length})`
+                : searched
+                  ? `Results (${filteredList.length})`
+                  : activeFilter !== 'all'
+                    ? `${activeFilter.toUpperCase()} Hits`
+                    : 'Trending Hits'}
             </span>
-            {!searched && activeFilter === 'all' && (
+            {!searched && activeFilter === 'all' && !isOffline && (
               <span className="text-[9px] font-bold text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/20 shrink-0">
                 100K+ Karaoke Songs
               </span>
             )}
+            {isOffline && (
+              <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 shrink-0">
+                Offline
+              </span>
+            )}
           </div>
 
-          {/* Grid / List Layout Toggle */}
-          <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+          {/* Refresh & Grid / List Layout Toggle */}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={() => handleSetLayoutMode('list')}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'list' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              title="1-Column Full Width List"
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                  setIsOffline(true);
+                  setDownloadToast({
+                    title: 'Offline Mode',
+                    message: 'Cannot refresh online catalog without internet connection.',
+                    success: false,
+                  });
+                  setTimeout(() => setDownloadToast(null), 3000);
+                  return;
+                }
+                setIsOffline(false);
+                fetchCatalog(1);
+              }}
+              disabled={loading && !isOffline}
+              className="p-1 px-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white flex items-center gap-1 text-[10px] font-bold transition-all active:scale-95 disabled:opacity-50"
+              title="Refresh Songs Catalog"
             >
-              <List size={12} />
-              <span className="hidden sm:inline">List</span>
+              <RefreshCw size={11} className={loading && !isOffline ? 'animate-spin text-teal-400' : ''} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
-            <button
-              onClick={() => handleSetLayoutMode('grid')}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'grid' ? 'bg-zinc-800 text-teal-400 shadow' : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              title="3-Column Grid"
-            >
-              <LayoutGrid size={12} />
-              <span className="hidden sm:inline">Grid</span>
-            </button>
+
+            <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+              <button
+                onClick={() => handleSetLayoutMode('list')}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'list' ? 'bg-zinc-800 text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                title="1-Column Full Width List"
+              >
+                <List size={12} />
+                <span className="hidden sm:inline">List</span>
+              </button>
+              <button
+                onClick={() => handleSetLayoutMode('grid')}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-all ${layoutMode === 'grid' ? 'bg-zinc-800 text-teal-400 shadow' : 'text-zinc-500 hover:text-zinc-300'
+                  }`}
+                title="3-Column Grid"
+              >
+                <LayoutGrid size={12} />
+                <span className="hidden sm:inline">Grid</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {loading && (
+        {/* Loading Spinner - ONLY shown when Online and loading */}
+        {!isOffline && loading && (
           <div className="flex items-center justify-center gap-2 py-10 text-zinc-400">
             <Loader2 size={16} className="animate-spin text-teal-400" />
             <span className="text-xs">Loading songs...</span>
           </div>
         )}
 
-        {!loading && filteredList.length === 0 && (
+        {/* Empty State when Offline with 0 downloaded songs */}
+        {!loading && filteredList.length === 0 && isOffline && (
+          <div className="text-center py-10 px-4">
+            <WifiOff size={36} className="text-amber-500/50 mx-auto mb-2" />
+            <p className="text-zinc-300 font-bold text-xs">OFFLINE — NO DOWNLOADED SONGS YET</p>
+            <p className="text-[11px] text-zinc-500 mt-1 max-w-xs mx-auto">
+              You are currently offline. Connect to Wi-Fi or mobile data to search and download karaoke songs for offline play.
+            </p>
+            <button
+              onClick={() => {
+                if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                  setDownloadToast({
+                    title: 'Still Offline',
+                    message: 'Connect to Wi-Fi or mobile data first.',
+                    success: false,
+                  });
+                  setTimeout(() => setDownloadToast(null), 3000);
+                  return;
+                }
+                setIsOffline(false);
+                fetchCatalog(1);
+              }}
+              className="mt-4 px-3.5 py-1.5 rounded-xl bg-teal-400 hover:bg-teal-300 text-black font-extrabold text-xs inline-flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+            >
+              <RefreshCw size={12} />
+              <span>Refresh Songs</span>
+            </button>
+          </div>
+        )}
+
+        {/* Empty State when Online */}
+        {!loading && filteredList.length === 0 && !isOffline && (
           <div className="text-center py-10 px-4">
             <Music2 size={36} className="text-zinc-700 mx-auto mb-2" />
             <p className="text-zinc-400 font-medium text-xs">NO KARAOKE SONGS FOUND</p>
@@ -799,6 +1215,13 @@ export const SongSearch = memo(function SongSearch({
                 ? 'Try searching with different keywords'
                 : 'No songs match this filter'}
             </p>
+            <button
+              onClick={() => fetchCatalog(1)}
+              className="mt-3 px-3.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-zinc-700 font-semibold text-xs inline-flex items-center gap-1.5 active:scale-95 transition-all"
+            >
+              <RefreshCw size={12} />
+              <span>Refresh Songs</span>
+            </button>
           </div>
         )}
 
@@ -814,6 +1237,20 @@ export const SongSearch = memo(function SongSearch({
                   Boolean(song.youtube_video_id && reservedSongIds?.has(song.youtube_video_id)) ||
                   Boolean(song.code && reservedSongIds?.has(song.code));
 
+                const isDownloaded =
+                  Boolean(song.id && downloadedIds.has(song.id)) ||
+                  Boolean(song.code && song.code !== 'YT' && downloadedIds.has(song.code)) ||
+                  Boolean(song.youtube_video_id && downloadedIds.has(song.youtube_video_id));
+
+                const isDownloading =
+                  typeof downloadingMap[song.id] === 'number' ||
+                  Boolean(song.youtube_video_id && typeof downloadingMap[song.youtube_video_id] === 'number');
+
+                const downloadProgress =
+                  downloadingMap[song.id] ??
+                  (song.youtube_video_id ? downloadingMap[song.youtube_video_id] : 0) ??
+                  0;
+
                 return (
                   <SongGridCard
                     key={song.id}
@@ -821,8 +1258,12 @@ export const SongSearch = memo(function SongSearch({
                     songStatus={songStatus}
                     isFav={isFav}
                     isAlreadyReserved={isAlreadyReserved}
+                    isDownloaded={isDownloaded}
+                    isDownloading={isDownloading}
+                    downloadProgress={downloadProgress}
                     onToggleFav={handleToggleFav}
                     onReserve={handleReserve}
+                    onDownload={handleDownload}
                   />
                 );
               })}
@@ -838,6 +1279,20 @@ export const SongSearch = memo(function SongSearch({
                   Boolean(song.youtube_video_id && reservedSongIds?.has(song.youtube_video_id)) ||
                   Boolean(song.code && reservedSongIds?.has(song.code));
 
+                const isDownloaded =
+                  Boolean(song.id && downloadedIds.has(song.id)) ||
+                  Boolean(song.code && song.code !== 'YT' && downloadedIds.has(song.code)) ||
+                  Boolean(song.youtube_video_id && downloadedIds.has(song.youtube_video_id));
+
+                const isDownloading =
+                  typeof downloadingMap[song.id] === 'number' ||
+                  Boolean(song.youtube_video_id && typeof downloadingMap[song.youtube_video_id] === 'number');
+
+                const downloadProgress =
+                  downloadingMap[song.id] ??
+                  (song.youtube_video_id ? downloadingMap[song.youtube_video_id] : 0) ??
+                  0;
+
                 return (
                   <SongListCard
                     key={song.id}
@@ -845,13 +1300,36 @@ export const SongSearch = memo(function SongSearch({
                     songStatus={songStatus}
                     isFav={isFav}
                     isAlreadyReserved={isAlreadyReserved}
+                    isDownloaded={isDownloaded}
+                    isDownloading={isDownloading}
+                    downloadProgress={downloadProgress}
                     onToggleFav={handleToggleFav}
                     onReserve={handleReserve}
+                    onDownload={handleDownload}
                   />
                 );
               })}
             </div>
           )
+        )}
+
+        {/* Floating Download Notification Toast */}
+        {downloadToast && (
+          <div className="fixed bottom-20 left-4 right-4 z-50 max-w-sm mx-auto flex items-center gap-3 p-3 rounded-2xl bg-zinc-950/95 border border-teal-500/40 text-white shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-3 duration-200">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${downloadToast.success ? 'bg-teal-500/20 text-teal-400' : 'bg-red-500/20 text-red-400'}`}>
+              {downloadToast.success ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white leading-tight">{downloadToast.title}</p>
+              <p className="text-[11px] text-zinc-300 truncate mt-0.5">{downloadToast.message}</p>
+            </div>
+            <button
+              onClick={() => setDownloadToast(null)}
+              className="p-1 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          </div>
         )}
 
         {/* Load More & Unlimited Songs Reassurance Banner */}

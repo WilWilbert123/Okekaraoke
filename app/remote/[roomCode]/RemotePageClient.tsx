@@ -116,12 +116,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     }
   }, [isSoloTVMode, soloPlaybackProgress.isPlaying]);
 
-  // Set 1-Device Solo mode strictly based on URL solotv parameter
+  // Set 1-Device Solo mode based on URL solotv parameter, saved preference, or offline state
   useEffect(() => {
     const isSoloParam = searchParams?.get('solotv') === 'true' || searchParams?.get('solotv') === '1';
-    setIsSoloTVMode(isSoloParam);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('okekaraoke_solo_tv', isSoloParam ? 'true' : 'false');
+    const savedSolo = typeof window !== 'undefined' && localStorage.getItem('okekaraoke_solo_tv') === 'true';
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    setIsSoloTVMode(isSoloParam || savedSolo || isOffline);
+    if (typeof window !== 'undefined' && (isSoloParam || savedSolo)) {
+      localStorage.setItem('okekaraoke_solo_tv', 'true');
     }
   }, [searchParams]);
 
@@ -210,34 +212,106 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const [editNameValue, setEditNameValue] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Offline Room State Helper ─────────────────────────────
+  const createOfflineRoomState = useCallback((code: string): InstanceState => {
+    const cacheKey = `okekaraoke_room_cache_${code.toUpperCase()}`;
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(cacheKey);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.instance) {
+            return parsed;
+          }
+        }
+      } catch {
+        // fallback to default offline state
+      }
+    }
+
+    return {
+      instance: {
+        id: `offline_room_${code.toUpperCase()}`,
+        room_code: code.toUpperCase(),
+        status: 'active' as const,
+        created_at: new Date().toISOString(),
+      },
+      settings: {
+        scoring_enabled: false,
+        allow_guest_pause: true,
+        allow_guest_skip: true,
+        allow_cancel: true,
+        theme: 'dark',
+      } as any,
+      current_song: null,
+      queue: [],
+      devices: [],
+    };
+  }, []);
+
   const fetchState = useCallback(async () => {
+    const cacheKey = `okekaraoke_room_cache_${roomCode.toUpperCase()}`;
+    const isBrowserOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+
+    // If completely offline according to browser, load cached or offline room immediately
+    if (isBrowserOffline) {
+      const offlineState = createOfflineRoomState(roomCode);
+      setInstanceState(offlineState);
+      setInstanceId(offlineState.instance.id);
+      setIsSoloTVMode(true);
+      setConnectionStatus('offline');
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       const response = await fetch(`/api/instances/${roomCode}/state?t=${Date.now()}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
       });
-      const json = await response.json();
+      const json = await response.json().catch(() => null);
 
-      if (!response.ok || !json.success) {
-        if (response.status === 404) {
-          setError('Room not found. This OKEKARAOKE room does not exist.');
-        } else {
-          setError(json.error?.message ?? 'Failed to connect to room.');
+      if (!response.ok || !json?.success) {
+        // Only trigger genuine Room Not Found error if online and server explicitly returned 404
+        if (response.status === 404 && json?.error?.code === 'ROOM_NOT_FOUND') {
+          setError('Room not found. This OKEKARAOKE room does not exist or has expired.');
+          setConnectionStatus('offline');
+          setLoading(false);
+          return;
         }
+
+        // For any 500 error (e.g. Supabase unreachable when offline) or server failure:
+        // Automatically switch to Offline Mode so the user can sing their downloaded songs!
+        console.warn('[OKEKARAOKE] Room server unreachable, switching to Offline Karaoke Mode');
+        const offlineState = createOfflineRoomState(roomCode);
+        setInstanceState(offlineState);
+        setInstanceId(offlineState.instance.id);
+        setIsSoloTVMode(true);
         setConnectionStatus('offline');
         setLoading(false);
+        setError(null);
         return;
       }
 
       const state = json.data as InstanceState;
       setInstanceState(state);
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(state));
+      } catch {
+        // ignore quota
+      }
 
       setCurrentSong((prevCurrent) => {
         if (state.current_song) {
           return { ...state.current_song, status: 'playing' as const };
         }
-        // Keep local optimistic temp item alive while waiting for server confirmation
-        if (prevCurrent?.queue_item_id.startsWith('temp_')) {
+        // Keep local offline playing item or optimistic item alive — NEVER clear if offline!
+        if (
+          prevCurrent?.queue_item_id.startsWith('temp_') ||
+          prevCurrent?.queue_item_id.startsWith('offline_') ||
+          (prevCurrent && typeof navigator !== 'undefined' && !navigator.onLine)
+        ) {
           return prevCurrent;
         }
         return null;
@@ -254,10 +328,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           incomingQueue.map((item) => item.song?.id || item.song?.code || item.song?.youtube_video_id).filter(Boolean)
         );
 
-        // Keep local optimistic items that haven't been reconciled by server yet
+        // Keep local optimistic and offline items that haven't been reconciled by server yet
         const pendingOptimistic = prevQueue.filter(
           (item) =>
-            item.queue_item_id.startsWith('temp_') &&
+            (item.queue_item_id.startsWith('temp_') ||
+              item.queue_item_id.startsWith('offline_') ||
+              (typeof navigator !== 'undefined' && !navigator.onLine)) &&
             !incomingIds.has(item.queue_item_id) &&
             !incomingSongIds.has(item.song?.id || item.song?.code || item.song?.youtube_video_id)
         );
@@ -270,11 +346,17 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setConnectionStatus('connected');
       setLoading(false);
 
-    } catch {
+    } catch (err) {
+      console.warn('[OKEKARAOKE] Network fetch error, activating Offline Karaoke Mode:', err);
+      const offlineState = createOfflineRoomState(roomCode);
+      setInstanceState(offlineState);
+      setInstanceId(offlineState.instance.id);
+      setIsSoloTVMode(true);
       setConnectionStatus('offline');
       setLoading(false);
+      setError(null);
     }
-  }, [roomCode]);
+  }, [roomCode, createOfflineRoomState]);
 
   // Re-sync room state when returning from background / other apps (Messenger, Facebook)
   useEffect(() => {
@@ -564,6 +646,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   };
 
   const handleReserveFailed = useCallback((tempId: string) => {
+    if (tempId.startsWith('offline_')) return;
     setQueue((prev) => prev.filter((item) => item.queue_item_id !== tempId));
     setCurrentSong((prev) => (prev?.queue_item_id === tempId ? null : prev));
   }, []);
@@ -879,11 +962,30 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         <h1 className="text-2xl font-black text-red-400 mb-2" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
           ROOM NOT FOUND
         </h1>
-        <p className="text-slate-400 mb-6">{error}</p>
-        <a href="/" className="px-6 py-3 rounded-xl font-bold text-white"
-          style={{ background: 'linear-gradient(135deg, #6366f1, #7c3aed)' }}>
-          Home
-        </a>
+        <p className="text-slate-400 mb-6 max-w-sm">{error}</p>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <button
+            onClick={() => {
+              setError(null);
+              const offlineState = createOfflineRoomState(roomCode);
+              setInstanceState(offlineState);
+              setInstanceId(offlineState.instance.id);
+              setIsSoloTVMode(true);
+              setConnectionStatus('offline');
+              setTab('my-songs');
+            }}
+            className="w-full py-3.5 px-4 rounded-xl font-bold text-black bg-teal-400 hover:bg-teal-300 flex items-center justify-center gap-2 shadow-lg shadow-teal-500/25 active:scale-95 transition-all"
+          >
+            <Mic2 size={18} />
+            <span>Sing Offline (My Downloads)</span>
+          </button>
+          <a
+            href="/"
+            className="w-full py-3 px-4 rounded-xl font-bold text-slate-300 bg-zinc-800 hover:bg-zinc-700 transition-colors flex items-center justify-center"
+          >
+            Home
+          </a>
+        </div>
       </div>
     );
   }

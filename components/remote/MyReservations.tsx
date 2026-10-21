@@ -6,10 +6,47 @@
 // ============================================================
 
 import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
-import { Star, Loader2, Trash2, Square, Play, Pause, CheckCircle, Plus, Music2, AlertTriangle, RotateCcw, History, Clock, Calendar, X } from 'lucide-react';
+import {
+  Star,
+  Loader2,
+  Trash2,
+  Square,
+  Play,
+  Pause,
+  CheckCircle,
+  Plus,
+  Music2,
+  AlertTriangle,
+  RotateCcw,
+  History,
+  Clock,
+  Calendar,
+  X,
+  Download,
+  HardDrive,
+  Smartphone,
+  Sparkles,
+  Search,
+  Maximize2,
+  Minimize2,
+  SkipBack,
+  SkipForward,
+} from 'lucide-react';
 import type { EnrichedQueueItem, Song } from '@/lib/types';
 import { getFavoriteSongs, toggleFavoriteSong } from '@/lib/utils/favorites';
 import { getSongHistory, removeSongFromHistory, clearSongHistory, formatHistoryDate, addSongToHistory, type SongHistoryItem, type HistorySong } from '@/lib/utils/songHistory';
+import {
+  getDownloadedSongs,
+  deleteDownloadedSong,
+  clearAllDownloads,
+  getStorageUsage,
+  createSongMediaUrl,
+  DOWNLOADS_CHANGED_EVENT,
+  type DownloadedSong,
+  type StorageUsage,
+} from '@/lib/utils/offlineStorage';
+import { OfflineSongThumbnail } from '@/components/remote/OfflineSongThumbnail';
+import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -44,18 +81,7 @@ const FavoriteCard = memo(function FavoriteCard({
     >
       {/* Top: Thumbnail with 16:9 Aspect Ratio + Star Toggle Button */}
       <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
-        {songThumb ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={songThumb}
-            alt={song.title}
-            className="w-full h-full object-cover scale-[1.03] group-hover:scale-105 transition-transform duration-200"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <Music2 size={16} className="text-zinc-600" />
-        )}
+        <OfflineSongThumbnail song={song} layoutMode="grid-3" />
 
         {/* Top-Right Floating Star Button */}
         <div className="absolute top-1 right-1 z-10">
@@ -152,18 +178,7 @@ const HistoryCard = memo(function HistoryCard({
     >
       {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
       <div className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center">
-        {songThumb ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={songThumb}
-            alt={item.song.title}
-            className="w-full h-full object-cover scale-[1.03] group-hover:scale-105 transition-transform duration-200"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <Music2 size={16} className="text-zinc-600" />
-        )}
+        <OfflineSongThumbnail song={item.song} layoutMode="grid-3" />
 
         {/* Top-Right Floating Actions: Favorite & Delete from history */}
         <div className="absolute top-1 right-1 flex items-center gap-0.5 z-10">
@@ -246,6 +261,351 @@ const HistoryCard = memo(function HistoryCard({
   );
 });
 
+interface DownloadedSongCardProps {
+  song: DownloadedSong;
+  isReserving: boolean;
+  onPlayOffline: (song: DownloadedSong) => void;
+  onReserve: (song: DownloadedSong) => void;
+  onDelete: (id: string) => void;
+  layoutMode?: 'list' | 'grid-3' | 'grid-4' | 'grid-5' | 'grid-6';
+}
+
+const DownloadedSongCard = memo(function DownloadedSongCard({
+  song,
+  isReserving,
+  onPlayOffline,
+  onReserve,
+  onDelete,
+  layoutMode = 'grid-3',
+}: DownloadedSongCardProps) {
+  const songThumb =
+    song.thumbnail_url ||
+    (song.youtube_video_id
+      ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg`
+      : '');
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return '4.2 MB';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // ─── 1. LIST VIEW (Horizontal) ─────────────────────────
+  if (layoutMode === 'list') {
+    return (
+      <div
+        className="flex items-center gap-2.5 p-2 rounded-xl bg-zinc-900/90 border border-zinc-800/80 hover:border-teal-500/40 transition-all shadow-sm group"
+        style={{ contentVisibility: 'auto', containIntrinsicSize: '0 64px' }}
+      >
+        {/* Left Thumbnail (16:9, w-20 sm:w-24) */}
+        <div
+          onClick={() => onPlayOffline(song)}
+          className="relative aspect-video w-20 sm:w-24 rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800 flex items-center justify-center cursor-pointer group/thumb"
+          title="Tap to preview video locally"
+        >
+          <OfflineSongThumbnail song={song} layoutMode="list" />
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity z-20">
+            <Play size={12} fill="currentColor" className="text-teal-400" />
+          </div>
+          <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded bg-black/80 text-[7px] font-mono font-bold text-teal-300 z-20">
+            {formatFileSize(song.file_size_bytes)}
+          </span>
+        </div>
+
+        {/* Middle: Title, Artist, Code */}
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-white text-xs truncate leading-tight" title={song.title}>
+            {song.title}
+          </p>
+          <p className="text-[10px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+            {song.artist}
+          </p>
+          <div className="flex items-center gap-1.5 mt-1 text-[8px] font-mono text-zinc-500">
+            <span className="px-1 py-0.2 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20 font-bold">
+              OFFLINE MP4
+            </span>
+            {song.code && song.code !== 'YT' && (
+              <span>#{song.code}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => onPlayOffline(song)}
+            className="h-7 px-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-teal-300 border border-teal-500/30 text-[10px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+            title="Preview offline"
+          >
+            <Play size={10} fill="currentColor" />
+            <span className="hidden sm:inline">PREVIEW</span>
+          </button>
+          <button
+            onClick={() => onReserve(song)}
+            disabled={isReserving}
+            className="h-7 px-2.5 rounded-lg bg-teal-400 hover:bg-teal-300 text-black text-[10px] font-black flex items-center gap-1 active:scale-95 transition-all disabled:opacity-50"
+            title="Reserve & sing on Mini TV"
+          >
+            {isReserving ? (
+              <Loader2 size={11} className="animate-spin text-black" />
+            ) : (
+              <>
+                <Plus size={11} className="stroke-[3]" />
+                <span>RESERVE</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(song.id)}
+            className="w-7 h-7 rounded-lg bg-zinc-900 hover:bg-red-500/10 text-zinc-500 hover:text-red-400 border border-zinc-800 hover:border-red-500/30 flex items-center justify-center active:scale-95 transition-all"
+            title="Delete from device"
+          >
+            <Trash2 size={11} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 2. MICRO GRIDS (grid-5 & grid-6) ──────────────────
+  if (layoutMode === 'grid-5' || layoutMode === 'grid-6') {
+    return (
+      <div
+        className="flex flex-col justify-between p-1 rounded-lg bg-zinc-900/90 border border-zinc-800/80 hover:border-teal-500/40 shadow-sm relative group overflow-hidden transition-all"
+        style={{ contentVisibility: 'auto', containIntrinsicSize: '0 110px' }}
+      >
+        <div
+          onClick={() => onPlayOffline(song)}
+          className="relative aspect-video w-full rounded overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center cursor-pointer group/thumb"
+          title="Tap to preview"
+        >
+          <OfflineSongThumbnail song={song} layoutMode={layoutMode} />
+
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity z-20">
+            <Play size={9} fill="currentColor" className="text-teal-400" />
+          </div>
+
+          <div className="absolute top-0.5 right-0.5 z-20" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(song.id);
+              }}
+              className="w-3.5 h-3.5 rounded bg-zinc-950/90 text-zinc-400 hover:text-red-400 flex items-center justify-center shadow"
+              title="Delete"
+            >
+              <Trash2 size={7.5} />
+            </button>
+          </div>
+
+          <span className="absolute bottom-0.5 left-0.5 px-0.5 py-0.2 rounded bg-black/80 text-[6px] font-mono text-teal-300 z-20">
+            {formatFileSize(song.file_size_bytes)}
+          </span>
+        </div>
+
+        <div className="mt-0.5 min-w-0">
+          <p className="font-bold text-white text-[7.5px] leading-tight truncate" title={song.title}>
+            {song.title}
+          </p>
+          <p className="text-[6.5px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+            {song.artist}
+          </p>
+        </div>
+
+        <div className="mt-1 grid grid-cols-2 gap-0.5">
+          <button
+            onClick={() => onPlayOffline(song)}
+            className="h-4.5 rounded bg-zinc-800 hover:bg-zinc-700 text-teal-300 flex items-center justify-center active:scale-95 transition-all"
+            title="Preview"
+          >
+            <Play size={7} fill="currentColor" />
+          </button>
+          <button
+            onClick={() => onReserve(song)}
+            disabled={isReserving}
+            className="h-4.5 rounded bg-teal-400 hover:bg-teal-300 text-black flex items-center justify-center font-bold active:scale-95 transition-all disabled:opacity-50"
+            title="Reserve"
+          >
+            {isReserving ? <Loader2 size={7} className="animate-spin text-black" /> : <Plus size={7.5} className="stroke-[3]" />}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 3. COMPACT GRID (grid-4) ──────────────────────────
+  if (layoutMode === 'grid-4') {
+    return (
+      <div
+        className="flex flex-col justify-between p-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/80 hover:border-teal-500/40 shadow-sm relative group overflow-hidden transition-all"
+        style={{ contentVisibility: 'auto', containIntrinsicSize: '0 135px' }}
+      >
+        <div
+          onClick={() => onPlayOffline(song)}
+          className="relative aspect-video w-full rounded-md overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center cursor-pointer group/thumb"
+          title="Tap to preview video locally"
+        >
+          <OfflineSongThumbnail song={song} layoutMode="grid-4" />
+
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity z-20">
+            <Play size={10} fill="currentColor" className="text-teal-400" />
+          </div>
+
+          <div className="absolute top-0.5 right-0.5 z-20" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(song.id);
+              }}
+              className="w-4.5 h-4.5 rounded bg-zinc-950/90 text-zinc-400 hover:text-red-400 flex items-center justify-center shadow"
+              title="Delete"
+            >
+              <Trash2 size={9} />
+            </button>
+          </div>
+
+          <div className="absolute top-0.5 left-0.5 px-1 py-0.2 rounded bg-teal-500/90 text-[6.5px] font-extrabold text-black uppercase tracking-wider z-20">
+            MP4
+          </div>
+
+          <span className="absolute bottom-0.5 left-0.5 px-1 py-0.2 rounded bg-zinc-950/90 text-[6.5px] font-mono text-teal-300 z-20">
+            {formatFileSize(song.file_size_bytes)}
+          </span>
+        </div>
+
+        <div className="mt-1 min-w-0">
+          <p className="font-bold text-white text-[9px] leading-tight truncate" title={song.title}>
+            {song.title}
+          </p>
+          <p className="text-[8px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+            {song.artist}
+          </p>
+        </div>
+
+        <div className="mt-1 grid grid-cols-2 gap-1">
+          <button
+            onClick={() => onPlayOffline(song)}
+            className="h-5.5 rounded-md flex items-center justify-center gap-0.5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-teal-300 text-[8px] font-bold"
+            title="Preview"
+          >
+            <Play size={8} fill="currentColor" />
+            <span>PLAY</span>
+          </button>
+          <button
+            onClick={() => onReserve(song)}
+            disabled={isReserving}
+            className="h-5.5 rounded-md flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 active:scale-95 text-black text-[8px] font-black disabled:opacity-50"
+            title="Reserve"
+          >
+            {isReserving ? <Loader2 size={8} className="animate-spin text-black" /> : <><Plus size={8} className="stroke-[3]" /><span>ADD</span></>}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 4. STANDARD GRID (grid-3) ─────────────────────────
+  return (
+    <div
+      className="flex flex-col justify-between p-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800/80 hover:border-teal-500/40 shadow-sm relative group overflow-hidden transition-all"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 160px' }}
+    >
+      {/* Top: Thumbnail with 16:9 Aspect Ratio + Floating Badges */}
+      <div 
+        onClick={() => onPlayOffline(song)}
+        className="relative aspect-video w-full rounded-md sm:rounded-lg overflow-hidden bg-zinc-950 shrink-0 border border-zinc-800/80 flex items-center justify-center cursor-pointer group/thumb"
+        title="Tap to preview video locally"
+      >
+        <OfflineSongThumbnail song={song} layoutMode="grid-3" />
+
+        {/* Play Overlay on Hover */}
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition-opacity z-20">
+          <div className="w-6 h-6 rounded-full bg-teal-400 text-black flex items-center justify-center shadow-lg">
+            <Play size={11} fill="currentColor" className="ml-0.5" />
+          </div>
+        </div>
+
+        {/* Delete button (top-right) */}
+        <div className="absolute top-1 right-1 z-10" onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(song.id);
+            }}
+            className="w-5 h-5 rounded bg-zinc-950/90 border border-white/10 flex items-center justify-center text-zinc-400 hover:text-red-400 active:scale-90 transition-transform shadow-sm"
+            title="Delete from phone storage"
+            aria-label={`Delete ${song.title} from device`}
+          >
+            <Trash2 size={10} />
+          </button>
+        </div>
+
+        {/* Offline Ready Badge (top-left) */}
+        <div className="absolute top-1 left-1 px-1.5 py-0.2 rounded bg-teal-500/90 text-[7px] font-extrabold text-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+          <span className="w-1 h-1 rounded-full bg-black animate-pulse" />
+          <span>OFFLINE MP4</span>
+        </div>
+
+        {/* File Size & Code Badge (bottom) */}
+        <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between text-[7px] font-mono font-bold text-zinc-300">
+          <span className="px-1 py-0.2 rounded bg-zinc-950/90 border border-teal-500/30 text-teal-300">
+            {formatFileSize(song.file_size_bytes)}
+          </span>
+          {song.code && song.code !== 'YT' && (
+            <span className="px-1 py-0.2 rounded bg-zinc-950/90 border border-white/10 text-zinc-300">
+              #{song.code}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Middle: Title & Artist */}
+      <div className="mt-1 min-w-0 flex-1 flex flex-col justify-between">
+        <div>
+          <p className="font-bold text-white text-[10px] leading-tight line-clamp-1 truncate" title={song.title}>
+            {song.title}
+          </p>
+          <p className="text-[9px] text-zinc-400 truncate mt-0.5" title={song.artist}>
+            {song.artist}
+          </p>
+        </div>
+      </div>
+
+      {/* Bottom Dual Action Buttons: [ ▶ PREVIEW ] & [ + RESERVE ] */}
+      <div className="mt-1.5 grid grid-cols-2 gap-1">
+        <button
+          onClick={() => onPlayOffline(song)}
+          className="h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-teal-300 border border-teal-500/40 text-[9px] font-bold transition-all shadow-sm"
+          title="Preview video locally on device (Verify offline playback)"
+        >
+          <Play size={9} fill="currentColor" />
+          <span>PREVIEW</span>
+        </button>
+
+        <button
+          onClick={() => onReserve(song)}
+          disabled={isReserving}
+          className="h-6.5 rounded-md sm:rounded-lg flex items-center justify-center gap-0.5 bg-teal-400 hover:bg-teal-300 active:scale-95 text-black text-[9px] font-black transition-all disabled:opacity-50 shadow-sm"
+          title="Reserve to queue & play on Mini TV"
+        >
+          {isReserving ? (
+            <Loader2 size={10} className="animate-spin text-black" />
+          ) : (
+            <>
+              <Plus size={10} className="stroke-[3]" />
+              <span>RESERVE</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+});
+
 interface MyReservationsProps {
   reservations: EnrichedQueueItem[];
   currentSongId?: string | null;
@@ -301,7 +661,7 @@ export function MyReservations({
   onSeekSong,
   onStopSong,
 }: MyReservationsProps) {
-  const [activeTab, setActiveTab] = useState<'reservations' | 'favorites' | 'history'>('reservations');
+  const [activeTab, setActiveTab] = useState<'reservations' | 'favorites' | 'history' | 'downloads'>('reservations');
   const [favorites, setFavorites] = useState<Song[]>([]);
   const [history, setHistory] = useState<SongHistoryItem[]>([]);
   const [optimisticallyStoppedIds, setOptimisticallyStoppedIds] = useState<Set<string>>(new Set());
@@ -311,6 +671,160 @@ export function MyReservations({
   const [reservingFavId, setReservingFavId] = useState<string | null>(null);
   const [reservingHistoryId, setReservingHistoryId] = useState<string | null>(null);
   const [localPaused, setLocalPaused] = useState(false);
+
+  // Offline Downloads state (IndexedDB device storage)
+  const [downloadedSongs, setDownloadedSongs] = useState<DownloadedSong[]>([]);
+  const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+  const [reservingDownloadId, setReservingDownloadId] = useState<string | null>(null);
+  const [offlinePlayerSong, setOfflinePlayerSong] = useState<DownloadedSong | null>(null);
+  const [offlineMediaUrl, setOfflineMediaUrl] = useState<string | null>(null);
+  const [offlineIsPlaying, setOfflineIsPlaying] = useState(true);
+  const [offlineCurrentTime, setOfflineCurrentTime] = useState(0);
+  const [offlineDuration, setOfflineDuration] = useState(0);
+  const offlineVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Download search query & layout mode state
+  const [downloadQuery, setDownloadQuery] = useState('');
+  const [downloadLayout, setDownloadLayout] = useState<'list' | 'grid-3' | 'grid-4' | 'grid-5' | 'grid-6'>('grid-3');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('okekaraoke_downloads_layout') as any;
+      if (['list', 'grid-3', 'grid-4', 'grid-5', 'grid-6'].includes(saved)) {
+        setDownloadLayout(saved);
+      }
+    }
+  }, []);
+
+  const handleSetDownloadLayout = (mode: 'list' | 'grid-3' | 'grid-4' | 'grid-5' | 'grid-6') => {
+    setDownloadLayout(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('okekaraoke_downloads_layout', mode);
+    }
+  };
+
+  const filteredDownloadedSongs = useMemo(() => {
+    if (!downloadQuery.trim()) return downloadedSongs;
+    const q = downloadQuery.toLowerCase().trim();
+    return downloadedSongs.filter(
+      (song) =>
+        song.title.toLowerCase().includes(q) ||
+        song.artist.toLowerCase().includes(q) ||
+        (song.code && song.code.toLowerCase().includes(q))
+    );
+  }, [downloadedSongs, downloadQuery]);
+
+  const refreshDownloadedSongs = useCallback(async () => {
+    try {
+      const [songs, usage] = await Promise.all([
+        getDownloadedSongs(),
+        getStorageUsage(),
+      ]);
+      setDownloadedSongs(songs);
+      setStorageUsage(usage);
+    } catch (err) {
+      console.warn('Failed to refresh downloaded songs:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshDownloadedSongs();
+    window.addEventListener(DOWNLOADS_CHANGED_EVENT, refreshDownloadedSongs);
+    return () => window.removeEventListener(DOWNLOADS_CHANGED_EVENT, refreshDownloadedSongs);
+  }, [refreshDownloadedSongs]);
+
+  const handlePlayOffline = useCallback((song: DownloadedSong) => {
+    if (offlineMediaUrl) {
+      URL.revokeObjectURL(offlineMediaUrl);
+    }
+    const url = createSongMediaUrl(song);
+    setOfflineMediaUrl(url);
+    setOfflinePlayerSong(song);
+    setOfflineIsPlaying(true);
+    setOfflineCurrentTime(0);
+  }, [offlineMediaUrl]);
+
+  const handleCloseOfflinePlayer = useCallback(() => {
+    if (offlineMediaUrl) {
+      URL.revokeObjectURL(offlineMediaUrl);
+    }
+    setOfflineMediaUrl(null);
+    setOfflinePlayerSong(null);
+    setOfflineIsPlaying(false);
+  }, [offlineMediaUrl]);
+
+  const handleDeleteDownloadedSong = useCallback(async (id: string) => {
+    if (offlinePlayerSong?.id === id) {
+      handleCloseOfflinePlayer();
+    }
+    await deleteDownloadedSong(id);
+    await refreshDownloadedSongs();
+  }, [offlinePlayerSong, handleCloseOfflinePlayer, refreshDownloadedSongs]);
+
+  const handleClearAllDownloads = useCallback(async () => {
+    if (typeof window !== 'undefined' && window.confirm('Delete all downloaded songs from device storage to free space?')) {
+      handleCloseOfflinePlayer();
+      await clearAllDownloads();
+      await refreshDownloadedSongs();
+    }
+  }, [handleCloseOfflinePlayer, refreshDownloadedSongs]);
+
+  const handleReserveDownloaded = useCallback(async (song: DownloadedSong) => {
+    setReservingDownloadId(song.id);
+    addSongToHistory(song as unknown as Song, roomCode);
+
+    const offlineId = `offline_${song.id || Date.now()}`;
+    // Immediately play the downloaded song on this device Mini TV
+    onReserved?.(song as unknown as Song, null, offlineId);
+    setReservingDownloadId(null);
+
+    // If offline (Airplane Mode / Wi-Fi off), play locally immediately without network delays
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      console.log('[Offline Mode] Playing downloaded song locally on Mini TV.');
+      return;
+    }
+
+    // If online, optionally sync with room in background without ever killing local playback
+    if (sessionId) {
+      try {
+        const response = await fetch('/api/queue/reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            song_code: song.code,
+            youtube_video_id: song.youtube_video_id,
+            title: song.title,
+            artist: song.artist,
+            thumbnail_url: song.thumbnail_url,
+            guest_session_id: sessionId,
+            guest_name: guestName || null,
+          }),
+        });
+        const json = await response.json();
+        if (json.success) {
+          onReserved?.(song as unknown as Song, json.data, offlineId);
+        }
+      } catch {
+        // Keep playing offline locally on this phone
+      }
+    }
+  }, [sessionId, roomCode, guestName, onReserved]);
+
+  // Handle switching to next/previous downloaded song in offline player
+  const handleNextOfflineSong = useCallback(() => {
+    if (!offlinePlayerSong || downloadedSongs.length <= 1) return;
+    const currentIndex = downloadedSongs.findIndex((s) => s.id === offlinePlayerSong.id);
+    const nextIndex = (currentIndex + 1) % downloadedSongs.length;
+    handlePlayOffline(downloadedSongs[nextIndex]);
+  }, [offlinePlayerSong, downloadedSongs, handlePlayOffline]);
+
+  const handlePrevOfflineSong = useCallback(() => {
+    if (!offlinePlayerSong || downloadedSongs.length <= 1) return;
+    const currentIndex = downloadedSongs.findIndex((s) => s.id === offlinePlayerSong.id);
+    const prevIndex = (currentIndex - 1 + downloadedSongs.length) % downloadedSongs.length;
+    handlePlayOffline(downloadedSongs[prevIndex]);
+  }, [offlinePlayerSong, downloadedSongs, handlePlayOffline]);
 
   // History date filter state
   const [historyDateFilter, setHistoryDateFilter] = useState<'all' | 'today' | 'yesterday' | 'custom'>('all');
@@ -777,19 +1291,17 @@ export function MyReservations({
         <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900 border border-zinc-800">
           <button
             onClick={() => setActiveTab('reservations')}
-            className={`flex-1 py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
-              activeTab === 'reservations'
+            className={`flex-1 py-2 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'reservations'
                 ? 'bg-white text-black font-extrabold shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
-            }`}
+              }`}
           >
-            <span className="truncate">RESERVATIONS</span>
+            <span className="truncate">QUEUE</span>
             <span
-              className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
-                activeTab === 'reservations'
+              className={`px-1.5 py-0.2 rounded-md text-[9px] font-mono font-bold shrink-0 ${activeTab === 'reservations'
                   ? 'bg-teal-500/20 text-teal-700'
                   : 'bg-zinc-800 text-zinc-400'
-              }`}
+                }`}
             >
               {uniqueReservations.length}
             </span>
@@ -797,23 +1309,21 @@ export function MyReservations({
 
           <button
             onClick={() => setActiveTab('favorites')}
-            className={`flex-1 py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
-              activeTab === 'favorites'
+            className={`flex-1 py-2 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'favorites'
                 ? 'bg-white text-black font-extrabold shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
-            }`}
+              }`}
           >
             <Star
-              size={12}
+              size={11}
               className={`shrink-0 ${activeTab === 'favorites' ? 'fill-yellow-500 text-yellow-500' : 'text-yellow-500'}`}
             />
-            <span className="truncate">FAVORITES</span>
+            <span className="truncate">FAVS</span>
             <span
-              className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
-                activeTab === 'favorites'
+              className={`px-1.5 py-0.2 rounded-md text-[9px] font-mono font-bold shrink-0 ${activeTab === 'favorites'
                   ? 'bg-yellow-500/20 text-yellow-700'
                   : 'bg-zinc-800 text-zinc-400'
-              }`}
+                }`}
             >
               {favorites.length}
             </span>
@@ -821,25 +1331,45 @@ export function MyReservations({
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-2 px-1.5 sm:px-2 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 sm:gap-1.5 ${
-              activeTab === 'history'
+            className={`flex-1 py-2 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'history'
                 ? 'bg-white text-black font-extrabold shadow-sm'
                 : 'text-zinc-400 hover:text-zinc-200'
-            }`}
+              }`}
           >
             <History
-              size={12}
+              size={11}
               className={`shrink-0 ${activeTab === 'history' ? 'text-teal-600' : 'text-zinc-400'}`}
             />
             <span className="truncate">HISTORY</span>
             <span
-              className={`px-1.5 py-0.2 rounded-md text-[10px] font-mono font-bold shrink-0 ${
-                activeTab === 'history'
+              className={`px-1.5 py-0.2 rounded-md text-[9px] font-mono font-bold shrink-0 ${activeTab === 'history'
                   ? 'bg-teal-500/20 text-teal-700'
                   : 'bg-zinc-800 text-zinc-400'
-              }`}
+                }`}
             >
               {history.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('downloads')}
+            className={`flex-1 py-2 px-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTab === 'downloads'
+                ? 'bg-white text-black font-extrabold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+          >
+            <Download
+              size={11}
+              className={`shrink-0 ${activeTab === 'downloads' ? 'text-teal-600' : 'text-teal-400'}`}
+            />
+            <span className="truncate">OFFLINE</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-md text-[9px] font-mono font-bold shrink-0 ${activeTab === 'downloads'
+                  ? 'bg-teal-500/20 text-teal-700'
+                  : 'bg-zinc-800 text-teal-400 font-bold'
+                }`}
+            >
+              {downloadedSongs.length}
             </span>
           </button>
         </div>
@@ -1176,11 +1706,10 @@ export function MyReservations({
                       setHistoryDateFilter('all');
                       setCustomDate('');
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                      historyDateFilter === 'all'
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${historyDateFilter === 'all'
                         ? 'bg-teal-400 text-black shadow-sm font-black'
                         : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                    }`}
+                      }`}
                   >
                     All ({history.length})
                   </button>
@@ -1191,11 +1720,10 @@ export function MyReservations({
                       setHistoryDateFilter('today');
                       setCustomDate('');
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                      historyDateFilter === 'today'
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${historyDateFilter === 'today'
                         ? 'bg-teal-400 text-black shadow-sm font-black'
                         : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                    }`}
+                      }`}
                   >
                     Today
                   </button>
@@ -1206,11 +1734,10 @@ export function MyReservations({
                       setHistoryDateFilter('yesterday');
                       setCustomDate('');
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${
-                      historyDateFilter === 'yesterday'
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold shrink-0 transition-all ${historyDateFilter === 'yesterday'
                         ? 'bg-teal-400 text-black shadow-sm font-black'
                         : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
-                    }`}
+                      }`}
                   >
                     Yesterday
                   </button>
@@ -1230,19 +1757,18 @@ export function MyReservations({
                       title="Filter by specific date"
                     />
                     <div
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all border pointer-events-none ${
-                        historyDateFilter === 'custom' && customDate
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1.5 transition-all border pointer-events-none ${historyDateFilter === 'custom' && customDate
                           ? 'bg-teal-400 text-black border-teal-400 shadow-sm font-black'
                           : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                      }`}
+                        }`}
                     >
                       <Calendar size={11} className={historyDateFilter === 'custom' && customDate ? 'text-black' : 'text-zinc-400'} />
                       <span>
                         {customDate
                           ? (() => {
-                              const [y, m, d] = customDate.split('-').map(Number);
-                              return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' });
-                            })()
+                            const [y, m, d] = customDate.split('-').map(Number);
+                            return new Date(y, m - 1, d).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                          })()
                           : 'Pick Date'}
                       </span>
                     </div>
@@ -1302,6 +1828,336 @@ export function MyReservations({
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* TAB 4: OFFLINE DOWNLOADS */}
+      {activeTab === 'downloads' && (
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Storage Bar & Action Controls */}
+          <div className="shrink-0 px-4 py-2 bg-zinc-950 border-b border-zinc-900 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 shrink-0">
+                <HardDrive size={13} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold text-white truncate">
+                  Phone Storage: <span className="text-teal-400">{storageUsage?.formattedSize || '0 MB'}</span>
+                </p>
+                <p className="text-[9px] text-zinc-400 truncate">
+                  {downloadedSongs.length} {downloadedSongs.length === 1 ? 'song' : 'songs'} saved on this device (IndexedDB)
+                </p>
+              </div>
+            </div>
+
+            {downloadedSongs.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAllDownloads}
+                className="px-2 py-1 rounded-lg text-[10px] font-bold text-zinc-400 hover:text-red-400 bg-zinc-900 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 transition-all shrink-0 active:scale-95 flex items-center gap-1"
+                title="Clear all offline downloads to free space"
+              >
+                <Trash2 size={11} />
+                <span>Clear All</span>
+              </button>
+            )}
+          </div>
+
+
+
+          {/* Search & Layout View Bar (shown when songs exist) */}
+          {downloadedSongs.length > 0 && (
+            <div className="shrink-0 px-3.5 pt-2 pb-2 bg-zinc-950 border-b border-zinc-900/80">
+              {/* Search Bar */}
+              <div className="relative flex items-center mb-1.5">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={downloadQuery}
+                  onChange={(e) => setDownloadQuery(e.target.value)}
+                  placeholder={`Search ${downloadedSongs.length} downloaded songs...`}
+                  className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 focus:border-teal-400 text-white text-[11px] placeholder:text-zinc-500 focus:outline-none transition-colors"
+                />
+                {downloadQuery && (
+                  <button
+                    onClick={() => setDownloadQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-white"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+
+              {/* Layout Switcher & Count */}
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-bold text-zinc-400 truncate">
+                  {downloadQuery.trim()
+                    ? `${filteredDownloadedSongs.length} of ${downloadedSongs.length} matches`
+                    : `${downloadedSongs.length} ${downloadedSongs.length === 1 ? 'song' : 'songs'}`}
+                </span>
+
+                {/* View Layout Mode Buttons: List, 3x, 4x, 5x, 6x */}
+                <div className="flex items-center gap-0.5 bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 shrink-0">
+                  <button
+                    onClick={() => handleSetDownloadLayout('list')}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                      downloadLayout === 'list'
+                        ? 'bg-zinc-800 text-white shadow'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="1-Column List"
+                  >
+                    List
+                  </button>
+                  <button
+                    onClick={() => handleSetDownloadLayout('grid-3')}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                      downloadLayout === 'grid-3'
+                        ? 'bg-zinc-800 text-teal-400 shadow'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="3-Column Grid"
+                  >
+                    3x
+                  </button>
+                  <button
+                    onClick={() => handleSetDownloadLayout('grid-4')}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                      downloadLayout === 'grid-4'
+                        ? 'bg-zinc-800 text-teal-400 shadow'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="4-Column Grid (Compact)"
+                  >
+                    4x
+                  </button>
+                  <button
+                    onClick={() => handleSetDownloadLayout('grid-5')}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                      downloadLayout === 'grid-5'
+                        ? 'bg-zinc-800 text-teal-400 shadow'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="5-Column Grid (Micro)"
+                  >
+                    5x
+                  </button>
+                  <button
+                    onClick={() => handleSetDownloadLayout('grid-6')}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold transition-all ${
+                      downloadLayout === 'grid-6'
+                        ? 'bg-zinc-800 text-teal-400 shadow'
+                        : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                    title="6-Column Grid (Dense)"
+                  >
+                    6x
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Scrollable Downloads Grid / List */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-3.5 py-3 pb-8 overscroll-contain [transform:translateZ(0)] [-webkit-overflow-scrolling:touch]">
+            {downloadedSongs.length === 0 ? (
+              <div className="text-center py-12 px-4 bg-zinc-900/40 rounded-2xl border border-zinc-800/60 mt-2">
+                <div className="w-12 h-12 rounded-full bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center mx-auto mb-3 text-zinc-500">
+                  <Download size={22} />
+                </div>
+                <p className="text-zinc-300 font-bold text-xs uppercase tracking-wide">NO DOWNLOADED SONGS YET</p>
+                <p className="text-[11px] text-zinc-500 max-w-[260px] mx-auto mt-1 leading-relaxed">
+                  Go to <strong className="text-zinc-400">Search</strong> and tap the <span className="inline-flex items-center px-1 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-teal-400 text-[10px] font-bold">⬇️</span> button next to any song to download it for offline play!
+                </p>
+              </div>
+            ) : filteredDownloadedSongs.length === 0 ? (
+              <div className="text-center py-10 px-4 bg-zinc-900/40 rounded-2xl border border-zinc-800/60 mt-2">
+                <Search size={26} className="text-zinc-600 mx-auto mb-2" />
+                <p className="text-zinc-300 font-bold text-xs uppercase">No matching downloaded songs</p>
+                <p className="text-[11px] text-zinc-500 mt-1 max-w-xs mx-auto">
+                  No downloaded songs match &quot;{downloadQuery}&quot;
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDownloadQuery('')}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-teal-300 text-xs font-bold transition-all active:scale-95"
+                >
+                  Clear Search
+                </button>
+              </div>
+            ) : downloadLayout === 'list' ? (
+              <div className="flex flex-col gap-1.5" style={{ contain: 'paint layout' }}>
+                {filteredDownloadedSongs.map((song) => (
+                  <DownloadedSongCard
+                    key={song.id}
+                    song={song}
+                    isReserving={reservingDownloadId === song.id}
+                    onPlayOffline={handlePlayOffline}
+                    onReserve={handleReserveDownloaded}
+                    onDelete={handleDeleteDownloadedSong}
+                    layoutMode="list"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div
+                className={`grid ${
+                  downloadLayout === 'grid-4'
+                    ? 'grid-cols-4 gap-1 sm:gap-1.5'
+                    : downloadLayout === 'grid-5'
+                    ? 'grid-cols-5 gap-1'
+                    : downloadLayout === 'grid-6'
+                    ? 'grid-cols-6 gap-0.5 sm:gap-1'
+                    : 'grid-cols-3 gap-1.5 sm:gap-2'
+                }`}
+                style={{ contain: 'paint layout' }}
+              >
+                {filteredDownloadedSongs.map((song) => (
+                  <DownloadedSongCard
+                    key={song.id}
+                    song={song}
+                    isReserving={reservingDownloadId === song.id}
+                    onPlayOffline={handlePlayOffline}
+                    onReserve={handleReserveDownloaded}
+                    onDelete={handleDeleteDownloadedSong}
+                    layoutMode={downloadLayout}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── OFFLINE KARAOKE PLAYER MODAL (100% OFFLINE / AIRPLANE MODE) ── */}
+      {offlinePlayerSong && (
+        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col p-4 animate-in fade-in duration-200">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-ping shrink-0" />
+              <div className="min-w-0">
+                <span className="text-[9px] font-extrabold uppercase tracking-widest text-teal-400 block">
+                  OFFLINE SOLO PLAYER (AIRPLANE MODE)
+                </span>
+                <p className="text-sm font-bold text-white truncate leading-tight mt-0.5">
+                  {offlinePlayerSong.title}
+                </p>
+                <p className="text-xs text-zinc-400 truncate">
+                  {offlinePlayerSong.artist}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleCloseOfflinePlayer}
+              className="w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition-all active:scale-95 shrink-0"
+              title="Close Offline Player"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {/* Video / Visualizer Display Area */}
+          <div className="flex-1 my-3 relative rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800 flex flex-col items-center justify-center shadow-2xl min-h-0">
+            {offlineMediaUrl ? (
+              <video
+                ref={offlineVideoRef}
+                src={offlineMediaUrl}
+                controls
+                playsInline
+                autoPlay={offlineIsPlaying}
+                onPlay={() => setOfflineIsPlaying(true)}
+                onPause={() => setOfflineIsPlaying(false)}
+                onTimeUpdate={(e) => {
+                  const video = e.currentTarget;
+                  setOfflineCurrentTime(video.currentTime);
+                  setOfflineDuration(video.duration || 0);
+                }}
+                onEnded={handleNextOfflineSong}
+                className="w-full h-full object-contain bg-black"
+              />
+            ) : (
+              /* Fallback Animated Karaoke Screen */
+              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center relative overflow-hidden bg-gradient-to-br from-zinc-950 via-zinc-900 to-black">
+                {offlinePlayerSong.thumbnail_url && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={offlinePlayerSong.thumbnail_url}
+                    alt={offlinePlayerSong.title}
+                    className="absolute inset-0 w-full h-full object-cover opacity-20 blur-sm scale-105"
+                  />
+                )}
+                <div className="relative z-10 flex flex-col items-center">
+                  <div className="w-16 h-16 rounded-full bg-teal-500/10 border border-teal-500/30 flex items-center justify-center mb-3 shadow-xl animate-pulse">
+                    <Music2 size={30} className="text-teal-400" />
+                  </div>
+                  <h3 className="text-lg font-black text-white">{offlinePlayerSong.title}</h3>
+                  <p className="text-sm text-zinc-400 mt-1">{offlinePlayerSong.artist}</p>
+                  <span className="mt-3 px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-mono font-bold tracking-wide">
+                    PLAYING FROM DEVICE LOCAL STORAGE
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Real-time Audio Visualizer */}
+            <div className="absolute bottom-0 left-0 right-0 pointer-events-none z-10">
+              <AudioVisualizer isPlaying={offlineIsPlaying} barCount={36} height={20} />
+            </div>
+          </div>
+
+          {/* Offline Controls Footer */}
+          <div className="shrink-0 p-3 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrevOfflineSong}
+                disabled={downloadedSongs.length <= 1}
+                className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition-all disabled:opacity-30 active:scale-95"
+                title="Previous Downloaded Song"
+              >
+                <SkipBack size={15} />
+              </button>
+
+              <button
+                onClick={() => {
+                  if (offlineVideoRef.current) {
+                    if (offlineIsPlaying) {
+                      offlineVideoRef.current.pause();
+                      setOfflineIsPlaying(false);
+                    } else {
+                      offlineVideoRef.current.play();
+                      setOfflineIsPlaying(true);
+                    }
+                  } else {
+                    setOfflineIsPlaying(!offlineIsPlaying);
+                  }
+                }}
+                className="w-11 h-11 rounded-xl bg-teal-400 hover:bg-teal-300 text-black flex items-center justify-center transition-all shadow-lg active:scale-95"
+                title={offlineIsPlaying ? 'Pause' : 'Play'}
+              >
+                {offlineIsPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+              </button>
+
+              <button
+                onClick={handleNextOfflineSong}
+                disabled={downloadedSongs.length <= 1}
+                className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition-all disabled:opacity-30 active:scale-95"
+                title="Next Downloaded Song"
+              >
+                <SkipForward size={15} />
+              </button>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[11px] font-mono font-bold text-teal-400 block">
+                {formatTime(offlineCurrentTime)} / {formatTime(offlineDuration || offlinePlayerSong.duration_seconds || 210)}
+              </span>
+              <span className="text-[9px] text-zinc-400">
+                Song {downloadedSongs.findIndex((s) => s.id === offlinePlayerSong.id) + 1} of {downloadedSongs.length}
+              </span>
+            </div>
+          </div>
         </div>
       )}
     </div>
