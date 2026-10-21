@@ -50,6 +50,9 @@ export function TVBanner({
   const repeatCountPerBanner = Math.max(1, bannerRepeatCount || 1);
   const maxTotalCycles = bannerMaxCycles || 0; // 0 = infinite / continuous
 
+  // One accurate unified speed for both ticker scroll duration and card display interval
+  const effectiveSpeed = Math.max(12, bannerSpeed || bannerRotateInterval || 35);
+
   // Combine images array or fallback to single bannerImageUrl
   const imagesList = (bannerImages && bannerImages.length > 0)
     ? bannerImages.filter(img => Boolean(img?.trim()))
@@ -68,6 +71,16 @@ export function TVBanner({
     return base.length > 0 ? base : (trimmedMain ? [trimmedMain] : []);
   }, [bannerPool, bannerText]);
 
+  // Sync active text index if admin manually changes bannerText preset or input
+  useEffect(() => {
+    if (bannerText) {
+      const idx = textPool.indexOf(bannerText.trim());
+      if (idx !== -1) {
+        setCurrentTextIndex(idx);
+      }
+    }
+  }, [bannerText, textPool]);
+
   // Reset popup dismissal if banner settings change
   useEffect(() => {
     setDismissedPopup(false);
@@ -78,7 +91,7 @@ export function TVBanner({
     shownCountRef.current = 1;
     totalSwitchesRef.current = 0;
     setStoppedAfterMax(false);
-  }, [bannerRotateEnabled, bannerRotateInterval, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool]);
+  }, [bannerRotateEnabled, effectiveSpeed, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool]);
 
   // Slideshow timer for multi-images in side_card and popup
   useEffect(() => {
@@ -89,23 +102,50 @@ export function TVBanner({
     return () => clearInterval(interval);
   }, [imagesList.length]);
 
-  // Auto-rotation timer for banner text quotes with configurable repetition count & max cycles
-  useEffect(() => {
+  // Advance to next quote when marquee completes a full off-screen pass across the screen
+  const handleMarqueeCycle = () => {
     if (!bannerRotateEnabled || textPool.length <= 1 || stoppedAfterMax) return;
 
-    const intervalSeconds = Math.max(5, bannerRotateInterval || 15);
+    if (shownCountRef.current < repeatCountPerBanner) {
+      shownCountRef.current += 1;
+      return; // Keep current banner for next pass
+    }
+
+    shownCountRef.current = 1;
+    totalSwitchesRef.current += 1;
+
+    if (maxTotalCycles > 0 && totalSwitchesRef.current >= maxTotalCycles * textPool.length) {
+      setStoppedAfterMax(true);
+      return;
+    }
+
+    setCurrentTextIndex((prev) => {
+      if (bannerRotateMode === 'sequential') {
+        return (prev + 1) % textPool.length;
+      }
+      let next = Math.floor(Math.random() * textPool.length);
+      if (next === prev && textPool.length > 1) {
+        next = (prev + 1) % textPool.length;
+      }
+      return next;
+    });
+  };
+
+  // Auto-rotation timer ONLY for static display types (side_card & popup)
+  // Marquee types (ticker & bottom_bar) use handleMarqueeCycle off-screen so they NEVER fade in the center!
+  useEffect(() => {
+    if (bannerType === 'ticker' || bannerType === 'bottom_bar') return;
+    if (!bannerRotateEnabled || textPool.length <= 1 || stoppedAfterMax) return;
+
     const interval = setInterval(() => {
-      // Check if current banner has been shown the required repeat count
       if (shownCountRef.current < repeatCountPerBanner) {
         shownCountRef.current += 1;
         return;
       }
 
-      // Ready to switch to next banner
       shownCountRef.current = 1;
       totalSwitchesRef.current += 1;
 
-      // Check if max total cycles reached (0 = infinite)
       if (maxTotalCycles > 0 && totalSwitchesRef.current >= maxTotalCycles * textPool.length) {
         setStoppedAfterMax(true);
         return;
@@ -117,7 +157,6 @@ export function TVBanner({
           if (bannerRotateMode === 'sequential') {
             return (prev + 1) % textPool.length;
           }
-          // Random pick different from previous if pool > 1
           let next = Math.floor(Math.random() * textPool.length);
           if (next === prev && textPool.length > 1) {
             next = (prev + 1) % textPool.length;
@@ -125,11 +164,11 @@ export function TVBanner({
           return next;
         });
         setIsFading(false);
-      }, 300);
-    }, intervalSeconds * 1000);
+      }, 400);
+    }, effectiveSpeed * 1000);
 
     return () => clearInterval(interval);
-  }, [bannerRotateEnabled, bannerRotateInterval, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool, stoppedAfterMax]);
+  }, [bannerType, bannerRotateEnabled, effectiveSpeed, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool, stoppedAfterMax]);
 
   if (!bannerEnabled) return null;
 
@@ -140,32 +179,10 @@ export function TVBanner({
 
   // ============================================================
   // TYPE 1: Top Running Ticker (Header Bar Marquee)
+  // Glides smoothly off-screen right (100vw) to off-screen left (-100%)
+  // Transitions between jokes only when off-screen — NO mid-screen fade!
   // ============================================================
   if (bannerType === 'ticker') {
-    const content = (
-      <div className="inline-flex items-center gap-3 sm:gap-6 px-6 sm:px-24 md:px-36 shrink-0">
-        {imagesList.map((img, idx) => (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            key={idx}
-            src={img}
-            alt={`Ad Banner ${idx + 1}`}
-            className="h-4 sm:h-7 md:h-10 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
-          />
-        ))}
-        {currentBannerText && (
-          <span
-            className={`text-[11px] sm:text-xs md:text-sm font-extrabold text-white tracking-wider shrink-0 transition-all duration-300 ${
-              isFading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-            }`}
-            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-          >
-            {currentBannerText}
-          </span>
-        )}
-      </div>
-    );
-
     return (
       <div
         className={`relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800 transition-all ${
@@ -176,24 +193,48 @@ export function TVBanner({
           WebkitBackdropFilter: 'blur(12px)',
         }}
       >
-        <div className="flex-1 overflow-hidden relative flex items-center">
+        <div className="flex-1 overflow-hidden relative flex items-center w-full">
           <div
-            className="whitespace-nowrap inline-flex items-center"
+            className="whitespace-nowrap inline-flex items-center will-change-transform"
             style={{
-              animation: `marquee ${bannerSpeed}s linear infinite`,
+              animation: `marquee-glide ${effectiveSpeed}s linear infinite`,
             }}
+            onAnimationIteration={handleMarqueeCycle}
           >
-            {content}
-            {content}
-            {content}
-            {content}
+            <div className="inline-flex items-center gap-3 sm:gap-6 px-6 sm:px-12 shrink-0">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] sm:text-xs font-black text-indigo-300 uppercase tracking-widest shrink-0">
+                <Megaphone size={12} className="text-amber-400 animate-pulse" />
+                ANNOUNCEMENT
+              </span>
+              {imagesList.map((img, idx) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  key={idx}
+                  src={img}
+                  alt={`Ad Banner ${idx + 1}`}
+                  className="h-4 sm:h-7 md:h-10 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
+                />
+              ))}
+              {currentBannerText && (
+                <span
+                  className="text-xs sm:text-sm md:text-base font-extrabold text-white tracking-wider shrink-0"
+                  style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                >
+                  {currentBannerText}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         <style>{`
-          @keyframes marquee {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
+          @keyframes marquee-glide {
+            0% {
+              transform: translateX(100vw);
+            }
+            100% {
+              transform: translateX(-100%);
+            }
           }
         `}</style>
       </div>
@@ -202,58 +243,59 @@ export function TVBanner({
 
   // ============================================================
   // TYPE 2: Bottom Edge Marquee Ticker Bar
+  // Glides smoothly along the bottom edge of the TV screen
   // ============================================================
   if (bannerType === 'bottom_bar') {
-    const content = (
-      <div className="inline-flex items-center gap-3 sm:gap-6 px-6 sm:px-24 md:px-36 shrink-0">
-        {imagesList.map((img, idx) => (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            key={idx}
-            src={img}
-            alt={`Ad Banner ${idx + 1}`}
-            className="h-4 sm:h-6 md:h-8 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
-          />
-        ))}
-        {currentBannerText && (
-          <span
-            className={`text-[11px] sm:text-xs md:text-sm font-extrabold text-amber-300 tracking-wider shrink-0 transition-all duration-300 ${
-              isFading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
-            }`}
-            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
-          >
-            {currentBannerText}
-          </span>
-        )}
-      </div>
-    );
-
     return (
       <div
-        className="fixed bottom-0 left-0 right-0 z-30 overflow-hidden flex items-center bg-zinc-950/95 border-t border-amber-500/40 shadow-2xl py-1"
+        className="fixed bottom-0 left-0 right-0 z-30 overflow-hidden flex items-center bg-zinc-950/95 border-t border-amber-500/40 shadow-2xl py-1.5"
         style={{
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
         }}
       >
-        <div className="flex-1 overflow-hidden relative flex items-center">
+        <div className="flex-1 overflow-hidden relative flex items-center w-full">
           <div
-            className="whitespace-nowrap inline-flex items-center"
+            className="whitespace-nowrap inline-flex items-center will-change-transform"
             style={{
-              animation: `marquee ${bannerSpeed}s linear infinite`,
+              animation: `marquee-glide-bottom ${effectiveSpeed}s linear infinite`,
             }}
+            onAnimationIteration={handleMarqueeCycle}
           >
-            {content}
-            {content}
-            {content}
-            {content}
+            <div className="inline-flex items-center gap-3 sm:gap-6 px-6 sm:px-12 shrink-0">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[10px] sm:text-xs font-black text-amber-300 uppercase tracking-widest shrink-0">
+                <Sparkles size={12} className="text-amber-400 animate-pulse" />
+                INUMAN CHRONICLES
+              </span>
+              {imagesList.map((img, idx) => (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  key={idx}
+                  src={img}
+                  alt={`Ad Banner ${idx + 1}`}
+                  className="h-4 sm:h-6 md:h-8 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
+                />
+              ))}
+              {currentBannerText && (
+                <span
+                  className="text-xs sm:text-sm md:text-base font-extrabold text-amber-300 tracking-wider shrink-0"
+                  style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+                >
+                  {currentBannerText}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         <style>{`
-          @keyframes marquee {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
+          @keyframes marquee-glide-bottom {
+            0% {
+              transform: translateX(100vw);
+            }
+            100% {
+              transform: translateX(-100%);
+            }
           }
         `}</style>
       </div>
