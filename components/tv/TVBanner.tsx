@@ -185,9 +185,8 @@ export function TVBanner({
   if (bannerType === 'ticker') {
     return (
       <div
-        className={`relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800 transition-all ${
-          imagesList.length > 0 ? 'h-7 sm:h-11 md:h-14' : 'h-6 sm:h-8 md:h-9.5'
-        }`}
+        className={`relative w-full overflow-hidden z-30 shrink-0 flex items-center bg-zinc-950/90 border-b border-zinc-800 transition-all ${imagesList.length > 0 ? 'h-7 sm:h-11 md:h-14' : 'h-6 sm:h-8 md:h-9.5'
+          }`}
         style={{
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
@@ -202,10 +201,7 @@ export function TVBanner({
             onAnimationIteration={handleMarqueeCycle}
           >
             <div className="inline-flex items-center gap-3 sm:gap-6 px-6 sm:px-12 shrink-0">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[10px] sm:text-xs font-black text-indigo-300 uppercase tracking-widest shrink-0">
-                <Megaphone size={12} className="text-amber-400 animate-pulse" />
-                ANNOUNCEMENT
-              </span>
+
               {imagesList.map((img, idx) => (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -338,9 +334,8 @@ export function TVBanner({
 
         {currentBannerText && (
           <p
-            className={`text-[11px] sm:text-xs font-bold text-zinc-100 line-clamp-3 leading-relaxed transition-opacity duration-300 ${
-              isFading ? 'opacity-0' : 'opacity-100'
-            }`}
+            className={`text-[11px] sm:text-xs font-bold text-zinc-100 line-clamp-3 leading-relaxed transition-opacity duration-300 ${isFading ? 'opacity-0' : 'opacity-100'
+              }`}
           >
             {currentBannerText}
           </p>
@@ -385,9 +380,8 @@ export function TVBanner({
 
           {currentBannerText && (
             <p
-              className={`text-[11px] font-bold text-zinc-100 line-clamp-2 leading-tight px-0.5 transition-opacity duration-300 ${
-                isFading ? 'opacity-0' : 'opacity-100'
-              }`}
+              className={`text-[11px] font-bold text-zinc-100 line-clamp-2 leading-tight px-0.5 transition-opacity duration-300 ${isFading ? 'opacity-0' : 'opacity-100'
+                }`}
             >
               {currentBannerText}
             </p>
