@@ -13,6 +13,7 @@ import { YouTubePlayer, type YouTubePlayerRef } from '@/components/tv/YouTubePla
 import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 import { useRealtime } from '@/hooks/useRealtime';
 import type { EnrichedQueueItem, PlayerState } from '@/lib/types';
+import { findDownloadedSong, createSongMediaUrl } from '@/lib/utils/offlineStorage';
 
 interface MiniTVPlayerProps {
   roomCode: string;
@@ -58,6 +59,8 @@ export function MiniTVPlayer({
   const [duration, setDuration] = useState(0);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubValue, setScrubValue] = useState(0);
+  const [offlineMediaUrl, setOfflineMediaUrl] = useState<string | null>(null);
+  const offlineVideoRef = useRef<HTMLVideoElement | null>(null);
   const playerRef = useRef<YouTubePlayerRef | null>(null);
   const skippedItemsRef = useRef<Set<string>>(new Set());
   const justStoppedUntilRef = useRef<number>(0);
@@ -66,6 +69,35 @@ export function MiniTVPlayer({
   useEffect(() => {
     currentSongRef.current = currentSong;
   }, [currentSong]);
+
+  // Check if currentSong exists in device IndexedDB (Airplane Mode / Offline playback support)
+  useEffect(() => {
+    if (!currentSong?.song) {
+      if (offlineMediaUrl) URL.revokeObjectURL(offlineMediaUrl);
+      setOfflineMediaUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    findDownloadedSong({
+      id: currentSong.song.id,
+      youtube_video_id: currentSong.song.youtube_video_id,
+      code: currentSong.song.code,
+      title: currentSong.song.title,
+    }).then((downloaded) => {
+      if (cancelled) return;
+      if (downloaded && downloaded.media_data) {
+        const url = createSongMediaUrl(downloaded);
+        setOfflineMediaUrl(url);
+      } else {
+        setOfflineMediaUrl(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSong?.song?.id, currentSong?.song?.youtube_video_id, currentSong?.song?.code, currentSong?.song?.title]);
 
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => {
@@ -92,11 +124,15 @@ export function MiniTVPlayer({
     const handlePauseOnBackground = () => {
       if (document.visibilityState === 'hidden') {
         if (isPlayingRef.current && currentSongRef.current) {
-          try {
-            playerRef.current?.pauseVideo();
-            setIsPlaying(false);
-            isPlayingRef.current = false;
-          } catch { }
+          if (offlineMediaUrl && offlineVideoRef.current) {
+            offlineVideoRef.current.pause();
+          } else {
+            try {
+              playerRef.current?.pauseVideo();
+            } catch { }
+          }
+          setIsPlaying(false);
+          isPlayingRef.current = false;
 
           onProgressChange?.({
             currentTime: currentTimeRef.current,
@@ -104,47 +140,41 @@ export function MiniTVPlayer({
             isPlaying: false,
           });
 
-          try {
-            fetch('/api/queue/control', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                room_code: roomCode,
-                session_id: sessionId,
-                action: 'pause',
-                queue_item_id: currentSongRef.current.queue_item_id,
-              }),
-              keepalive: true,
-            }).catch(() => { });
-          } catch { }
+          if (!offlineMediaUrl) {
+            try {
+              fetch('/api/queue/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  room_code: roomCode,
+                  session_id: sessionId,
+                  action: 'pause',
+                  queue_item_id: currentSongRef.current.queue_item_id,
+                }),
+                keepalive: true,
+              }).catch(() => { });
+            } catch { }
+          }
         }
       } else if (document.visibilityState === 'visible') {
-        // Returned to OkeKaraoke — keep paused and silently reconcile room state
-        onRefreshState();
+        // Returned to OkeKaraoke — if online, silently reconcile room state
+        if (typeof navigator !== 'undefined' && navigator.onLine) {
+          onRefreshState();
+        }
       }
     };
 
     const handlePageHide = () => {
       if (isPlayingRef.current && currentSongRef.current) {
-        try {
-          playerRef.current?.pauseVideo();
-          setIsPlaying(false);
-          isPlayingRef.current = false;
-        } catch { }
-
-        try {
-          fetch('/api/queue/control', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              room_code: roomCode,
-              session_id: sessionId,
-              action: 'pause',
-              queue_item_id: currentSongRef.current.queue_item_id,
-            }),
-            keepalive: true,
-          }).catch(() => { });
-        } catch { }
+        if (offlineMediaUrl && offlineVideoRef.current) {
+          offlineVideoRef.current.pause();
+        } else {
+          try {
+            playerRef.current?.pauseVideo();
+          } catch { }
+        }
+        setIsPlaying(false);
+        isPlayingRef.current = false;
       }
     };
 
@@ -170,20 +200,30 @@ export function MiniTVPlayer({
   }, [currentSong?.queue_item_id]);
 
   const handleSeek = useCallback((newTime: number) => {
-    playerRef.current?.seekTo(newTime);
-    playerRef.current?.playVideo();
+    if (offlineMediaUrl && offlineVideoRef.current) {
+      offlineVideoRef.current.currentTime = newTime;
+      offlineVideoRef.current.play().catch(() => { });
+    } else {
+      playerRef.current?.seekTo(newTime);
+      playerRef.current?.playVideo();
+    }
     setIsPlaying(true);
     setCurrentTime(newTime);
     setScrubValue(newTime);
-  }, []);
+  }, [offlineMediaUrl]);
 
   const handleRestart = useCallback(() => {
-    playerRef.current?.seekTo(0);
-    playerRef.current?.playVideo();
+    if (offlineMediaUrl && offlineVideoRef.current) {
+      offlineVideoRef.current.currentTime = 0;
+      offlineVideoRef.current.play().catch(() => { });
+    } else {
+      playerRef.current?.seekTo(0);
+      playerRef.current?.playVideo();
+    }
     setCurrentTime(0);
     setScrubValue(0);
     setIsPlaying(true);
-  }, []);
+  }, [offlineMediaUrl]);
 
   const handleProgress = useCallback((cur: number, dur: number) => {
     if (!isScrubbing) {
@@ -389,16 +429,24 @@ export function MiniTVPlayer({
 
     // Instant optimistic update in 0ms!
     if (targetAction === 'pause') {
-      playerRef.current?.pauseVideo();
+      if (offlineMediaUrl && offlineVideoRef.current) {
+        offlineVideoRef.current.pause();
+      } else {
+        playerRef.current?.pauseVideo();
+      }
       setIsPlaying(false);
       isPlayingRef.current = false;
     } else {
-      // If position was 0 or iframe reloaded, recover timestamp if known
-      const pos = playerRef.current?.getCurrentTime?.() ?? 0;
-      if (pos === 0 && currentTimeRef.current > 2) {
-        playerRef.current?.seekTo?.(currentTimeRef.current);
+      if (offlineMediaUrl && offlineVideoRef.current) {
+        offlineVideoRef.current.play().catch(() => { });
+      } else {
+        // If position was 0 or iframe reloaded, recover timestamp if known
+        const pos = playerRef.current?.getCurrentTime?.() ?? 0;
+        if (pos === 0 && currentTimeRef.current > 2) {
+          playerRef.current?.seekTo?.(currentTimeRef.current);
+        }
+        playerRef.current?.playVideo();
       }
-      playerRef.current?.playVideo();
       setIsPlaying(true);
       isPlayingRef.current = true;
     }
@@ -424,11 +472,19 @@ export function MiniTVPlayer({
 
         // Revert on permission failure
         if (targetAction === 'pause') {
-          playerRef.current?.playVideo();
+          if (offlineMediaUrl && offlineVideoRef.current) {
+            offlineVideoRef.current.play().catch(() => { });
+          } else {
+            playerRef.current?.playVideo();
+          }
           setIsPlaying(true);
           isPlayingRef.current = true;
         } else {
-          playerRef.current?.pauseVideo();
+          if (offlineMediaUrl && offlineVideoRef.current) {
+            offlineVideoRef.current.pause();
+          } else {
+            playerRef.current?.pauseVideo();
+          }
           setIsPlaying(false);
           isPlayingRef.current = false;
         }
@@ -437,7 +493,7 @@ export function MiniTVPlayer({
     } catch {
       // Network hiccup - maintain current state
     }
-  }, [currentSong, isPlaying, onRefreshState, roomCode, sessionId]);
+  }, [currentSong, isPlaying, offlineMediaUrl, onRefreshState, roomCode, sessionId]);
 
   // Immediate local stop in 0ms without duplicate network requests
   const stopLocal = useCallback(() => {
@@ -445,11 +501,13 @@ export function MiniTVPlayer({
     if (currentSongRef.current?.queue_item_id) {
       skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
     }
-    try {
-      playerRef.current?.pauseVideo();
-      setIsPlaying(false);
-    } catch { }
-  }, []);
+    if (offlineMediaUrl && offlineVideoRef.current) {
+      offlineVideoRef.current.pause();
+    } else {
+      try { playerRef.current?.pauseVideo(); } catch { }
+    }
+    setIsPlaying(false);
+  }, [offlineMediaUrl]);
 
   // Register controls to parent (e.g. RemotePageClient / RemoteQueue)
   useEffect(() => {
@@ -523,7 +581,7 @@ export function MiniTVPlayer({
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 font-extrabold text-[10px] tracking-wider uppercase shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping" />
               <Smartphone size={11} className="text-teal-400" />
-              <span>1 DEVICE MODE</span>
+              <span>{offlineMediaUrl ? 'OFFLINE' : 'SOLO MODE'}</span>
             </div>
 
             {currentSong && (
@@ -565,7 +623,7 @@ export function MiniTVPlayer({
         </div>
       )}
 
-      {/* ── VIDEO DISPLAY AREA (Single YouTubePlayer instance) ── */}
+      {/* ── VIDEO DISPLAY AREA (Offline HTML5 Video OR Single YouTubePlayer instance) ── */}
       <div
         className={
           isFullVideo
@@ -574,7 +632,41 @@ export function MiniTVPlayer({
             }`
         }
       >
-        {videoId ? (
+        {offlineMediaUrl ? (
+          <video
+            ref={offlineVideoRef}
+            src={offlineMediaUrl}
+            playsInline
+            autoPlay={isPlaying}
+            controls={false}
+            preload="auto"
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onError={(e) => {
+              console.warn('[MiniTV] Offline video playback error:', e);
+            }}
+            onTimeUpdate={(e) => {
+              const video = e.currentTarget;
+              if (!isScrubbing) {
+                setCurrentTime(video.currentTime);
+                setDuration(video.duration || 0);
+              }
+              onProgressChange?.({
+                currentTime: isScrubbing ? scrubValue : video.currentTime,
+                duration: video.duration || 0,
+                isPlaying: !video.paused,
+              });
+            }}
+            onEnded={() => {
+              const video = offlineVideoRef.current;
+              // Only advance queue if video actually reached near completion (not an initial buffer stall)
+              if (video && video.duration > 3 && video.currentTime >= video.duration - 2) {
+                handleEnded(queueItemId || '');
+              }
+            }}
+            className="w-full h-full object-contain bg-black"
+          />
+        ) : videoId ? (
           <YouTubePlayer
             ref={playerRef}
             videoId={videoId}
