@@ -119,13 +119,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   // Set 1-Device Solo mode based on URL solotv parameter, saved preference, or offline state
   useEffect(() => {
     const isSoloParam = searchParams?.get('solotv') === 'true' || searchParams?.get('solotv') === '1';
-    const savedSolo = typeof window !== 'undefined' && localStorage.getItem('okekaraoke_solo_tv') === 'true';
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    setIsSoloTVMode(isSoloParam || savedSolo || isOffline);
-    if (typeof window !== 'undefined' && (isSoloParam || savedSolo)) {
+    const isSoloRoomCode = roomCode.toUpperCase() === 'SOLO';
+    const savedSolo = typeof window !== 'undefined' && localStorage.getItem('okekaraoke_solo_tv') === 'true';
+    setIsSoloTVMode(isSoloParam || isSoloRoomCode || isOffline || savedSolo);
+    if (typeof window !== 'undefined' && (isSoloParam || isSoloRoomCode)) {
       localStorage.setItem('okekaraoke_solo_tv', 'true');
     }
-  }, [searchParams]);
+  }, [searchParams, roomCode]);
 
   const toggleSoloTVMode = () => {
     setIsSoloTVMode((prev) => {
@@ -140,9 +141,15 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   // Remember last room code for app shortcuts & quick rejoining
   useEffect(() => {
     if (typeof window !== 'undefined' && roomCode) {
-      localStorage.setItem('okekaraoke_last_room', roomCode.toUpperCase());
+      const upper = roomCode.toUpperCase();
+      localStorage.setItem('okekaraoke_last_room', upper);
+      if (upper !== 'SOLO' && upper !== 'OFFLINE') {
+        localStorage.setItem('okekaraoke_last_online_room', upper);
+      }
     }
   }, [roomCode]);
+
+
 
   // Clear unread count when viewing chat
   useEffect(() => {
@@ -372,6 +379,31 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       window.removeEventListener('pageshow', handleVisibility);
     };
   }, [fetchState]);
+
+  // Network recovery: Automatically rejoin online room when internet is restored
+  useEffect(() => {
+    const handleOnline = () => {
+      const lastOnline = typeof window !== 'undefined' ? localStorage.getItem('okekaraoke_last_online_room') : null;
+      if (roomCode.toUpperCase() === 'SOLO' && lastOnline && lastOnline !== 'SOLO' && lastOnline !== 'OFFLINE') {
+        window.location.href = `/remote/${lastOnline.toUpperCase()}`;
+        return;
+      }
+      fetchState();
+    };
+
+    const handleOffline = () => {
+      setIsSoloTVMode(true);
+      setConnectionStatus('offline');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [roomCode, fetchState]);
 
   // Register this phone as a remote device
   const registerDevice = useCallback(async (name: string) => {

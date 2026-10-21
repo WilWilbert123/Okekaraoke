@@ -1,6 +1,7 @@
 // ============================================================
 // OKEKARAOKE — GET /api/songs/download
 // Downloads authentic YouTube Karaoke MP4 video + audio files
+// Compatible with localhost, VPS, and cloud Vercel serverless deployments
 // Streams directly to client IndexedDB for 100% offline playback
 // ============================================================
 
@@ -9,6 +10,9 @@ import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import https from 'https';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ffmpegStatic = require('ffmpeg-static');
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -37,16 +41,59 @@ function testSpawn(cmd: string, args: string[]): Promise<boolean> {
   });
 }
 
+// Download standalone yt-dlp binary on-demand (for Vercel serverless / Linux cloud environments)
+function downloadStandaloneBinary(targetPath: string): Promise<boolean> {
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+  const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binName}`;
+
+  function fetchUrl(url: string, redirects = 0): Promise<boolean> {
+    if (redirects > 5) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      https
+        .get(url, (res) => {
+          if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            return resolve(fetchUrl(res.headers.location, redirects + 1));
+          }
+          if (res.statusCode !== 200) {
+            return resolve(false);
+          }
+
+          const fileStream = fs.createWriteStream(targetPath);
+          res.pipe(fileStream);
+          fileStream.on('finish', () => {
+            fileStream.close();
+            try {
+              fs.chmodSync(targetPath, 0o755);
+            } catch {}
+            resolve(true);
+          });
+          fileStream.on('error', () => {
+            try {
+              fs.unlinkSync(targetPath);
+            } catch {}
+            resolve(false);
+          });
+        })
+        .on('error', () => resolve(false));
+    });
+  }
+
+  return fetchUrl(downloadUrl);
+}
+
 // Discover available yt-dlp binary or python module
 async function getDownloader(): Promise<DownloaderConfig | null> {
   if (cachedDownloader) return cachedDownloader;
 
   const localAppData = process.env.LOCALAPPDATA || '';
   const userProfile = process.env.USERPROFILE || '';
+  const cwd = process.cwd();
 
   // 1. Direct standalone/scripts yt-dlp executable
   const directCandidates = [
     'yt-dlp',
+    path.join(cwd, 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
     path.join(localAppData, 'Programs', 'Python', 'Python310', 'Scripts', 'yt-dlp.exe'),
     path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'Scripts', 'yt-dlp.exe'),
     path.join(localAppData, 'Programs', 'Python', 'Python311', 'Scripts', 'yt-dlp.exe'),
@@ -54,6 +101,7 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
     path.join(localAppData, 'Programs', 'yt-dlp', 'yt-dlp.exe'),
     '/usr/local/bin/yt-dlp',
     '/usr/bin/yt-dlp',
+    path.join(os.tmpdir(), process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
   ];
 
   for (const candidate of directCandidates) {
@@ -83,12 +131,38 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
     }
   }
 
+  // 3. Fallback: On cloud serverless environments (like Vercel / AWS Lambda),
+  // acquire the standalone binary into /tmp on-demand
+  const tmpBinaryPath = path.join(os.tmpdir(), process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  if (!fs.existsSync(tmpBinaryPath)) {
+    const downloaded = await downloadStandaloneBinary(tmpBinaryPath);
+    if (downloaded && fs.existsSync(tmpBinaryPath)) {
+      const ok = await testSpawn(tmpBinaryPath, ['--version']);
+      if (ok) {
+        cachedDownloader = { cmd: tmpBinaryPath, prefixArgs: [] };
+        return cachedDownloader;
+      }
+    }
+  } else {
+    const ok = await testSpawn(tmpBinaryPath, ['--version']);
+    if (ok) {
+      cachedDownloader = { cmd: tmpBinaryPath, prefixArgs: [] };
+      return cachedDownloader;
+    }
+  }
+
   return null;
 }
 
 // Universal dynamic ffmpeg binary locator
 async function getDynamicFfmpegPath(): Promise<string | null> {
   if (cachedFfmpegPath && fs.existsSync(cachedFfmpegPath)) {
+    return cachedFfmpegPath;
+  }
+
+  // 1. ffmpeg-static npm package (universal: Windows, Linux/Vercel, macOS)
+  if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
+    cachedFfmpegPath = ffmpegStatic;
     return cachedFfmpegPath;
   }
 
@@ -101,15 +175,15 @@ async function getDynamicFfmpegPath(): Promise<string | null> {
   const userProfile = process.env.USERPROFILE || '';
 
   const candidates = [
-    // 1. Python Scripts ffmpeg (linked/installed)
+    // Python Scripts ffmpeg
     path.join(localAppData, 'Programs', 'Python', 'Python310', 'Scripts', 'ffmpeg.exe'),
     path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'Scripts', 'ffmpeg.exe'),
-    // 2. imageio_ffmpeg binaries
+    // imageio_ffmpeg binaries
     path.join(localAppData, 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg.exe'),
     path.join(localAppData, 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
     path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg.exe'),
     path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
-    // 3. System PATH check
+    // System locations
     path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
     path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
     path.join(localAppData, 'Programs', 'ffmpeg', 'bin', 'ffmpeg.exe'),
@@ -127,39 +201,11 @@ async function getDynamicFfmpegPath(): Promise<string | null> {
     }
   }
 
-  // 4. Test ffmpeg directly in system PATH
+  // Test ffmpeg directly in system PATH
   if (await testSpawn('ffmpeg', ['-version'])) {
     cachedFfmpegPath = 'ffmpeg';
     return 'ffmpeg';
   }
-
-  // 5. Query Python's imageio_ffmpeg dynamically
-  try {
-    const downloader = await getDownloader();
-    const pyCmd = downloader?.cmd.toLowerCase().includes('python') ? downloader.cmd : 'python';
-    const pyPath = await new Promise<string | null>((resolve) => {
-      const child = spawn(pyCmd, ['-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())'], {
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      let out = '';
-      child.stdout?.on('data', (d) => (out += d.toString()));
-      child.on('close', (code) => {
-        const trimmed = out.trim();
-        if (code === 0 && trimmed && fs.existsSync(trimmed)) {
-          resolve(trimmed);
-        } else {
-          resolve(null);
-        }
-      });
-      child.on('error', () => resolve(null));
-    });
-
-    if (pyPath) {
-      cachedFfmpegPath = pyPath;
-      return pyPath;
-    }
-  } catch {}
 
   return null;
 }
@@ -274,7 +320,7 @@ export async function GET(request: NextRequest) {
     const downloader = await getDownloader();
     if (!downloader) {
       return NextResponse.json(
-        { error: 'YouTube downloader engine is not installed or not configured on server.' },
+        { error: 'YouTube downloader engine is initializing or not available on server.' },
         { status: 503 }
       );
     }

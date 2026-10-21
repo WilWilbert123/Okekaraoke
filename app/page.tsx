@@ -22,25 +22,63 @@ export default function LandingPage() {
   const [error, setError] = useState<string | null>(null);
   const [theme, setTheme] = useState<string>('black');
   const [isMobileDevice, setIsMobileDevice] = useState<boolean>(false);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [lastOnlineRoom, setLastOnlineRoom] = useState<string | null>(null);
   const { isInstallable, isStandalone, installApp } = usePWAInstall();
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('okekaraoke_last_room');
-      if (saved) {
-        setLastRoom(saved);
-      }
-      const savedTv = localStorage.getItem('okekaraoke_last_tv_room');
-      if (savedTv) {
-        setLastTvRoom(savedTv);
-      }
-      const savedTheme = localStorage.getItem('okekaraoke_current_theme');
-      if (savedTheme) {
-        setTheme(savedTheme);
-      }
-      setIsMobileDevice(/Mobi|Android|iPhone|iPad|iPod|SmartTV|Tizen|WebOS/i.test(navigator.userAgent));
-    }
+    const checkNetworkAndRooms = () => {
+      const online = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      setIsOnline(online);
 
+      if (typeof window !== 'undefined') {
+        const savedOnline = localStorage.getItem('okekaraoke_last_online_room');
+        if (savedOnline && savedOnline !== 'SOLO' && savedOnline !== 'OFFLINE') {
+          setLastOnlineRoom(savedOnline);
+        }
+
+        let saved = localStorage.getItem('okekaraoke_last_room');
+        // When online, if last room was saved as SOLO or OFFLINE, automatically restore the real online room
+        if (online && (saved === 'SOLO' || saved === 'OFFLINE' || !saved) && savedOnline) {
+          saved = savedOnline;
+          localStorage.setItem('okekaraoke_last_room', savedOnline);
+          localStorage.setItem('okekaraoke_solo_tv', 'false');
+        }
+
+        if (saved) {
+          setLastRoom(saved);
+        }
+        const savedTv = localStorage.getItem('okekaraoke_last_tv_room');
+        if (savedTv) {
+          setLastTvRoom(savedTv);
+        }
+        const savedTheme = localStorage.getItem('okekaraoke_current_theme');
+        if (savedTheme) {
+          setTheme(savedTheme);
+        }
+        setIsMobileDevice(/Mobi|Android|iPhone|iPad|iPod|SmartTV|Tizen|WebOS/i.test(navigator.userAgent));
+      }
+    };
+
+    checkNetworkAndRooms();
+
+    const handleOnline = () => {
+      checkNetworkAndRooms();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     const updateTheme = (newTheme: string) => {
       if (newTheme) {
         setTheme(newTheme);
@@ -129,6 +167,8 @@ export default function LandingPage() {
       });
 
       localStorage.setItem('okekaraoke_last_tv_room', room_code);
+      localStorage.setItem('okekaraoke_last_online_room', room_code);
+      setLastOnlineRoom(room_code);
 
       router.push(`/tv/${room_code}`);
     } catch {
@@ -177,6 +217,8 @@ export default function LandingPage() {
       });
 
       localStorage.setItem('okekaraoke_last_room', room_code);
+      localStorage.setItem('okekaraoke_last_online_room', room_code);
+      setLastOnlineRoom(room_code);
       localStorage.setItem('okekaraoke_solo_tv', 'true');
 
       router.push(`/remote/${room_code}?solotv=true`);
@@ -231,6 +273,8 @@ export default function LandingPage() {
       });
 
       localStorage.setItem('okekaraoke_last_tv_room', room_code);
+      localStorage.setItem('okekaraoke_last_online_room', room_code);
+      setLastOnlineRoom(room_code);
 
       router.push(`/tv/${room_code}`);
     } catch {
@@ -296,6 +340,8 @@ export default function LandingPage() {
       });
 
       localStorage.setItem('okekaraoke_last_room', room_code);
+      localStorage.setItem('okekaraoke_last_online_room', room_code);
+      setLastOnlineRoom(room_code);
 
       if (isSolo) {
         localStorage.setItem('okekaraoke_solo_tv', 'true');
@@ -476,95 +522,114 @@ export default function LandingPage() {
           </div>
 
           {/* Mode-Aware Rejoin Bar */}
-          {(lastTvRoom || lastRoom) && (
-            <div className="mb-3 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-slate-100/80 border border-slate-200/80 flex flex-col gap-1.5 shadow-sm transition-all duration-300">
-              {selectedMode === 'tv' ? (
-                /* TV + Phone Mode Rejoin: ONLY TV and Remote buttons */
-                <div key="rejoin-tv" className="flex flex-col gap-1.5 animate-fade-in">
-                  <div className="flex items-center justify-between px-0.5">
-                    <div className="flex items-center gap-1 sm:gap-1.5">
-                      <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 shrink-0" />
-                      <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
-                        {lastTvRoom && lastRoom && lastTvRoom === lastRoom ? (
-                          <>Rejoin Room <span className="font-mono text-indigo-900 font-black tracking-wider lowercase">({lastRoom})</span></>
-                        ) : (
-                          <>Rejoin Recent Session</>
-                        )}
-                      </span>
+          {(() => {
+            const effectiveOnlineRoom = (lastOnlineRoom && lastOnlineRoom !== 'SOLO' && lastOnlineRoom !== 'OFFLINE')
+              ? lastOnlineRoom
+              : ((lastRoom && lastRoom !== 'SOLO' && lastRoom !== 'OFFLINE') ? lastRoom : (lastTvRoom && lastTvRoom !== 'SOLO' && lastTvRoom !== 'OFFLINE' ? lastTvRoom : null));
+            const displayRoom = (isOnline && effectiveOnlineRoom) ? effectiveOnlineRoom : (lastRoom || lastTvRoom || 'SOLO');
+
+            if (!effectiveOnlineRoom && !lastRoom && !lastTvRoom) return null;
+
+            return (
+              <div className="mb-3 p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-slate-100/80 border border-slate-200/80 flex flex-col gap-1.5 shadow-sm transition-all duration-300">
+                {selectedMode === 'tv' ? (
+                  /* TV + Phone Mode Rejoin: ONLY TV and Remote buttons */
+                  <div key="rejoin-tv" className="flex flex-col gap-1.5 animate-fade-in">
+                    <div className="flex items-center justify-between px-0.5">
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600 shrink-0" />
+                        <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
+                          {displayRoom ? (
+                            <>Rejoin Room <span className="font-mono text-indigo-900 font-black tracking-wider lowercase">({displayRoom})</span></>
+                          ) : (
+                            <>Rejoin Recent Session</>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <button
+                        onClick={() => {
+                          const targetRoom = (lastTvRoom || displayRoom || 'OFFLINE').trim().toUpperCase();
+                          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                            window.location.href = `/tv/${targetRoom}`;
+                          } else {
+                            router.push(`/tv/${targetRoom}`);
+                          }
+                        }}
+                        className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-950 border border-teal-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                        title={`Resume TV Display (${lastTvRoom || displayRoom})`}
+                      >
+                        <Tv2 size={13} className="text-teal-700 shrink-0" />
+                        <span className="truncate">TV Display</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          const targetRoom = (displayRoom || lastTvRoom || 'OFFLINE').trim().toUpperCase();
+                          setJoinCode(targetRoom || '');
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('okekaraoke_solo_tv', 'false');
+                          }
+                          if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                            window.location.href = `/remote/${targetRoom}`;
+                          } else {
+                            router.push(`/remote/${targetRoom}`);
+                          }
+                        }}
+                        className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                        title={`Rejoin Phone Remote (${displayRoom || lastTvRoom})`}
+                      >
+                        <History size={13} className="text-indigo-700 shrink-0" />
+                        <span className="truncate">Phone Remote</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <button
-                      onClick={() => {
-                        const targetRoom = (lastTvRoom || lastRoom || 'OFFLINE').trim().toUpperCase();
-                        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-                          window.location.href = `/tv/${targetRoom}`;
-                        } else {
-                          router.push(`/tv/${targetRoom}`);
-                        }
-                      }}
-                      className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-950 border border-teal-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
-                      title={`Resume TV Display (${lastTvRoom || lastRoom})`}
-                    >
-                      <Tv2 size={13} className="text-teal-700 shrink-0" />
-                      <span className="truncate">TV Display</span>
-                    </button>
+                ) : (
+                  /* 1-Device Mode Rejoin: Automatically rejoins online room when internet is detected */
+                  <div key="rejoin-solo" className="flex flex-col gap-1.5 animate-fade-in">
+                    <div className="flex items-center justify-between px-0.5">
+                      <div className="flex items-center gap-1 sm:gap-1.5">
+                        <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 shrink-0" />
+                        <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
+                          {isOnline && effectiveOnlineRoom ? (
+                            <>Rejoin Online Room <span className="font-mono text-teal-900 font-black tracking-wider lowercase">({effectiveOnlineRoom})</span></>
+                          ) : (
+                            <>Rejoin 1-Device Room <span className="font-mono text-teal-900 font-black tracking-wider lowercase">({displayRoom})</span></>
+                          )}
+                        </span>
+                      </div>
+                    </div>
 
                     <button
                       onClick={() => {
-                        const targetRoom = (lastRoom || lastTvRoom || 'OFFLINE').trim().toUpperCase();
-                        setJoinCode(targetRoom || '');
+                        const targetRoom = (isOnline && effectiveOnlineRoom ? effectiveOnlineRoom : displayRoom).trim().toUpperCase();
                         if (typeof window !== 'undefined') {
-                          localStorage.setItem('okekaraoke_solo_tv', 'false');
+                          if (isOnline && targetRoom !== 'SOLO') {
+                            localStorage.setItem('okekaraoke_solo_tv', 'false');
+                          } else {
+                            localStorage.setItem('okekaraoke_solo_tv', 'true');
+                          }
+                          localStorage.setItem('okekaraoke_last_room', targetRoom);
                         }
                         if (typeof navigator !== 'undefined' && !navigator.onLine) {
-                          window.location.href = `/remote/${targetRoom}`;
+                          window.location.href = `/remote/${targetRoom}?solotv=true`;
                         } else {
-                          router.push(`/remote/${targetRoom}`);
+                          router.push(`/remote/${targetRoom}${targetRoom === 'SOLO' ? '?solotv=true' : ''}`);
                         }
                       }}
-                      className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
-                      title={`Rejoin Phone Remote (${lastRoom || lastTvRoom})`}
+                      className="w-full py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl bg-teal-400/20 hover:bg-teal-400/30 text-teal-950 border border-teal-400/60 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
+                      title={`Rejoin ${isOnline && effectiveOnlineRoom ? 'Online Room' : '1-Device Karaoke'} (${isOnline && effectiveOnlineRoom ? effectiveOnlineRoom : displayRoom})`}
                     >
-                      <History size={13} className="text-indigo-700 shrink-0" />
-                      <span className="truncate">Phone Remote</span>
+                      <Smartphone size={13} className="text-teal-700 shrink-0" />
+                      <span>{isOnline && effectiveOnlineRoom ? `REJOIN ONLINE ROOM (${effectiveOnlineRoom})` : 'REJOIN 1-DEVICE KARAOKE'}</span>
                     </button>
                   </div>
-                </div>
-              ) : (
-                /* 1-Device Mode Rejoin: ONLY 1-Device button */
-                <div key="rejoin-solo" className="flex flex-col gap-1.5 animate-fade-in">
-                  <div className="flex items-center justify-between px-0.5">
-                    <div className="flex items-center gap-1 sm:gap-1.5">
-                      <History className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-teal-600 shrink-0" />
-                      <span className="text-[10px] sm:text-xs font-extrabold text-slate-600 tracking-wider uppercase">
-                        Rejoin 1-Device Room <span className="font-mono text-teal-900 font-black tracking-wider lowercase">({lastRoom || lastTvRoom})</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      const targetRoom = (lastRoom || lastTvRoom || 'SOLO').trim().toUpperCase();
-                      localStorage.setItem('okekaraoke_solo_tv', 'true');
-                      localStorage.setItem('okekaraoke_last_room', targetRoom);
-                      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-                        window.location.href = `/remote/${targetRoom}?solotv=true`;
-                      } else {
-                        router.push(`/remote/${targetRoom}?solotv=true`);
-                      }
-                    }}
-                    className="w-full py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl bg-teal-400/20 hover:bg-teal-400/30 text-teal-950 border border-teal-400/60 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
-                    title={`Rejoin 1-Device Karaoke (${lastRoom || lastTvRoom})`}
-                  >
-                    <Smartphone size={13} className="text-teal-700 shrink-0" />
-                    <span>REJOIN 1-DEVICE KARAOKE</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
 
           {/* Join Room Form — Mode-Aware TV Display & Remote Room Code Launcher */}
           {selectedMode === 'tv' ? (

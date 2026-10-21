@@ -70,9 +70,35 @@ export function MiniTVPlayer({
     currentSongRef.current = currentSong;
   }, [currentSong]);
 
+  const [isDeviceOnline, setIsDeviceOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    const handleOnline = () => setIsDeviceOnline(true);
+    const handleOffline = () => setIsDeviceOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Check if currentSong exists in device IndexedDB (Airplane Mode / Offline playback support)
   useEffect(() => {
     if (!currentSong?.song) {
+      if (offlineMediaUrl) URL.revokeObjectURL(offlineMediaUrl);
+      setOfflineMediaUrl(null);
+      return;
+    }
+
+    const isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    const isExplicitOfflineSong =
+      currentSong.song.id?.startsWith('offline_') || currentSong.queue_item_id?.startsWith('offline_');
+
+    // If online AND this is a standard YouTube video, play via online player so it stays synced
+    if (!isOffline && !isExplicitOfflineSong && currentSong.song.youtube_video_id) {
       if (offlineMediaUrl) URL.revokeObjectURL(offlineMediaUrl);
       setOfflineMediaUrl(null);
       return;
@@ -101,7 +127,7 @@ export function MiniTVPlayer({
     return () => {
       cancelled = true;
     };
-  }, [currentSong?.song?.id, currentSong?.song?.youtube_video_id, currentSong?.song?.code, currentSong?.song?.title]);
+  }, [currentSong?.song?.id, currentSong?.song?.youtube_video_id, currentSong?.song?.code, currentSong?.song?.title, isDeviceOnline]);
 
   const isPlayingRef = useRef(isPlaying);
   useEffect(() => {
@@ -585,7 +611,7 @@ export function MiniTVPlayer({
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 font-extrabold text-[10px] tracking-wider uppercase shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping" />
               <Smartphone size={11} className="text-teal-400" />
-              <span>{offlineMediaUrl ? 'OFFLINE' : 'SOLO MODE'}</span>
+              <span>{!isDeviceOnline ? 'OFFLINE' : (offlineMediaUrl ? 'OFFLINE PLAY' : 'SOLO MODE')}</span>
             </div>
 
             {currentSong && (
