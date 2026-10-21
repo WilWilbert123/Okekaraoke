@@ -1,6 +1,6 @@
 // ============================================================
 // OKEKARAOKE — GET /api/songs/download
-// Downloads real YouTube Karaoke MP4 video + audio files
+// Downloads authentic YouTube Karaoke MP4 video + audio files
 // Streams directly to client IndexedDB for 100% offline playback
 // ============================================================
 
@@ -13,14 +13,19 @@ import fs from 'fs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
-let cachedFfmpegPath: string | null = null;
-let cachedPythonCmd: string | null = null;
+interface DownloaderConfig {
+  cmd: string;
+  prefixArgs: string[];
+}
 
-// Universal check to see if a command is installed on the host system (Linux, Mac, or Windows)
-function isCommandAvailable(cmd: string): Promise<boolean> {
+let cachedDownloader: DownloaderConfig | null = null;
+let cachedFfmpegPath: string | null = null;
+
+// Universal check to see if a command is executable on the host
+function testSpawn(cmd: string, args: string[]): Promise<boolean> {
   return new Promise((resolve) => {
     try {
-      const child = spawn(cmd, ['-version'], {
+      const child = spawn(cmd, args, {
         windowsHide: true,
         stdio: 'ignore',
       });
@@ -32,36 +37,57 @@ function isCommandAvailable(cmd: string): Promise<boolean> {
   });
 }
 
-// Discover available python executable that has yt_dlp installed
-async function getPythonExecutable(): Promise<string | null> {
-  if (cachedPythonCmd) return cachedPythonCmd;
+// Discover available yt-dlp binary or python module
+async function getDownloader(): Promise<DownloaderConfig | null> {
+  if (cachedDownloader) return cachedDownloader;
 
-  const candidates = ['python', 'python3', 'py'];
-  for (const cmd of candidates) {
-    const works = await new Promise<boolean>((resolve) => {
-      try {
-        const child = spawn(cmd, ['-m', 'yt_dlp', '--version'], {
-          windowsHide: true,
-          stdio: 'ignore',
-        });
-        child.on('close', (code) => resolve(code === 0));
-        child.on('error', () => resolve(false));
-      } catch {
-        resolve(false);
-      }
-    });
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const userProfile = process.env.USERPROFILE || '';
 
-    if (works) {
-      cachedPythonCmd = cmd;
-      return cmd;
+  // 1. Direct standalone/scripts yt-dlp executable
+  const directCandidates = [
+    'yt-dlp',
+    path.join(localAppData, 'Programs', 'Python', 'Python310', 'Scripts', 'yt-dlp.exe'),
+    path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'Scripts', 'yt-dlp.exe'),
+    path.join(localAppData, 'Programs', 'Python', 'Python311', 'Scripts', 'yt-dlp.exe'),
+    path.join(localAppData, 'Programs', 'Python', 'Python312', 'Scripts', 'yt-dlp.exe'),
+    path.join(localAppData, 'Programs', 'yt-dlp', 'yt-dlp.exe'),
+    '/usr/local/bin/yt-dlp',
+    '/usr/bin/yt-dlp',
+  ];
+
+  for (const candidate of directCandidates) {
+    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
+    const ok = await testSpawn(candidate, ['--version']);
+    if (ok) {
+      cachedDownloader = { cmd: candidate, prefixArgs: [] };
+      return cachedDownloader;
+    }
+  }
+
+  // 2. Python module candidates (python -m yt_dlp)
+  const pyCandidates = [
+    'python',
+    path.join(localAppData, 'Programs', 'Python', 'Python310', 'python.exe'),
+    path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'python.exe'),
+    'py',
+    'python3',
+  ];
+
+  for (const py of pyCandidates) {
+    if (py.includes(path.sep) && !fs.existsSync(py)) continue;
+    const ok = await testSpawn(py, ['-m', 'yt_dlp', '--version']);
+    if (ok) {
+      cachedDownloader = { cmd: py, prefixArgs: ['-m', 'yt_dlp'] };
+      return cachedDownloader;
     }
   }
 
   return null;
 }
 
-// Universal dynamic ffmpeg binary locator without hardcoding user profile paths
-async function getDynamicFfmpegPath(pythonCmd: string): Promise<string | null> {
+// Universal dynamic ffmpeg binary locator
+async function getDynamicFfmpegPath(): Promise<string | null> {
   if (cachedFfmpegPath && fs.existsSync(cachedFfmpegPath)) {
     return cachedFfmpegPath;
   }
@@ -71,10 +97,48 @@ async function getDynamicFfmpegPath(pythonCmd: string): Promise<string | null> {
     return cachedFfmpegPath;
   }
 
-  // 1. Query python's imageio_ffmpeg dynamically (works on all user accounts and operating systems)
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const userProfile = process.env.USERPROFILE || '';
+
+  const candidates = [
+    // 1. Python Scripts ffmpeg (linked/installed)
+    path.join(localAppData, 'Programs', 'Python', 'Python310', 'Scripts', 'ffmpeg.exe'),
+    path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'Scripts', 'ffmpeg.exe'),
+    // 2. imageio_ffmpeg binaries
+    path.join(localAppData, 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg.exe'),
+    path.join(localAppData, 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
+    path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg.exe'),
+    path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python', 'Python310', 'lib', 'site-packages', 'imageio_ffmpeg', 'binaries', 'ffmpeg-win-x86_64-v7.1.exe'),
+    // 3. System PATH check
+    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(localAppData, 'Programs', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(userProfile, 'scoop', 'shims', 'ffmpeg.exe'),
+    path.join(process.env.ALLUSERSPROFILE || '', 'chocolatey', 'bin', 'ffmpeg.exe'),
+    '/usr/bin/ffmpeg',
+    '/usr/local/bin/ffmpeg',
+    '/opt/homebrew/bin/ffmpeg',
+  ];
+
+  for (const loc of candidates) {
+    if (loc && fs.existsSync(loc)) {
+      cachedFfmpegPath = loc;
+      return loc;
+    }
+  }
+
+  // 4. Test ffmpeg directly in system PATH
+  if (await testSpawn('ffmpeg', ['-version'])) {
+    cachedFfmpegPath = 'ffmpeg';
+    return 'ffmpeg';
+  }
+
+  // 5. Query Python's imageio_ffmpeg dynamically
   try {
+    const downloader = await getDownloader();
+    const pyCmd = downloader?.cmd.toLowerCase().includes('python') ? downloader.cmd : 'python';
     const pyPath = await new Promise<string | null>((resolve) => {
-      const child = spawn(pythonCmd, ['-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())'], {
+      const child = spawn(pyCmd, ['-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())'], {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'ignore'],
       });
@@ -97,67 +161,66 @@ async function getDynamicFfmpegPath(pythonCmd: string): Promise<string | null> {
     }
   } catch {}
 
-  // 2. Check system PATH
-  const inPath = await isCommandAvailable('ffmpeg');
-  if (inPath) {
-    cachedFfmpegPath = 'ffmpeg';
-    return 'ffmpeg';
-  }
-
-  // 3. Check standard locations
-  const standardLocations = [
-    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'ffmpeg', 'bin', 'ffmpeg.exe'),
-    path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'ffmpeg.exe'),
-    path.join(process.env.ALLUSERSPROFILE || '', 'chocolatey', 'bin', 'ffmpeg.exe'),
-    '/usr/bin/ffmpeg',
-    '/usr/local/bin/ffmpeg',
-    '/opt/homebrew/bin/ffmpeg',
-  ];
-
-  for (const loc of standardLocations) {
-    if (loc && fs.existsSync(loc)) {
-      cachedFfmpegPath = loc;
-      return loc;
-    }
-  }
-
   return null;
 }
 
+// Clean any leftover temporary files or parts
+function cleanupTempFiles(baseFilePath: string) {
+  try {
+    if (fs.existsSync(baseFilePath)) {
+      fs.unlinkSync(baseFilePath);
+    }
+  } catch {}
+
+  try {
+    const dir = path.dirname(baseFilePath);
+    const baseName = path.basename(baseFilePath);
+    const files = fs.readdirSync(dir);
+    for (const f of files) {
+      if (f.startsWith(baseName)) {
+        try {
+          fs.unlinkSync(path.join(dir, f));
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
 async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
-  const pythonCmd = await getPythonExecutable();
-  if (!pythonCmd) {
-    console.warn('[yt-dlp] Python with yt_dlp module is not available on host system.');
+  const downloader = await getDownloader();
+  if (!downloader) {
+    console.warn('[yt-dlp] Neither yt-dlp nor python with yt_dlp module is available on host system.');
     return false;
   }
 
-  const ffmpegLocation = await getDynamicFfmpegPath(pythonCmd);
+  const ffmpegLocation = await getDynamicFfmpegPath();
+  const nodeExecutable = process.execPath || 'node';
 
   return new Promise((resolve) => {
     try {
       const args = [
-        '-m',
-        'yt_dlp',
+        ...downloader.prefixArgs,
         ...(ffmpegLocation ? ['--ffmpeg-location', ffmpegLocation] : []),
+        '--js-runtimes',
+        `node:${nodeExecutable}`,
         '-f',
         ffmpegLocation
-          ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best'
+          ? 'bestvideo[height<=720][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best'
           : 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
         '--merge-output-format',
         'mp4',
         '--no-playlist',
         '--socket-timeout',
-        '30',
+        '25',
         '--retries',
-        '3',
+        '2',
+        '--no-part',
         '-o',
         outputFile,
         target,
       ];
 
-      const child = spawn(pythonCmd, args, {
+      const child = spawn(downloader.cmd, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -175,15 +238,18 @@ async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
             return;
           }
         }
-        console.warn(`[yt-dlp] download failed for "${target}" (code ${code}):`, stderr.slice(-400));
+        console.warn(`[yt-dlp] download failed for "${target}" (code ${code}):`, stderr.slice(-300));
+        cleanupTempFiles(outputFile);
         resolve(false);
       });
 
       child.on('error', (err) => {
         console.warn('[yt-dlp] process spawn error:', err.message);
+        cleanupTempFiles(outputFile);
         resolve(false);
       });
     } catch {
+      cleanupTempFiles(outputFile);
       resolve(false);
     }
   });
@@ -205,27 +271,61 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing videoId or title parameter' }, { status: 400 });
     }
 
+    const downloader = await getDownloader();
+    if (!downloader) {
+      return NextResponse.json(
+        { error: 'YouTube downloader engine is not installed or not configured on server.' },
+        { status: 503 }
+      );
+    }
+
+    // Clean videoId: strip 'yt_' prefix or extract ID from full URL
+    let cleanVideoId = videoId.replace(/^yt_/, '').trim();
+    const urlMatch = cleanVideoId.match(/(?:youtu\.be\/|v=|\/embed\/|\/v\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    if (urlMatch) {
+      cleanVideoId = urlMatch[1];
+    }
+    const hasValidVideoId = /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId);
+
+    // Build prioritized targets to guarantee authentic video retrieval
+    const targetsToTry: string[] = [];
+
+    // 1. Direct YouTube video URL if ID is present
+    if (hasValidVideoId) {
+      targetsToTry.push(`https://www.youtube.com/watch?v=${cleanVideoId}`);
+    }
+
+    // Clean title and artist to avoid clutter in search
+    const cleanTitle = title
+      .replace(/\(videoke\s*track\)|\(karaoke\)|\(instrumental\)|\(with\s*lyrics\)/gi, '')
+      .trim();
+    const cleanArtist = artist.replace(/^youtube$/i, '').trim();
+
+    // 2. High-accuracy karaoke search fallbacks if direct ID is unavailable / blocked
+    if (cleanTitle && cleanArtist) {
+      targetsToTry.push(`ytsearch1:${cleanTitle} ${cleanArtist} karaoke`);
+      targetsToTry.push(`ytsearch1:${cleanTitle} ${cleanArtist} videoke`);
+    }
+    if (cleanTitle) {
+      targetsToTry.push(`ytsearch1:${cleanTitle} karaoke`);
+    }
+    if (cleanTitle && cleanArtist) {
+      targetsToTry.push(`ytsearch1:${cleanTitle} ${cleanArtist}`);
+    } else if (cleanTitle) {
+      targetsToTry.push(`ytsearch1:${cleanTitle}`);
+    }
+
     let success = false;
-    const pythonCmd = await getPythonExecutable();
-
-    if (pythonCmd) {
-      // 1. Direct YouTube video URL if videoId is valid
-      if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
-        const directUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        success = await runYtDlp(directUrl, tempFile);
+    for (const target of targetsToTry) {
+      success = await runYtDlp(target, tempFile);
+      if (success && fs.existsSync(tempFile)) {
+        const stat = fs.statSync(tempFile);
+        if (stat.size > 50000) {
+          break;
+        }
       }
-
-      // 2. Fallback: targeted search via ytsearch1
-      if (!success && (title || artist)) {
-        const searchQuery = `ytsearch1:${title} ${artist} karaoke`.trim();
-        success = await runYtDlp(searchQuery, tempFile);
-      }
-
-      // 3. Fallback: title karaoke search
-      if (!success && title) {
-        const searchQuery = `ytsearch1:${title} karaoke`.trim();
-        success = await runYtDlp(searchQuery, tempFile);
-      }
+      cleanupTempFiles(tempFile);
+      success = false;
     }
 
     // ── Delivery of Real MP4 Video + Audio ──
@@ -238,20 +338,22 @@ export async function GET(request: NextRequest) {
           nodeStream.on('data', (chunk) => controller.enqueue(chunk));
           nodeStream.on('end', () => {
             controller.close();
-            fs.unlink(tempFile, () => {});
+            cleanupTempFiles(tempFile);
           });
           nodeStream.on('error', (err) => {
             controller.error(err);
-            fs.unlink(tempFile, () => {});
+            cleanupTempFiles(tempFile);
           });
         },
         cancel() {
           nodeStream.destroy();
-          fs.unlink(tempFile, () => {});
+          cleanupTempFiles(tempFile);
         },
       });
 
-      const safeFilename = encodeURIComponent((title || 'karaoke_song').replace(/[/\\?%*:|"<>]/g, '_'));
+      const safeFilename = encodeURIComponent(
+        (cleanTitle || title || 'karaoke_song').replace(/[/\\?%*:|"<>]/g, '_')
+      );
 
       return new Response(webStream, {
         headers: {
@@ -264,10 +366,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Never return fake/synthetic audio
-    if (fs.existsSync(tempFile)) {
-      fs.unlink(tempFile, () => {});
-    }
+    cleanupTempFiles(tempFile);
 
     return NextResponse.json(
       {
@@ -276,9 +375,7 @@ export async function GET(request: NextRequest) {
       { status: 502 }
     );
   } catch (error: any) {
-    if (fs.existsSync(tempFile)) {
-      fs.unlink(tempFile, () => {});
-    }
+    cleanupTempFiles(tempFile);
     console.error('[Download API] Error:', error);
 
     return NextResponse.json(
