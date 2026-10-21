@@ -2064,6 +2064,7 @@ export function MyReservations({
               <video
                 ref={offlineVideoRef}
                 src={offlineMediaUrl}
+                poster={offlinePlayerSong.thumbnail_data || offlinePlayerSong.thumbnail_url || undefined}
                 controls
                 playsInline
                 autoPlay={offlineIsPlaying}

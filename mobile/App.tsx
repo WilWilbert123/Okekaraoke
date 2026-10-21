@@ -37,17 +37,32 @@ export default function App() {
   const handleWebViewError = (event: WebViewErrorEvent) => {
     const { nativeEvent } = event;
     console.warn('[WebView Error]', nativeEvent.description, nativeEvent.code);
-    // If primary domain fails (DNS error, host not found, network failure)
-    if (currentUrl === PRIMARY_URL) {
+    // If primary domain fails with DNS/host lookup error, switch to backup
+    if (
+      currentUrl === PRIMARY_URL &&
+      (nativeEvent.code === -2 || nativeEvent.code === -6 || nativeEvent.code === -105)
+    ) {
       handleDomainFailure();
     }
   };
 
   const handleHttpError = (event: WebViewHttpErrorEvent) => {
     const { nativeEvent } = event;
-    // If primary domain returns 404/502/503 (e.g. expired domain or parking page)
-    if (currentUrl === PRIMARY_URL && (nativeEvent.statusCode >= 500 || nativeEvent.statusCode === 404)) {
-      console.warn('[WebView HTTP Error]', nativeEvent.statusCode);
+    const url = nativeEvent.url || '';
+    // Only failover if the root document / main page itself returned 404 or 5xx (not background API calls)
+    const isMainDoc =
+      url === currentUrl ||
+      url === PRIMARY_URL ||
+      url === FALLBACK_URL ||
+      url.endsWith('.sbs/') ||
+      url.endsWith('.vercel.app/');
+
+    if (
+      isMainDoc &&
+      currentUrl === PRIMARY_URL &&
+      (nativeEvent.statusCode >= 500 || nativeEvent.statusCode === 404)
+    ) {
+      console.warn('[WebView Main HTTP Error]', nativeEvent.statusCode, url);
       handleDomainFailure();
     }
   };
@@ -62,6 +77,17 @@ export default function App() {
       webViewRef.current?.reload();
       setIsRetrying(false);
     }, 1000);
+  };
+
+  const handleOpenOfflineMode = () => {
+    // Navigate directly to offline solo karaoke screen
+    const offlineUrl = `${currentUrl}remote/OFFLINE`;
+    webViewRef.current?.injectJavaScript(`
+      try {
+        window.location.href = '/remote/OFFLINE';
+      } catch (e) {}
+      true;
+    `);
   };
 
   const renderErrorScreen = () => {
@@ -82,7 +108,7 @@ export default function App() {
 
           <Text style={styles.errorTitle}>No Internet Connection</Text>
           <Text style={styles.errorSubtitle}>
-            OkeKaraoke requires an active connection to load songs and sync rooms. Please check your Wi-Fi or mobile data.
+            OkeKaraoke is currently offline. You can retry connecting, or play your saved songs offline from device storage.
           </Text>
 
           <TouchableOpacity
@@ -99,6 +125,17 @@ export default function App() {
                 <Text style={styles.retryButtonText}>Retry Connection</Text>
               </View>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.offlineButton}
+            onPress={handleOpenOfflineMode}
+            activeOpacity={0.8}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="musical-notes" size={16} color="#2dd4bf" style={styles.buttonIcon} />
+              <Text style={styles.offlineButtonText}>Play Saved Offline Songs</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -127,6 +164,19 @@ export default function App() {
         mediaPlaybackRequiresUserAction={false}
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        databaseEnabled={true}
+        allowFileAccess={true}
+        allowFileAccessFromFileURLs={true}
+        allowUniversalAccessFromFileURLs={true}
+        originWhitelist={['*']}
+        mixedContentMode="always"
+        cacheEnabled={true}
+        thirdPartyCookiesEnabled={true}
+        sharedCookiesEnabled={true}
+        userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 OkeKaraokeMobile/1.0"
+        javaScriptCanOpenWindowsAutomatically={true}
+        setSupportMultipleWindows={false}
+        androidLayerType="hardware"
         startInLoadingState={true}
         onError={handleWebViewError}
         onHttpError={handleHttpError}
@@ -217,12 +267,23 @@ const styles = StyleSheet.create({
     color: '#a1a1aa',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 24,
+    marginBottom: 20,
   },
   retryButton: {
     width: '100%',
     height: 46,
     backgroundColor: '#2dd4bf',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  offlineButton: {
+    width: '100%',
+    height: 44,
+    backgroundColor: '#27272a',
+    borderWidth: 1,
+    borderColor: '#3f3f46',
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -239,6 +300,11 @@ const styles = StyleSheet.create({
     color: '#000000',
     fontSize: 14,
     fontWeight: '800',
+  },
+  offlineButtonText: {
+    color: '#2dd4bf',
+    fontSize: 13,
+    fontWeight: '700',
   },
   footerText: {
     marginTop: 24,

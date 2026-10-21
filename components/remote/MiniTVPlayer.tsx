@@ -636,6 +636,7 @@ export function MiniTVPlayer({
           <video
             ref={offlineVideoRef}
             src={offlineMediaUrl}
+            poster={currentSong?.song?.thumbnail_url || undefined}
             playsInline
             autoPlay={isPlaying}
             controls={false}
