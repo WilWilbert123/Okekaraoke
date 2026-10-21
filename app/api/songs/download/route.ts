@@ -2,7 +2,6 @@
 // OKEKARAOKE — GET /api/songs/download
 // Downloads real YouTube Karaoke MP4 video + audio files
 // Streams directly to client IndexedDB for 100% offline playback
-// Seamlessly falls back to resilient karaoke media package in serverless
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +12,9 @@ import fs from 'fs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
+
+let cachedFfmpegPath: string | null = null;
+let cachedPythonCmd: string | null = null;
 
 // Universal check to see if a command is installed on the host system (Linux, Mac, or Windows)
 function isCommandAvailable(cmd: string): Promise<boolean> {
@@ -30,36 +32,124 @@ function isCommandAvailable(cmd: string): Promise<boolean> {
   });
 }
 
-// Check if Python & yt-dlp can be executed in current environment
-function checkPythonAvailable(): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      const child = spawn('python', ['-m', 'yt_dlp', '--version'], {
-        windowsHide: true,
-        stdio: 'ignore',
-      });
-      child.on('close', (code) => resolve(code === 0));
-      child.on('error', () => resolve(false));
-    } catch {
-      resolve(false);
+// Discover available python executable that has yt_dlp installed
+async function getPythonExecutable(): Promise<string | null> {
+  if (cachedPythonCmd) return cachedPythonCmd;
+
+  const candidates = ['python', 'python3', 'py'];
+  for (const cmd of candidates) {
+    const works = await new Promise<boolean>((resolve) => {
+      try {
+        const child = spawn(cmd, ['-m', 'yt_dlp', '--version'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+        child.on('close', (code) => resolve(code === 0));
+        child.on('error', () => resolve(false));
+      } catch {
+        resolve(false);
+      }
+    });
+
+    if (works) {
+      cachedPythonCmd = cmd;
+      return cmd;
     }
-  });
+  }
+
+  return null;
+}
+
+// Universal dynamic ffmpeg binary locator without hardcoding user profile paths
+async function getDynamicFfmpegPath(pythonCmd: string): Promise<string | null> {
+  if (cachedFfmpegPath && fs.existsSync(cachedFfmpegPath)) {
+    return cachedFfmpegPath;
+  }
+
+  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+    cachedFfmpegPath = process.env.FFMPEG_PATH;
+    return cachedFfmpegPath;
+  }
+
+  // 1. Query python's imageio_ffmpeg dynamically (works on all user accounts and operating systems)
+  try {
+    const pyPath = await new Promise<string | null>((resolve) => {
+      const child = spawn(pythonCmd, ['-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())'], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      let out = '';
+      child.stdout?.on('data', (d) => (out += d.toString()));
+      child.on('close', (code) => {
+        const trimmed = out.trim();
+        if (code === 0 && trimmed && fs.existsSync(trimmed)) {
+          resolve(trimmed);
+        } else {
+          resolve(null);
+        }
+      });
+      child.on('error', () => resolve(null));
+    });
+
+    if (pyPath) {
+      cachedFfmpegPath = pyPath;
+      return pyPath;
+    }
+  } catch {}
+
+  // 2. Check system PATH
+  const inPath = await isCommandAvailable('ffmpeg');
+  if (inPath) {
+    cachedFfmpegPath = 'ffmpeg';
+    return 'ffmpeg';
+  }
+
+  // 3. Check standard locations
+  const standardLocations = [
+    path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'ffmpeg', 'bin', 'ffmpeg.exe'),
+    path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'ffmpeg.exe'),
+    path.join(process.env.ALLUSERSPROFILE || '', 'chocolatey', 'bin', 'ffmpeg.exe'),
+    '/usr/bin/ffmpeg',
+    '/usr/local/bin/ffmpeg',
+    '/opt/homebrew/bin/ffmpeg',
+  ];
+
+  for (const loc of standardLocations) {
+    if (loc && fs.existsSync(loc)) {
+      cachedFfmpegPath = loc;
+      return loc;
+    }
+  }
+
+  return null;
 }
 
 async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
-  const hasFfmpeg = process.env.FFMPEG_PATH || (await isCommandAvailable('ffmpeg'));
+  const pythonCmd = await getPythonExecutable();
+  if (!pythonCmd) {
+    console.warn('[yt-dlp] Python with yt_dlp module is not available on host system.');
+    return false;
+  }
+
+  const ffmpegLocation = await getDynamicFfmpegPath(pythonCmd);
 
   return new Promise((resolve) => {
     try {
       const args = [
         '-m',
         'yt_dlp',
-        ...(hasFfmpeg ? ['--ffmpeg-location', process.env.FFMPEG_PATH || 'ffmpeg'] : []),
+        ...(ffmpegLocation ? ['--ffmpeg-location', ffmpegLocation] : []),
         '-f',
-        hasFfmpeg ? 'bestvideo[height<=720]+bestaudio/best[height<=720]/best' : 'best[ext=mp4]/best',
+        ffmpegLocation
+          ? 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720]/best'
+          : 'best[height<=720][ext=mp4]/best[ext=mp4]/best',
+        '--merge-output-format',
+        'mp4',
         '--no-playlist',
         '--socket-timeout',
-        '20',
+        '30',
         '--retries',
         '3',
         '-o',
@@ -67,7 +157,7 @@ async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
         target,
       ];
 
-      const child = spawn('python', args, {
+      const child = spawn(pythonCmd, args, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -79,11 +169,14 @@ async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
 
       child.on('close', (code) => {
         if (code === 0 && fs.existsSync(outputFile)) {
-          resolve(true);
-        } else {
-          console.warn(`[yt-dlp] download failed for ${target} with code ${code}:`, stderr.slice(-300));
-          resolve(false);
+          const stat = fs.statSync(outputFile);
+          if (stat.size > 50000) {
+            resolve(true);
+            return;
+          }
         }
+        console.warn(`[yt-dlp] download failed for "${target}" (code ${code}):`, stderr.slice(-400));
+        resolve(false);
       });
 
       child.on('error', (err) => {
@@ -94,46 +187,6 @@ async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
       resolve(false);
     }
   });
-}
-
-/**
- * Generates a clean, playable offline karaoke accompaniment buffer (WAV PCM)
- * Fits under serverless limits (3.8MB for ~3 mins) and plays natively on all devices
- */
-function generateKaraokeWavBuffer(durationSeconds = 180): Buffer {
-  const sampleRate = 11025; // 11kHz for lightweight offline footprint
-  const numSamples = sampleRate * durationSeconds;
-  const buffer = Buffer.alloc(44 + numSamples * 2);
-
-  // RIFF header
-  buffer.write('RIFF', 0);
-  buffer.writeUInt32LE(36 + numSamples * 2, 4);
-  buffer.write('WAVE', 8);
-
-  // Format chunk
-  buffer.write('fmt ', 12);
-  buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20); // PCM
-  buffer.writeUInt16LE(1, 22); // Mono
-  buffer.writeUInt32LE(sampleRate, 24);
-  buffer.writeUInt32LE(sampleRate * 2, 28);
-  buffer.writeUInt16LE(2, 32);
-  buffer.writeUInt16LE(16, 34);
-
-  // Data chunk
-  buffer.write('data', 36);
-  buffer.writeUInt32LE(numSamples * 2, 40);
-
-  // Soft rhythm cadence for realistic karaoke accompaniment feel
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const beat = (i % (sampleRate / 2)) < 200 ? 0.04 : 0;
-    const melody = Math.sin(2 * Math.PI * 220 * t) * 0.02 * Math.exp(-((t % 1) * 3));
-    const sample = Math.round((beat + melody) * 32767);
-    buffer.writeInt16LE(sample, 44 + i * 2);
-  }
-
-  return buffer;
 }
 
 export async function GET(request: NextRequest) {
@@ -149,32 +202,37 @@ export async function GET(request: NextRequest) {
     const artist = (searchParams.get('artist') || '').trim();
 
     if (!videoId && !title) {
-      return NextResponse.json({ error: 'Missing videoId or title' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing videoId or title parameter' }, { status: 400 });
     }
 
     let success = false;
-    const pythonAvailable = await checkPythonAvailable();
+    const pythonCmd = await getPythonExecutable();
 
-    if (pythonAvailable) {
-      // 1. First attempt: Direct YouTube video URL if videoId looks like valid YouTube ID
+    if (pythonCmd) {
+      // 1. Direct YouTube video URL if videoId is valid
       if (videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
         const directUrl = `https://www.youtube.com/watch?v=${videoId}`;
         success = await runYtDlp(directUrl, tempFile);
       }
 
-      // 2. Second attempt / Fallback: Targeted karaoke search via ytsearch1
-      if (!success) {
+      // 2. Fallback: targeted search via ytsearch1
+      if (!success && (title || artist)) {
         const searchQuery = `ytsearch1:${title} ${artist} karaoke`.trim();
+        success = await runYtDlp(searchQuery, tempFile);
+      }
+
+      // 3. Fallback: title karaoke search
+      if (!success && title) {
+        const searchQuery = `ytsearch1:${title} karaoke`.trim();
         success = await runYtDlp(searchQuery, tempFile);
       }
     }
 
-    // ── Success with real YouTube MP4 ──
+    // ── Delivery of Real MP4 Video + Audio ──
     if (success && fs.existsSync(tempFile)) {
       const stat = fs.statSync(tempFile);
       const nodeStream = fs.createReadStream(tempFile);
 
-      // Convert Node ReadStream to Web ReadableStream
       const webStream = new ReadableStream({
         start(controller) {
           nodeStream.on('data', (chunk) => controller.enqueue(chunk));
@@ -206,37 +264,28 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // ── Resilient Serverless Fallback ──
-    // When in serverless / cloud hosting (where python subprocesses are unavailable),
-    // deliver a clean, valid, native karaoke accompaniment audio file so download NEVER fails
-    const wavBuffer = generateKaraokeWavBuffer(180);
-    const safeFilename = encodeURIComponent((title || 'karaoke_song').replace(/[/\\?%*:|"<>]/g, '_'));
+    // Never return fake/synthetic audio
+    if (fs.existsSync(tempFile)) {
+      fs.unlink(tempFile, () => {});
+    }
 
-    return new Response(new Uint8Array(wavBuffer), {
-      status: 200,
-      headers: {
-        'Content-Type': 'audio/wav',
-        'Content-Length': wavBuffer.length.toString(),
-        'Content-Disposition': `attachment; filename="${safeFilename}.wav"`,
-        'Cache-Control': 'public, max-age=86400',
-        'Accept-Ranges': 'bytes',
+    return NextResponse.json(
+      {
+        error: 'Failed to download authentic YouTube video. Please ensure the song is available and try again.',
       },
-    });
+      { status: 502 }
+    );
   } catch (error: any) {
     if (fs.existsSync(tempFile)) {
       fs.unlink(tempFile, () => {});
     }
-    console.error('Download stream error:', error);
+    console.error('[Download API] Error:', error);
 
-    // Guaranteed fallback response so mobile / browser never breaks
-    const fallbackBuffer = generateKaraokeWavBuffer(120);
-    return new Response(new Uint8Array(fallbackBuffer), {
-      status: 200,
-      headers: {
-        'Content-Type': 'audio/wav',
-        'Content-Length': fallbackBuffer.length.toString(),
-        'Cache-Control': 'no-store',
+    return NextResponse.json(
+      {
+        error: error?.message || 'Server error while downloading karaoke video.',
       },
-    });
+      { status: 500 }
+    );
   }
 }
