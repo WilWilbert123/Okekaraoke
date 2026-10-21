@@ -6,8 +6,9 @@
 // Supports multi-image ads and real-time live updates
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Megaphone, X, Sparkles } from 'lucide-react';
+import { DEFAULT_BANNER_PRESET_TEXTS } from '@/lib/constants/bannerPresets';
 
 export interface TVBannerProps {
   bannerEnabled: boolean;
@@ -16,6 +17,12 @@ export interface TVBannerProps {
   bannerImageUrl?: string;
   bannerImages?: string[];
   bannerSpeed?: number;
+  bannerRotateEnabled?: boolean;
+  bannerRotateInterval?: number;
+  bannerRotateMode?: 'random' | 'sequential';
+  bannerPool?: string[];
+  bannerRepeatCount?: number;
+  bannerMaxCycles?: number;
 }
 
 export function TVBanner({
@@ -25,19 +32,53 @@ export function TVBanner({
   bannerImageUrl,
   bannerImages,
   bannerSpeed = 20,
+  bannerRotateEnabled = false,
+  bannerRotateInterval = 15,
+  bannerRotateMode = 'random',
+  bannerPool,
+  bannerRepeatCount = 1,
+  bannerMaxCycles = 0,
 }: TVBannerProps) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [dismissedPopup, setDismissedPopup] = useState(false);
+  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const [isFading, setIsFading] = useState(false);
+  const [stoppedAfterMax, setStoppedAfterMax] = useState(false);
+
+  const shownCountRef = useRef(1);
+  const totalSwitchesRef = useRef(0);
+  const repeatCountPerBanner = Math.max(1, bannerRepeatCount || 1);
+  const maxTotalCycles = bannerMaxCycles || 0; // 0 = infinite / continuous
 
   // Combine images array or fallback to single bannerImageUrl
   const imagesList = (bannerImages && bannerImages.length > 0)
     ? bannerImages.filter(img => Boolean(img?.trim()))
     : (bannerImageUrl?.trim() ? [bannerImageUrl.trim()] : []);
 
-  // Reset popup dismissal if banner settings or text change
+  // Build the effective pool of text quotes for rotation
+  const textPool = useMemo(() => {
+    const base = (bannerPool && bannerPool.length > 0)
+      ? bannerPool.filter(t => Boolean(t?.trim()))
+      : DEFAULT_BANNER_PRESET_TEXTS;
+
+    const trimmedMain = bannerText?.trim();
+    if (trimmedMain && !base.includes(trimmedMain)) {
+      return [trimmedMain, ...base];
+    }
+    return base.length > 0 ? base : (trimmedMain ? [trimmedMain] : []);
+  }, [bannerPool, bannerText]);
+
+  // Reset popup dismissal if banner settings change
   useEffect(() => {
     setDismissedPopup(false);
   }, [bannerText, bannerImageUrl, bannerImages, bannerType, bannerEnabled]);
+
+  // Reset repetition counters if settings or pool change
+  useEffect(() => {
+    shownCountRef.current = 1;
+    totalSwitchesRef.current = 0;
+    setStoppedAfterMax(false);
+  }, [bannerRotateEnabled, bannerRotateInterval, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool]);
 
   // Slideshow timer for multi-images in side_card and popup
   useEffect(() => {
@@ -48,9 +89,54 @@ export function TVBanner({
     return () => clearInterval(interval);
   }, [imagesList.length]);
 
+  // Auto-rotation timer for banner text quotes with configurable repetition count & max cycles
+  useEffect(() => {
+    if (!bannerRotateEnabled || textPool.length <= 1 || stoppedAfterMax) return;
+
+    const intervalSeconds = Math.max(5, bannerRotateInterval || 15);
+    const interval = setInterval(() => {
+      // Check if current banner has been shown the required repeat count
+      if (shownCountRef.current < repeatCountPerBanner) {
+        shownCountRef.current += 1;
+        return;
+      }
+
+      // Ready to switch to next banner
+      shownCountRef.current = 1;
+      totalSwitchesRef.current += 1;
+
+      // Check if max total cycles reached (0 = infinite)
+      if (maxTotalCycles > 0 && totalSwitchesRef.current >= maxTotalCycles * textPool.length) {
+        setStoppedAfterMax(true);
+        return;
+      }
+
+      setIsFading(true);
+      setTimeout(() => {
+        setCurrentTextIndex((prev) => {
+          if (bannerRotateMode === 'sequential') {
+            return (prev + 1) % textPool.length;
+          }
+          // Random pick different from previous if pool > 1
+          let next = Math.floor(Math.random() * textPool.length);
+          if (next === prev && textPool.length > 1) {
+            next = (prev + 1) % textPool.length;
+          }
+          return next;
+        });
+        setIsFading(false);
+      }, 300);
+    }, intervalSeconds * 1000);
+
+    return () => clearInterval(interval);
+  }, [bannerRotateEnabled, bannerRotateInterval, bannerRotateMode, repeatCountPerBanner, maxTotalCycles, textPool, stoppedAfterMax]);
+
   if (!bannerEnabled) return null;
 
   const currentImage = imagesList[activeImageIndex] || imagesList[0];
+  const currentBannerText = bannerRotateEnabled && textPool.length > 0
+    ? (textPool[currentTextIndex] || bannerText)
+    : bannerText;
 
   // ============================================================
   // TYPE 1: Top Running Ticker (Header Bar Marquee)
@@ -67,9 +153,14 @@ export function TVBanner({
             className="h-4 sm:h-7 md:h-10 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
           />
         ))}
-        {bannerText && (
-          <span className="text-[11px] sm:text-xs md:text-sm font-extrabold text-white tracking-wider shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            {bannerText}
+        {currentBannerText && (
+          <span
+            className={`text-[11px] sm:text-xs md:text-sm font-extrabold text-white tracking-wider shrink-0 transition-all duration-300 ${
+              isFading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+            }`}
+            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+          >
+            {currentBannerText}
           </span>
         )}
       </div>
@@ -124,9 +215,14 @@ export function TVBanner({
             className="h-4 sm:h-6 md:h-8 object-contain rounded shadow-md shrink-0 bg-white/10 p-0.5"
           />
         ))}
-        {bannerText && (
-          <span className="text-[11px] sm:text-xs md:text-sm font-extrabold text-amber-300 tracking-wider shrink-0" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            {bannerText}
+        {currentBannerText && (
+          <span
+            className={`text-[11px] sm:text-xs md:text-sm font-extrabold text-amber-300 tracking-wider shrink-0 transition-all duration-300 ${
+              isFading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
+            }`}
+            style={{ fontFamily: 'Space Grotesk, sans-serif' }}
+          >
+            {currentBannerText}
           </span>
         )}
       </div>
@@ -198,9 +294,13 @@ export function TVBanner({
           </div>
         )}
 
-        {bannerText && (
-          <p className="text-[11px] sm:text-xs font-bold text-zinc-100 line-clamp-3 leading-relaxed">
-            {bannerText}
+        {currentBannerText && (
+          <p
+            className={`text-[11px] sm:text-xs font-bold text-zinc-100 line-clamp-3 leading-relaxed transition-opacity duration-300 ${
+              isFading ? 'opacity-0' : 'opacity-100'
+            }`}
+          >
+            {currentBannerText}
           </p>
         )}
       </div>
@@ -241,9 +341,13 @@ export function TVBanner({
             </div>
           )}
 
-          {bannerText && (
-            <p className="text-[11px] font-bold text-zinc-100 line-clamp-2 leading-tight px-0.5">
-              {bannerText}
+          {currentBannerText && (
+            <p
+              className={`text-[11px] font-bold text-zinc-100 line-clamp-2 leading-tight px-0.5 transition-opacity duration-300 ${
+                isFading ? 'opacity-0' : 'opacity-100'
+              }`}
+            >
+              {currentBannerText}
             </p>
           )}
 

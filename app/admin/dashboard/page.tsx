@@ -46,9 +46,13 @@ import {
   Circle,
   Send,
   X,
+  Shuffle,
+  Repeat,
+  ChevronDown,
 } from 'lucide-react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { BANNER_PRESETS, getRandomBannerPreset } from '@/lib/constants/bannerPresets';
 
 interface AnalyticsData {
   metrics: {
@@ -100,6 +104,12 @@ interface BannerSettings {
   banner_images?: string[];
   banner_speed: number;
   theme?: string;
+  banner_rotate_enabled?: boolean;
+  banner_rotate_interval?: number;
+  banner_rotate_mode?: 'random' | 'sequential';
+  banner_pool?: string[];
+  banner_repeat_count?: number;
+  banner_max_cycles?: number;
 }
 
 interface Song {
@@ -686,19 +696,273 @@ function BannerTab({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
           {/* Left Column: Announcement Text & Scroll Speed */}
           <div className="space-y-4">
-            {/* Banner text */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
-                Announcement Text / Ad Caption
-              </label>
+            {/* Banner text with Dropdown, Random Picker, and Quick Chips */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Megaphone size={13} className="text-indigo-400" />
+                  <span>Announcement Text / Ad Caption</span>
+                </label>
+
+                {/* Dropdown & Random Picker Toolbar */}
+                <div className="flex items-center gap-1.5">
+                  {/* Dropdown with 22 Curated Presets */}
+                  <div className="relative">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          setBanner({ ...banner, banner_text: e.target.value });
+                        }
+                      }}
+                      className="appearance-none bg-slate-900 border border-indigo-500/40 hover:border-indigo-500/70 text-indigo-200 text-xs font-semibold py-1.5 pl-3 pr-7 rounded-xl outline-none cursor-pointer transition-all shadow-sm max-w-[210px] sm:max-w-[240px] truncate"
+                      title="Select a suggested karaoke joke or banner caption"
+                    >
+                      <option value="" disabled>
+                        💡 Pick Suggested Banner (35+ Jokes)...
+                      </option>
+                      <optgroup label="🇵🇭 Tagalog & Inuman Banter (28)">
+                        {BANNER_PRESETS.filter((p) => p.category === 'tagalog' || p.category === 'inuman').map((preset) => (
+                          <option key={preset.id} value={preset.text}>
+                            {preset.label}: "{preset.text.slice(0, 38)}..."
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="🎤 English, Karaoke & Dark Jokes (11)">
+                        {BANNER_PRESETS.filter((p) => p.category === 'english' || p.category === 'dark_joke').map((preset) => (
+                          <option key={preset.id} value={preset.text}>
+                            {preset.label}: "{preset.text.slice(0, 38)}..."
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                  </div>
+
+                  {/* Instant Random Joke Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const picked = getRandomBannerPreset(banner.banner_text);
+                      setBanner({ ...banner, banner_text: picked.text });
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/40 text-indigo-200 hover:text-white text-xs font-bold flex items-center gap-1 transition-all active:scale-95 shadow-sm"
+                    title="Pick a random Tagalog or English joke from the 35+ presets"
+                  >
+                    <Shuffle size={13} className="text-indigo-300" />
+                    <span>Random</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Textarea */}
               <textarea
                 rows={3}
                 value={banner.banner_text}
                 onChange={(e) => setBanner({ ...banner, banner_text: e.target.value })}
-                placeholder="e.g. Welcome to OKEKARAOKE! Special promo: 20% off drinks & bucket beers tonight."
-                className="w-full px-3.5 py-2.5 rounded-xl text-xs text-white outline-none transition-all placeholder-slate-600 resize-none"
+                placeholder="e.g. Ano sino na tatagay ? inuugat na yang baso haha"
+                className="w-full px-3.5 py-2.5 rounded-xl text-xs text-white outline-none transition-all placeholder-slate-600 resize-none font-medium leading-relaxed"
                 style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)' }}
               />
+
+              {/* Quick Clickable Sample Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 custom-scrollbar text-[11px]">
+                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider shrink-0 flex items-center gap-1">
+                  <Sparkles size={11} className="text-amber-400" />
+                  <span>Quick Pick:</span>
+                </span>
+                {[
+                  'Ano sino na tatagay ? inuugat na yang baso haha',
+                  "Wala na, sick leave na sa Monday 'to! Cheers!",
+                  'Bawal sintunado dito! Pero kung ikaw ang taya sa alak at beer, sige birit mo lang!',
+                  'Walang aalis kapag ubos na ang beer, bawal magpanggap na tulog sa sofa!',
+                  'Kung gaano kalakas boses mo kumanta, sana ganun din kalakas loob mong magbayad ng utang haha!',
+                  'Sabi mo kanina "one bottle lang tayo tol", bakit pang-anim na bucket na \'to ngayon?!',
+                  'Kala mo may concert sa Araneta kung makahawak sa mic, pagtingin sa score 68 lang pala haha!',
+                  'Pakibilisan kumanta, may iiyak pa sa "My Way" mamaya haha.',
+                  "Sabi ng atay mo: 'Parang awa mo na, tubig naman kahit isang baso lang!'",
+                  'Paki-check nga kung humihinga pa si pre sa ilalim ng lamesa haha!',
+                ].map((sample, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setBanner({ ...banner, banner_text: sample })}
+                    className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-indigo-600/20 hover:border-indigo-500/40 border border-white/5 text-slate-300 hover:text-indigo-200 transition-all shrink-0 text-left truncate max-w-[210px]"
+                    title={sample}
+                  >
+                    "{sample}"
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* AUTO-CHANGE / ROTATE BANNER RANDOM FUNCTION */}
+            <div
+              className="p-3.5 rounded-xl transition-all"
+              style={{
+                background: banner.banner_rotate_enabled ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                border: banner.banner_rotate_enabled ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid rgba(255, 255, 255, 0.06)',
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div
+                    className={`p-2 rounded-xl mt-0.5 shrink-0 ${
+                      banner.banner_rotate_enabled ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-slate-400'
+                    }`}
+                  >
+                    <Repeat
+                      size={16}
+                      className={banner.banner_rotate_enabled ? 'animate-spin' : ''}
+                      style={{ animationDuration: '6s' }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-white">Auto-Change Banners Randomly</p>
+                      <span
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                          banner.banner_rotate_enabled
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-700/50 text-slate-400'
+                        }`}
+                      >
+                        {banner.banner_rotate_enabled ? 'REALTIME ROTATION ON' : 'OFF'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                      Automatically randomize & cycle 20+ Tagalog & English jokes on all TV screens in real-time.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Toggle Switch */}
+                <div
+                  onClick={() =>
+                    setBanner({
+                      ...banner,
+                      banner_rotate_enabled: !banner.banner_rotate_enabled,
+                    })
+                  }
+                  className="w-11 h-6 rounded-full transition-colors flex items-center px-0.5 shrink-0 cursor-pointer select-none"
+                  style={{ background: banner.banner_rotate_enabled ? '#6366f1' : 'rgba(255,255,255,0.08)' }}
+                >
+                  <div
+                    className="w-5 h-5 rounded-full bg-white shadow transition-transform"
+                    style={{ transform: banner.banner_rotate_enabled ? 'translateX(20px)' : 'translateX(0)' }}
+                  />
+                </div>
+              </div>
+
+              {/* Expanded controls when auto-rotate is enabled */}
+              {banner.banner_rotate_enabled && (
+                <div className="mt-3.5 pt-3 border-t border-indigo-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Rotation Interval */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Clock size={12} className="text-indigo-400" />
+                      <span>Speed / Interval:</span>
+                      <span className="text-indigo-300 font-extrabold">{banner.banner_rotate_interval ?? 15}s</span>
+                    </label>
+                    <select
+                      value={banner.banner_rotate_interval ?? 15}
+                      onChange={(e) => setBanner({ ...banner, banner_rotate_interval: Number(e.target.value) })}
+                      className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                    >
+                      <option value={8}>⚡ Every 8 Seconds (Fast)</option>
+                      <option value={12}>Every 12 Seconds</option>
+                      <option value={15}>Every 15 Seconds (Recommended)</option>
+                      <option value={20}>Every 20 Seconds</option>
+                      <option value={30}>Every 30 Seconds (Relaxed)</option>
+                      <option value={45}>Every 45 Seconds</option>
+                    </select>
+                  </div>
+
+                  {/* Rotation Mode */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Shuffle size={12} className="text-indigo-400" />
+                      <span>Rotation Mode:</span>
+                    </label>
+                    <select
+                      value={banner.banner_rotate_mode ?? 'random'}
+                      onChange={(e) => setBanner({ ...banner, banner_rotate_mode: e.target.value as any })}
+                      className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                    >
+                      <option value="random">🔀 Random Shuffle (Surprise Jokes)</option>
+                      <option value="sequential">🔁 Sequential Order (In Order)</option>
+                    </select>
+                  </div>
+
+                  {/* Repeat Each Banner (How many times each joke is shown before changing) */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Repeat size={12} className="text-indigo-400" />
+                      <span>Repeat Each Banner:</span>
+                      <span className="text-indigo-300 font-extrabold">{banner.banner_repeat_count ?? 1}x</span>
+                    </label>
+                    <select
+                      value={banner.banner_repeat_count ?? 1}
+                      onChange={(e) => setBanner({ ...banner, banner_repeat_count: Number(e.target.value) })}
+                      className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                    >
+                      <option value={1}>1 Time (Switch each interval)</option>
+                      <option value={2}>2 Times (Show twice before changing)</option>
+                      <option value={3}>3 Times (Show 3x before changing)</option>
+                      <option value={5}>5 Times (Stay longer per joke)</option>
+                    </select>
+                  </div>
+
+                  {/* Total Cycles / Loop Mode */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
+                      <Sparkles size={12} className="text-amber-400" />
+                      <span>TV Loop / Total Repetitions:</span>
+                    </label>
+                    <select
+                      value={banner.banner_max_cycles ?? 0}
+                      onChange={(e) => setBanner({ ...banner, banner_max_cycles: Number(e.target.value) })}
+                      className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
+                    >
+                      <option value={0}>🔁 Continuous Loop (Never stops - Recommended)</option>
+                      <option value={1}>1 Full Round (Show all once, then stop)</option>
+                      <option value={2}>2 Full Rounds</option>
+                      <option value={3}>3 Full Rounds</option>
+                      <option value={5}>5 Full Rounds</option>
+                      <option value={10}>10 Full Rounds</option>
+                    </select>
+                  </div>
+
+                  {/* Real-time Pool Info & Shuffle Trigger */}
+                  <div className="sm:col-span-2 flex items-center justify-between gap-2 p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-xs">
+                    <div className="flex items-center gap-2 text-indigo-200 text-[11px]">
+                      <Sparkles size={13} className="text-amber-400 shrink-0" />
+                      <span>
+                        TV shows each joke <strong>{banner.banner_repeat_count ?? 1}x</strong> for{' '}
+                        <strong>{banner.banner_rotate_interval ?? 15}s</strong>,{' '}
+                        {banner.banner_max_cycles ? (
+                          <>stopping after <strong>{banner.banner_max_cycles} round(s)</strong></>
+                        ) : (
+                          <>looping <strong>continuously</strong></>
+                        )}{' '}
+                        across <strong>{BANNER_PRESETS.length} jokes</strong>.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const picked = getRandomBannerPreset(banner.banner_text);
+                        setBanner({ ...banner, banner_text: picked.text });
+                      }}
+                      className="px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] shrink-0 transition-all flex items-center gap-1 active:scale-95"
+                      title="Instant randomize caption now"
+                    >
+                      <Shuffle size={11} />
+                      <span>Shuffle Now</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Scroll speed */}
@@ -2401,6 +2665,12 @@ export default function AdminDashboardPage() {
     banner_text: '',
     banner_image_url: '',
     banner_speed: 20,
+    banner_rotate_enabled: false,
+    banner_rotate_interval: 15,
+    banner_rotate_mode: 'random',
+    banner_pool: [],
+    banner_repeat_count: 1,
+    banner_max_cycles: 0,
   });
   const [songs, setSongs] = useState<Song[]>([]);
   const [totalSongsCount, setTotalSongsCount] = useState(0);
