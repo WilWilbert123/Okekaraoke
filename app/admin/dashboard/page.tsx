@@ -857,25 +857,27 @@ function BannerTab({
               {/* Expanded controls when auto-rotate is enabled */}
               {banner.banner_rotate_enabled && (
                 <div className="mt-3.5 pt-3 border-t border-indigo-500/20 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Rotation Interval */}
+                  {/* Unified Synchronized Speed Display */}
                   <div>
                     <label className="block text-[11px] font-bold text-slate-300 mb-1 flex items-center gap-1">
                       <Clock size={12} className="text-indigo-400" />
-                      <span>Speed / Interval:</span>
-                      <span className="text-indigo-300 font-extrabold">{banner.banner_rotate_interval ?? 15}s</span>
+                      <span>Speed / Duration:</span>
+                      <span className="text-indigo-300 font-extrabold">{banner.banner_speed ?? 35}s</span>
                     </label>
-                    <select
-                      value={banner.banner_rotate_interval ?? 15}
-                      onChange={(e) => setBanner({ ...banner, banner_rotate_interval: Number(e.target.value) })}
-                      className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
-                    >
-                      <option value={8}>⚡ Every 8 Seconds (Fast)</option>
-                      <option value={12}>Every 12 Seconds</option>
-                      <option value={15}>Every 15 Seconds (Recommended)</option>
-                      <option value={20}>Every 20 Seconds</option>
-                      <option value={30}>Every 30 Seconds (Relaxed)</option>
-                      <option value={45}>Every 45 Seconds</option>
-                    </select>
+                    <div className="w-full bg-slate-900/90 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 flex items-center justify-between">
+                      <span className="text-indigo-200 font-semibold text-[11px]">
+                        {(banner.banner_speed ?? 35) <= 20
+                          ? '⚡ Fast (20s)'
+                          : (banner.banner_speed ?? 35) <= 35
+                          ? '🚶 Normal (35s)'
+                          : (banner.banner_speed ?? 35) <= 50
+                          ? '⭐ Slow & Relaxed (50s)'
+                          : (banner.banner_speed ?? 35) <= 70
+                          ? '🐢 Very Slow (65s)'
+                          : '💤 Ultra Slow (80s)'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">Unified Slider</span>
+                    </div>
                   </div>
 
                   {/* Rotation Mode */}
@@ -906,7 +908,7 @@ function BannerTab({
                       onChange={(e) => setBanner({ ...banner, banner_repeat_count: Number(e.target.value) })}
                       className="w-full bg-slate-900 border border-indigo-500/30 text-white text-xs rounded-xl px-3 py-1.5 outline-none cursor-pointer"
                     >
-                      <option value={1}>1 Time (Switch each interval)</option>
+                      <option value={1}>1 Time (Switch each cycle)</option>
                       <option value={2}>2 Times (Show twice before changing)</option>
                       <option value={3}>3 Times (Show 3x before changing)</option>
                       <option value={5}>5 Times (Stay longer per joke)</option>
@@ -939,7 +941,7 @@ function BannerTab({
                       <Sparkles size={13} className="text-amber-400 shrink-0" />
                       <span>
                         TV shows each joke <strong>{banner.banner_repeat_count ?? 1}x</strong> for{' '}
-                        <strong>{banner.banner_rotate_interval ?? 15}s</strong>,{' '}
+                        <strong>{banner.banner_speed ?? 35}s</strong>,{' '}
                         {banner.banner_max_cycles ? (
                           <>stopping after <strong>{banner.banner_max_cycles} round(s)</strong></>
                         ) : (
@@ -965,22 +967,84 @@ function BannerTab({
               )}
             </div>
 
-            {/* Scroll speed */}
-            <div>
-              <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
-                Ticker Scroll Speed: <span className="text-indigo-300">{banner.banner_speed}s</span>
-              </label>
+            {/* Unified One Speed Control: Scroll Speed & Display Duration */}
+            <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock size={13} className="text-indigo-400" />
+                    <span>Banner Speed & Display Duration</span>
+                  </label>
+                  <p className="text-[10px] text-slate-500">
+                    Controls TV ticker glide speed across the screen and ad card display duration.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-black text-indigo-300 font-mono">
+                    {banner.banner_speed ?? 35}s
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold uppercase tracking-wider">
+                    {(banner.banner_speed ?? 35) <= 20
+                      ? 'Fast'
+                      : (banner.banner_speed ?? 35) <= 35
+                      ? 'Normal'
+                      : (banner.banner_speed ?? 35) <= 50
+                      ? 'Slow (Relaxed)'
+                      : (banner.banner_speed ?? 35) <= 70
+                      ? 'Very Slow'
+                      : 'Ultra Slow'}
+                  </span>
+                </div>
+              </div>
+
               <input
                 type="range"
-                min="8"
-                max="40"
-                value={banner.banner_speed}
-                onChange={(e) => setBanner({ ...banner, banner_speed: Number(e.target.value) })}
+                min="15"
+                max="90"
+                step="5"
+                value={banner.banner_speed ?? 35}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setBanner({
+                    ...banner,
+                    banner_speed: val,
+                    banner_rotate_interval: val, // Keep 100% synchronized!
+                  });
+                }}
                 className="w-full accent-indigo-500 cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-slate-600 mt-0.5">
-                <span>Fast (8s)</span>
-                <span>Slow (40s)</span>
+
+              {/* Quick Speed Preset Buttons */}
+              <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                {[
+                  { label: 'Fast (20s)', val: 20 },
+                  { label: 'Normal (35s)', val: 35 },
+                  { label: 'Slow (50s)', val: 50 },
+                  { label: 'Very Slow (65s)', val: 65 },
+                  { label: 'Ultra Slow (80s)', val: 80 },
+                ].map((preset) => {
+                  const isActive = (banner.banner_speed ?? 35) === preset.val;
+                  return (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => {
+                        setBanner({
+                          ...banner,
+                          banner_speed: preset.val,
+                          banner_rotate_interval: preset.val,
+                        });
+                      }}
+                      className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all border ${
+                        isActive
+                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
+                          : 'bg-white/[0.03] text-slate-400 border-white/5 hover:bg-white/[0.08] hover:text-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
