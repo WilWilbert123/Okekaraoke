@@ -64,6 +64,12 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     banner_image_url?: string;
     banner_images?: string[];
     banner_speed?: number;
+    banner_rotate_enabled?: boolean;
+    banner_rotate_interval?: number;
+    banner_rotate_mode?: 'random' | 'sequential';
+    banner_pool?: string[];
+    banner_repeat_count?: number;
+    banner_max_cycles?: number;
   }>({ banner_enabled: false, banner_text: '' });
   const [shoutouts, setShoutouts] = useState<ShoutoutItem[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
@@ -768,6 +774,12 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
           bannerImageUrl={bannerSettings.banner_image_url}
           bannerImages={bannerSettings.banner_images}
           bannerSpeed={bannerSettings.banner_speed}
+          bannerRotateEnabled={bannerSettings.banner_rotate_enabled}
+          bannerRotateInterval={bannerSettings.banner_rotate_interval}
+          bannerRotateMode={bannerSettings.banner_rotate_mode}
+          bannerPool={bannerSettings.banner_pool}
+          bannerRepeatCount={bannerSettings.banner_repeat_count}
+          bannerMaxCycles={bannerSettings.banner_max_cycles}
         />
         <TVHeader
           roomCode={roomCode}
