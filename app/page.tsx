@@ -142,6 +142,15 @@ export default function LandingPage() {
     setCreatingSolo(true);
     setError(null);
 
+    // If offline, start 1-device karaoke immediately with offline solo mode
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const offlineRoom = (lastRoom || 'SOLO').trim().toUpperCase();
+      localStorage.setItem('okekaraoke_last_room', offlineRoom);
+      localStorage.setItem('okekaraoke_solo_tv', 'true');
+      window.location.href = `/remote/${offlineRoom}?solotv=true`;
+      return;
+    }
+
     try {
       const session = getOrCreateGuestSession();
 
@@ -243,6 +252,19 @@ export default function LandingPage() {
 
     setJoining(true);
     setError(null);
+
+    // If offline, bypass network call and enter solo/remote room locally
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      localStorage.setItem('okekaraoke_last_room', code);
+      if (isSolo) {
+        localStorage.setItem('okekaraoke_solo_tv', 'true');
+        window.location.href = `/remote/${code}?solotv=true`;
+      } else {
+        localStorage.setItem('okekaraoke_solo_tv', 'false');
+        window.location.href = `/remote/${code}`;
+      }
+      return;
+    }
 
     try {
       const session = getOrCreateGuestSession();
@@ -474,7 +496,14 @@ export default function LandingPage() {
 
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
-                      onClick={() => router.push(`/tv/${lastTvRoom || lastRoom}`)}
+                      onClick={() => {
+                        const targetRoom = (lastTvRoom || lastRoom || 'OFFLINE').trim().toUpperCase();
+                        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                          window.location.href = `/tv/${targetRoom}`;
+                        } else {
+                          router.push(`/tv/${targetRoom}`);
+                        }
+                      }}
                       className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-teal-500/10 hover:bg-teal-500/20 text-teal-950 border border-teal-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
                       title={`Resume TV Display (${lastTvRoom || lastRoom})`}
                     >
@@ -484,12 +513,16 @@ export default function LandingPage() {
 
                     <button
                       onClick={() => {
-                        const targetRoom = lastRoom || lastTvRoom;
+                        const targetRoom = (lastRoom || lastTvRoom || 'OFFLINE').trim().toUpperCase();
                         setJoinCode(targetRoom || '');
                         if (typeof window !== 'undefined') {
                           localStorage.setItem('okekaraoke_solo_tv', 'false');
                         }
-                        router.push(`/remote/${targetRoom}`);
+                        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                          window.location.href = `/remote/${targetRoom}`;
+                        } else {
+                          router.push(`/remote/${targetRoom}`);
+                        }
                       }}
                       className="flex-1 py-1.5 sm:py-2 px-2 rounded-lg sm:rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
                       title={`Rejoin Phone Remote (${lastRoom || lastTvRoom})`}
@@ -513,9 +546,14 @@ export default function LandingPage() {
 
                   <button
                     onClick={() => {
-                      const targetRoom = lastRoom || lastTvRoom;
+                      const targetRoom = (lastRoom || lastTvRoom || 'SOLO').trim().toUpperCase();
                       localStorage.setItem('okekaraoke_solo_tv', 'true');
-                      router.push(`/remote/${targetRoom}?solotv=true`);
+                      localStorage.setItem('okekaraoke_last_room', targetRoom);
+                      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                        window.location.href = `/remote/${targetRoom}?solotv=true`;
+                      } else {
+                        router.push(`/remote/${targetRoom}?solotv=true`);
+                      }
                     }}
                     className="w-full py-2 sm:py-2.5 px-3 rounded-lg sm:rounded-xl bg-teal-400/20 hover:bg-teal-400/30 text-teal-950 border border-teal-400/60 text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-xs"
                     title={`Rejoin 1-Device Karaoke (${lastRoom || lastTvRoom})`}
