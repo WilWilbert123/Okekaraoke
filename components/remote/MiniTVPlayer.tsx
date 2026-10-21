@@ -13,7 +13,7 @@ import { YouTubePlayer, type YouTubePlayerRef } from '@/components/tv/YouTubePla
 import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
 import { useRealtime } from '@/hooks/useRealtime';
 import type { EnrichedQueueItem, PlayerState } from '@/lib/types';
-import { findDownloadedSong, createSongMediaUrl } from '@/lib/utils/offlineStorage';
+import { findDownloadedSong, createSongMediaUrl, detectBufferMimeType } from '@/lib/utils/offlineStorage';
 
 interface MiniTVPlayerProps {
   roomCode: string;
@@ -87,11 +87,15 @@ export function MiniTVPlayer({
     }).then((downloaded) => {
       if (cancelled) return;
       if (downloaded && downloaded.media_data) {
-        const url = createSongMediaUrl(downloaded);
-        setOfflineMediaUrl(url);
-      } else {
-        setOfflineMediaUrl(null);
+        const mime = detectBufferMimeType(downloaded.media_data) || downloaded.mime_type || '';
+        // Only use offline media if it's a real video stream (>50KB and video MIME)
+        if (mime.startsWith('video/') && downloaded.media_data.byteLength > 50000) {
+          const url = createSongMediaUrl(downloaded);
+          setOfflineMediaUrl(url);
+          return;
+        }
       }
+      setOfflineMediaUrl(null);
     });
 
     return () => {

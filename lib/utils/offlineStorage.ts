@@ -333,45 +333,6 @@ export function createSongMediaUrl(song: DownloadedSong): string | null {
   }
 }
 
-/**
- * Synthesizes a valid, universally playable audio media package (WAV PCM)
- * Supported 100% natively on iOS Safari, Android Chrome, and all web platforms without network
- */
-function createPlayableKaraokeBuffer(durationSeconds = 180): ArrayBuffer {
-  const sampleRate = 11025; // 11kHz for lightweight offline footprint (~3.8MB for 3 mins)
-  const numSamples = sampleRate * durationSeconds;
-  const buffer = new ArrayBuffer(44 + numSamples * 2);
-  const view = new DataView(buffer);
-
-  function writeString(offset: number, str: string) {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-  }
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + numSamples * 2, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // Mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, 'data');
-  view.setUint32(40, numSamples * 2, true);
-
-  // Soft rhythm cadence for realistic karaoke accompaniment feel
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const beat = (i % (sampleRate / 2)) < 200 ? 0.04 : 0;
-    const melody = Math.sin(2 * Math.PI * 220 * t) * 0.02 * Math.exp(-((t % 1) * 3));
-    const sample = Math.round((beat + melody) * 32767);
-    view.setInt16(44 + i * 2, sample, true);
-  }
-
-  return buffer;
-}
 
 /**
  * Extracts a crisp video frame from an ArrayBuffer video stream using offscreen <video> + <canvas>
@@ -511,60 +472,65 @@ export async function downloadAndSaveSong(
       `/api/songs/download?videoId=${encodeURIComponent(videoId)}&id=${encodeURIComponent(song.id)}&title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`
     );
 
-    if (res.ok && res.body) {
-      const detectedMime = res.headers.get('content-type') || '';
-      const contentLength = res.headers.get('content-length');
-      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+    if (!res.ok) {
+      let serverErr = 'Download failed from server.';
+      try {
+        const json = await res.json();
+        if (json?.error) serverErr = json.error;
+      } catch {}
+      throw new Error(serverErr);
+    }
 
-      // Only treat as real media if content-type is video, audio, or octet-stream
-      if (detectedMime.includes('video') || detectedMime.includes('audio') || detectedMime.includes('octet-stream')) {
-        mimeType = detectedMime;
-        const reader = res.body.getReader();
-        const chunks: Uint8Array[] = [];
-        let receivedBytes = 0;
+    if (!res.body) {
+      throw new Error('No video stream received from server.');
+    }
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            chunks.push(value);
-            receivedBytes += value.length;
-            if (totalBytes > 0 && onProgress) {
-              const streamPercent = Math.round((receivedBytes / totalBytes) * 100);
-              const realProgress = Math.min(99, Math.max(simulatedProgress, streamPercent));
-              onProgress(realProgress);
-            } else if (onProgress) {
-              simulatedProgress = Math.min(95, simulatedProgress + 5);
-              onProgress(simulatedProgress);
-            }
-          }
+    const detectedMime = res.headers.get('content-type') || '';
+    const contentLength = res.headers.get('content-length');
+    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+    mimeType = detectedMime.includes('video') ? detectedMime : 'video/mp4';
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let receivedBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        receivedBytes += value.length;
+        if (totalBytes > 0 && onProgress) {
+          const streamPercent = Math.round((receivedBytes / totalBytes) * 100);
+          const realProgress = Math.min(99, Math.max(simulatedProgress, streamPercent));
+          onProgress(realProgress);
+        } else if (onProgress) {
+          simulatedProgress = Math.min(95, simulatedProgress + 5);
+          onProgress(simulatedProgress);
         }
-
-        const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
-        const combined = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-          combined.set(chunk, offset);
-          offset += chunk.length;
-        }
-
-        mediaBuffer = combined.buffer;
-        fileSize = totalLength;
       }
     }
-  } catch (err) {
-    console.warn('Network stream download fallback:', err);
+
+    const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    mediaBuffer = combined.buffer;
+    fileSize = totalLength;
   } finally {
     clearInterval(timer);
   }
 
-  // If network stream was unavailable, serverless, or interrupted, synthesize offline karaoke accompaniment package
-  if (!mediaBuffer || mediaBuffer.byteLength < 1000) {
-    console.warn('[OfflineStorage] Video stream incomplete/unavailable. Synthesizing offline karaoke accompaniment package...');
-    mediaBuffer = createPlayableKaraokeBuffer(song.duration_seconds || 180);
-    mimeType = 'audio/wav';
-    fileSize = mediaBuffer.byteLength;
+  // Require genuine video stream (at least 50KB) - never save fake audio
+  if (!mediaBuffer || mediaBuffer.byteLength < 50000) {
+    throw new Error('Incomplete video stream received. Please check internet connection and retry.');
   }
+
+  mimeType = detectBufferMimeType(mediaBuffer) || mimeType;
 
   onProgress?.(100);
 
