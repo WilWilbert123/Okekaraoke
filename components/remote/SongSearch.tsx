@@ -602,7 +602,7 @@ export const SongSearch = memo(function SongSearch({
         message: err?.message || 'Could not save song to local storage. Check available storage.',
         success: false,
       });
-      setTimeout(() => setDownloadToast(null), 4000);
+      // Keep error toast open (no auto-hide) so the full details can be read/copied
     }
   }, [downloadedIds, refreshDownloads]);
 
@@ -1321,7 +1321,7 @@ export const SongSearch = memo(function SongSearch({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-white leading-tight">{downloadToast.title}</p>
-              <p className="text-[11px] text-zinc-300 truncate mt-0.5">{downloadToast.message}</p>
+              <p className={`text-[11px] text-zinc-300 mt-0.5 ${downloadToast.success ? 'truncate' : 'whitespace-pre-wrap break-words max-h-48 overflow-y-auto select-text'}`}>{downloadToast.message}</p>
             </div>
             <button
               onClick={() => setDownloadToast(null)}
