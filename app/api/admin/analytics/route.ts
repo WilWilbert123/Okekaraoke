@@ -9,9 +9,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { apiSuccess, apiError } from '@/lib/utils/apiHelpers';
 import { extractLocationFromRequest } from '@/lib/utils/location';
 
-// Cache analytics responses for 30 seconds to reduce Vercel Fluid Active CPU usage.
-// Admins can force-refresh via the dashboard Refresh button.
-export const revalidate = 30;
+// This route reads request headers (IP/location), so it must be dynamic.
+// (A static `revalidate` caused DYNAMIC_SERVER_USAGE errors at build time.)
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
