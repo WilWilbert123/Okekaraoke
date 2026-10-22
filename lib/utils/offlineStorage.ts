@@ -474,11 +474,15 @@ export async function downloadAndSaveSong(
 
     if (!res.ok) {
       let serverErr = 'Download failed from server.';
+      let serverDetails = '';
       try {
         const json = await res.json();
         if (json?.error) serverErr = json.error;
+        if (json?.details) serverDetails = json.details;
       } catch {}
-      throw new Error(serverErr);
+      const fullErr = serverDetails ? `${serverErr}\n\nDetails: ${serverDetails}` : serverErr;
+      console.error('[Download] Server error:', fullErr, '| HTTP Status:', res.status);
+      throw new Error(fullErr);
     }
 
     if (!res.body) {

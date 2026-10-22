@@ -101,7 +101,23 @@ export async function GET(request: NextRequest) {
     }
 
 
-    const combinedSongs = [...localSongs, ...youtubeResults];
+    // Deduplicate combined results: prefer local DB songs over YouTube live results.
+    // Uses composite key: youtube_video_id (if present) OR unique id.
+    const seenVideoIds = new Set<string>();
+    const seenIds = new Set<string>();
+    const combinedSongs: typeof localSongs = [];
+
+    for (const song of [...localSongs, ...youtubeResults]) {
+      const vid = (song as any).youtube_video_id;
+      const sid = String(song.id);
+      // Skip if we already have a song with the same YouTube video ID
+      if (vid && seenVideoIds.has(vid)) continue;
+      // Skip if we already have an identical id
+      if (seenIds.has(sid)) continue;
+      if (vid) seenVideoIds.add(vid);
+      seenIds.add(sid);
+      combinedSongs.push(song);
+    }
 
     return apiSuccess({
       songs: combinedSongs,
