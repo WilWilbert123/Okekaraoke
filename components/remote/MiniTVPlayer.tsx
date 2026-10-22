@@ -28,7 +28,7 @@ interface MiniTVPlayerProps {
     seekTo: (sec: number) => void;
     restartSong: () => void;
     togglePlay: () => void;
-    stopSong?: () => void;
+    stopSong?: (targetQueueItemId?: string) => void;
   } | null) => void;
 }
 
@@ -328,9 +328,11 @@ export function MiniTVPlayer({
     song_started: (payload: any) => {
       if (payload?.skipped_queue_item_id) {
         skippedItemsRef.current.add(payload.skipped_queue_item_id);
-      }
-      if (currentSongRef.current?.queue_item_id) {
+      } else if (currentSongRef.current?.queue_item_id && currentSongRef.current.queue_item_id !== payload?.queue_item_id) {
         skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+      }
+      if (payload?.queue_item_id) {
+        skippedItemsRef.current.delete(payload.queue_item_id);
       }
       setIsPlaying(true);
       onRefreshState();
@@ -338,6 +340,10 @@ export function MiniTVPlayer({
     song_skipped: (payload: any) => {
       if (payload?.skipped_queue_item_id) {
         skippedItemsRef.current.add(payload.skipped_queue_item_id);
+      }
+      if (payload?.skipped_queue_item_id && currentSongRef.current?.queue_item_id && payload.skipped_queue_item_id !== currentSongRef.current.queue_item_id) {
+        onRefreshState();
+        return;
       }
       try { playerRef.current?.pauseVideo(); } catch { }
       onRefreshState();
@@ -526,10 +532,11 @@ export function MiniTVPlayer({
   }, [currentSong, isPlaying, offlineMediaUrl, onRefreshState, roomCode, sessionId]);
 
   // Immediate local stop in 0ms without duplicate network requests
-  const stopLocal = useCallback(() => {
-    justStoppedUntilRef.current = Date.now() + 4000;
-    if (currentSongRef.current?.queue_item_id) {
-      skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+  const stopLocal = useCallback((targetQueueItemId?: string) => {
+    justStoppedUntilRef.current = Date.now() + 1500;
+    const targetId = targetQueueItemId || currentSongRef.current?.queue_item_id;
+    if (targetId) {
+      skippedItemsRef.current.add(targetId);
     }
     if (offlineMediaUrl && offlineVideoRef.current) {
       offlineVideoRef.current.pause();
@@ -556,10 +563,8 @@ export function MiniTVPlayer({
 
   const isCurrentSongStopped = Boolean(
     currentSong &&
-    (
-      (currentSong.queue_item_id && skippedItemsRef.current.has(currentSong.queue_item_id)) ||
-      (Date.now() < justStoppedUntilRef.current && !currentSong.queue_item_id.startsWith('temp_'))
-    )
+    currentSong.queue_item_id &&
+    skippedItemsRef.current.has(currentSong.queue_item_id)
   );
   const effectiveCurrentSong = isCurrentSongStopped ? null : currentSong;
   const effectiveOfflineUrl = isCurrentSongStopped ? null : offlineMediaUrl;

@@ -609,7 +609,7 @@ interface MyReservationsProps {
   onReserved?: (song?: Song, resultData?: any, tempIdToReplace?: string) => void;
   onReserveFailed?: (tempId: string) => void;
   isSoloTVMode?: boolean;
-  onSoloStop?: () => void;
+  onSoloStop?: (queueItemId?: string) => void;
   onSoloTogglePlay?: () => void;
   isPaused?: boolean;
   onTogglePause?: (paused: boolean) => void;
@@ -1083,7 +1083,7 @@ export function MyReservations({
 
     // 2. Instant 0ms local stop in 1-Device mode
     if (isSoloTVMode && onSoloStop) {
-      onSoloStop();
+      onSoloStop(queueItemId);
     }
 
     // 3. Delegate to parent's realtime stop handler (broadcasts via WebSocket to TV in 0ms)
