@@ -515,6 +515,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     currentSongRef.current = currentSong;
   }, [currentSong]);
 
+  const queueRef = useRef<EnrichedQueueItem[]>(queue);
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
   // Realtime handlers with instant state updates from payload
   const realtimeHandlers = useRef({
     queue_added: (payload: any) => {
@@ -832,12 +837,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         };
 
         setQueue((prev) => {
-          if (tempIdToReplace && resultData?.queue_item_id) {
+          if (tempIdToReplace) {
             const hasMatch = prev.some((item) => item.queue_item_id === tempIdToReplace);
             if (hasMatch) {
               return prev.map((item) =>
                 item.queue_item_id === tempIdToReplace
-                  ? { ...queuedItem, queue_item_id: resultData.queue_item_id }
+                  ? { ...queuedItem, queue_item_id: resultData?.queue_item_id || queuedItem.queue_item_id }
                   : item
               );
             }
@@ -858,13 +863,21 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     const list: EnrichedQueueItem[] = [];
     const seenIds = new Set<string>();
 
-    if (currentSong && (currentSong.guest_session_id === sessionId || currentSong.queue_item_id.startsWith('temp_'))) {
+    if (
+      currentSong &&
+      (currentSong.guest_session_id === sessionId ||
+        currentSong.queue_item_id.startsWith('temp_') ||
+        currentSong.queue_item_id.startsWith('offline_'))
+    ) {
       list.push({ ...currentSong, status: 'playing' as const });
       seenIds.add(currentSong.queue_item_id);
     }
 
     queue.forEach((item) => {
-      const isMine = item.guest_session_id === sessionId || item.queue_item_id.startsWith('temp_');
+      const isMine =
+        item.guest_session_id === sessionId ||
+        item.queue_item_id.startsWith('temp_') ||
+        item.queue_item_id.startsWith('offline_');
       if (isMine && !seenIds.has(item.queue_item_id)) {
         seenIds.add(item.queue_item_id);
         list.push({ ...item, status: (item.status || 'queued') as any });
@@ -1030,8 +1043,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setIsPaused(false);
 
       // 2. Instant 0ms advance to next song (or null if empty)
-      if (queue.length > 0) {
-        const nextSong = queue[0];
+      const currentQueue = queueRef.current;
+      if (currentQueue.length > 0) {
+        const nextSong = currentQueue[0];
         setCurrentSong({ ...nextSong, status: 'playing' });
         setQueue((prev) => prev.slice(1));
         setTvPlaybackProgress({
@@ -1352,6 +1366,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           onRegisterControls={(ctrls) => {
             soloPlaybackControlsRef.current = ctrls;
           }}
+          onAdvanceQueue={handleStopSong}
         />
       )}
 

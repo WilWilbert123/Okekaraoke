@@ -776,6 +776,39 @@ export const SongSearch = memo(function SongSearch({
   const handleReserve = useCallback(async (song: Song) => {
     if (!sessionId) return;
 
+    const isDownloadedSong = Boolean(
+      downloadedIds.has(song.id) ||
+      (song.code && downloadedIds.has(song.code)) ||
+      (song.youtube_video_id && downloadedIds.has(song.youtube_video_id))
+    );
+
+    // If offline (Airplane Mode / Wi-Fi off), play downloaded song locally without network call
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      if (isDownloadedSong) {
+        const offlineId = `offline_${song.id || Date.now()}`;
+        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
+        onReserved(song, null, offlineId);
+        setTimeout(() => {
+          setReserveStatus((prev) => {
+            if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
+            const next = { ...prev };
+            delete next[song.id];
+            return next;
+          });
+        }, 1500);
+        return;
+      } else {
+        setReserveStatus((prev) => ({
+          ...prev,
+          [song.id]: { status: 'error', message: 'Offline.' },
+        }));
+        setTimeout(() => {
+          setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
+        }, 3000);
+        return;
+      }
+    }
+
     const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     // Instant optimistic visual feedback on the button in 0ms
@@ -793,29 +826,6 @@ export const SongSearch = memo(function SongSearch({
         return next;
       });
     }, 1500);
-
-    const isDownloadedSong = Boolean(
-      downloadedIds.has(song.id) ||
-      (song.code && downloadedIds.has(song.code)) ||
-      (song.youtube_video_id && downloadedIds.has(song.youtube_video_id))
-    );
-
-    // If offline (Airplane Mode / Wi-Fi off), play downloaded song locally without network call
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      if (isDownloadedSong) {
-        onReserved(song, null, `offline_${song.id}`);
-        return;
-      } else {
-        setReserveStatus((prev) => ({
-          ...prev,
-          [song.id]: { status: 'error', message: 'Offline.' },
-        }));
-        setTimeout(() => {
-          setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
-        }, 3000);
-        return;
-      }
-    }
 
     try {
       const response = await fetch('/api/queue/reserve', {
