@@ -280,6 +280,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setConnectionStatus('offline');
       setLoading(false);
       setError(null);
+      // Clear stale server currentSong/queue — keep only offline_ and temp_ items
+      setCurrentSong((prev) => {
+        if (!prev) return null;
+        // Keep offline/temp songs (already playing offline), drop server songs
+        if (prev.queue_item_id.startsWith('offline_') || prev.queue_item_id.startsWith('temp_')) return prev;
+        return null;
+      });
+      setQueue((prev) =>
+        prev.filter(
+          (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+        )
+      );
       return;
     }
 
@@ -395,6 +407,17 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setConnectionStatus('offline');
       setLoading(false);
       setError(null);
+      // Clear stale server currentSong/queue — keep only offline_ and temp_ items
+      setCurrentSong((prev) => {
+        if (!prev) return null;
+        if (prev.queue_item_id.startsWith('offline_') || prev.queue_item_id.startsWith('temp_')) return prev;
+        return null;
+      });
+      setQueue((prev) =>
+        prev.filter(
+          (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+        )
+      );
     }
   }, [roomCode, createOfflineRoomState]);
 
@@ -814,6 +837,39 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         if (tempIdToReplace) {
           setQueue((prev) => prev.filter((q) => q.queue_item_id !== tempIdToReplace));
         }
+      } else if (!resultData && tempIdToReplace?.startsWith('offline_')) {
+        // ── OFFLINE RESERVATION: always play immediately ───────────────────────────────────
+        // When offline, there is no server to decide playback order. The song
+        // must always become currentSong immediately so MiniTVPlayer loads it.
+        // Stale server currentSong is replaced — offline songs play on tap.
+        console.log('[Offline] Forcing immediate play for offline reservation:', tempIdToReplace);
+        const playingItem: EnrichedQueueItem = {
+          queue_item_id: tempIdToReplace,
+          instance_id: instanceId || '',
+          guest_name: guestName || 'You',
+          guest_session_id: sessionId,
+          position: 1,
+          status: 'playing',
+          started_at: new Date().toISOString(),
+          reserved_at: new Date().toISOString(),
+          song: {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            code: song.code || '',
+            youtube_video_id: song.youtube_video_id,
+            thumbnail_url: songThumb,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        };
+        setCurrentSong(playingItem);
+        // Clear any stale server queue — offline queue only keeps offline_ items
+        setQueue((prev) =>
+          prev.filter(
+            (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+          )
+        );
       } else {
         const queuedItem: EnrichedQueueItem = {
           queue_item_id: resultData?.queue_item_id || tempIdToReplace || `temp_${Date.now()}`,
