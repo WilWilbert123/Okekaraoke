@@ -36,6 +36,7 @@ import { getFavoriteSongs, toggleFavoriteSong } from '@/lib/utils/favorites';
 import {
   getDownloadedSongs,
   downloadAndSaveSong,
+  findDownloadedSong,
   DOWNLOADS_CHANGED_EVENT,
 } from '@/lib/utils/offlineStorage';
 import { OfflineSongThumbnail } from '@/components/remote/OfflineSongThumbnail';
@@ -797,10 +798,42 @@ export const SongSearch = memo(function SongSearch({
           });
         }, 1500);
         return;
+      }
+
+      // downloadedIds may be stale — do a direct IndexedDB fallback lookup
+      console.log('[SongSearch] downloadedIds miss for offline reserve, trying direct IndexedDB lookup...');
+      const directMatch = await findDownloadedSong({
+        id: song.id,
+        youtube_video_id: song.youtube_video_id,
+        code: song.code,
+        title: song.title,
+      });
+      console.log('[SongSearch] Direct IndexedDB result:', directMatch
+        ? { id: directMatch.id, title: directMatch.title, byteLength: directMatch.media_data?.byteLength ?? 0 }
+        : 'NOT FOUND'
+      );
+
+      if (directMatch && directMatch.media_data && directMatch.media_data.byteLength > 50000) {
+        const offlineId = `offline_${song.id || Date.now()}`;
+        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
+        onReserved(song, null, offlineId);
+        setTimeout(() => {
+          setReserveStatus((prev) => {
+            if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
+            const next = { ...prev };
+            delete next[song.id];
+            return next;
+          });
+        }, 1500);
+        return;
       } else {
+        const notDownloaded = !directMatch || !directMatch.media_data;
+        const msg = notDownloaded
+          ? 'Not downloaded. Download this song first.'
+          : 'Download incomplete. Please re-download.';
         setReserveStatus((prev) => ({
           ...prev,
-          [song.id]: { status: 'error', message: 'Offline.' },
+          [song.id]: { status: 'error', message: msg },
         }));
         setTimeout(() => {
           setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));

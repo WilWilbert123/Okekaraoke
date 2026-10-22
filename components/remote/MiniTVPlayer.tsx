@@ -96,15 +96,29 @@ export function MiniTVPlayer({
     }
 
     const isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    // offline_ prefix can be on song.id OR queue_item_id (both paths are used)
     const isExplicitOfflineSong =
-      currentSong.song.id?.startsWith('offline_') || currentSong.queue_item_id?.startsWith('offline_');
+      currentSong.song.id?.startsWith('offline_') ||
+      currentSong.queue_item_id?.startsWith('offline_');
 
-    // If online AND this is a standard YouTube video, play via online player so it stays synced
+    // If online AND not an explicitly-tagged offline song AND has a YouTube ID → use online player
+    // But if device is offline, ALWAYS try IndexedDB regardless of prefix
     if (!isOffline && !isExplicitOfflineSong && currentSong.song.youtube_video_id) {
       if (offlineMediaUrl) URL.revokeObjectURL(offlineMediaUrl);
       setOfflineMediaUrl(null);
       return;
     }
+
+    // Look up song in IndexedDB by any available identifier
+    console.log('[MiniTV] Looking up downloaded song for offline play:', {
+      id: currentSong.song.id,
+      youtube_video_id: currentSong.song.youtube_video_id,
+      code: currentSong.song.code,
+      title: currentSong.song.title,
+      isOffline,
+      isExplicitOfflineSong,
+      queue_item_id: currentSong.queue_item_id,
+    });
 
     let cancelled = false;
     findDownloadedSong({
@@ -114,6 +128,10 @@ export function MiniTVPlayer({
       title: currentSong.song.title,
     }).then((downloaded) => {
       if (cancelled) return;
+      console.log('[MiniTV] IndexedDB lookup result:', downloaded
+        ? { id: downloaded.id, title: downloaded.title, byteLength: downloaded.media_data?.byteLength ?? 0, mime: downloaded.mime_type }
+        : 'NOT FOUND'
+      );
       if (downloaded && downloaded.media_data) {
         const mime = detectBufferMimeType(downloaded.media_data) || downloaded.mime_type || '';
         // Only use offline media if it's a real video stream (>50KB and video MIME)
@@ -122,7 +140,13 @@ export function MiniTVPlayer({
           setOfflineMediaUrl(url);
           setIsPlaying(true);
           return;
+        } else {
+          console.warn('[MiniTV] Downloaded song rejected — MIME:', mime, 'Size:', downloaded.media_data.byteLength, 'bytes. Song needs to be re-downloaded.');
         }
+      } else if (downloaded && !downloaded.media_data) {
+        console.warn('[MiniTV] Downloaded song found but has NO media_data — it was likely downloaded during a server error. Please re-download.');
+      } else {
+        console.warn('[MiniTV] Song not found in IndexedDB — not downloaded yet, or downloaded with a different ID.');
       }
       setOfflineMediaUrl(null);
     });
