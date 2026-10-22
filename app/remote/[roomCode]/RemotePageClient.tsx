@@ -122,9 +122,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
     const isSoloRoomCode = roomCode.toUpperCase() === 'SOLO';
     const savedSolo = typeof window !== 'undefined' && localStorage.getItem('okekaraoke_solo_tv') === 'true';
-    setIsSoloTVMode(isSoloParam || isSoloRoomCode || isOffline || savedSolo);
-    if (typeof window !== 'undefined' && (isSoloParam || isSoloRoomCode)) {
+    const isSolo = isSoloParam || isSoloRoomCode || isOffline || savedSolo;
+    setIsSoloTVMode(isSolo);
+    if (typeof window !== 'undefined' && isSolo) {
       localStorage.setItem('okekaraoke_solo_tv', 'true');
+      localStorage.setItem('okekaraoke_last_solo_room', roomCode.toUpperCase());
     }
   }, [searchParams, roomCode]);
 
@@ -133,6 +135,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       const next = !prev;
       if (typeof window !== 'undefined') {
         localStorage.setItem('okekaraoke_solo_tv', String(next));
+        if (next) {
+          localStorage.setItem('okekaraoke_last_solo_room', roomCode.toUpperCase());
+        }
       }
       return next;
     });
@@ -146,8 +151,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       if (upper !== 'SOLO' && upper !== 'OFFLINE') {
         localStorage.setItem('okekaraoke_last_online_room', upper);
       }
+      if (isSoloTVMode) {
+        localStorage.setItem('okekaraoke_last_solo_room', upper);
+      }
     }
-  }, [roomCode]);
+  }, [roomCode, isSoloTVMode]);
 
 
 
@@ -1134,15 +1142,25 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
               <span>Scan TV</span>
             </button>
 
-            {/* 1-Device indicator — ONLY visible when 1-Device mode is active */}
-            {isSoloTVMode && (
-              <div
-                className="px-2 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-extrabold shrink-0 whitespace-nowrap bg-teal-400 text-black border-teal-300 shadow-sm shadow-teal-500/30"
-                title="1-Device Karaoke Mode active: Sing & search directly on this phone"
+            {/* 1-Device indicator / toggle — easily toggles Mini TV on/off */}
+            {isSoloTVMode ? (
+              <button
+                onClick={toggleSoloTVMode}
+                className="px-2 py-1 rounded-lg border flex items-center gap-1 text-[11px] font-extrabold shrink-0 whitespace-nowrap bg-teal-400 text-black border-teal-300 shadow-sm shadow-teal-500/30 active:scale-95 transition-all"
+                title="1-Device Karaoke Mode active: Sing & search directly on this phone. Tap to toggle Mini TV."
               >
                 <Smartphone size={12} className="text-black" />
                 <span>1 DEVICE</span>
-              </div>
+              </button>
+            ) : (
+              <button
+                onClick={toggleSoloTVMode}
+                className="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white flex items-center gap-1 text-[11px] font-bold active:scale-95 transition-all shrink-0 whitespace-nowrap"
+                title="Turn On 1-Device Mode (Mini TV on phone)"
+              >
+                <Tv size={12} className="text-teal-400" />
+                <span>Mini TV</span>
+              </button>
             )}
 
             <button
