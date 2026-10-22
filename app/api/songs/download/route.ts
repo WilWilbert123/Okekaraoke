@@ -42,9 +42,16 @@ function testSpawn(cmd: string, args: string[]): Promise<boolean> {
 }
 
 // Download standalone yt-dlp binary on-demand (for Vercel serverless / Linux cloud environments)
+// NOTE: on Linux we MUST use the self-contained PyInstaller build (yt-dlp_linux).
+// The plain `yt-dlp` asset is a Python zipapp and fails on Vercel (no python3 installed).
+function standaloneBinName(): string {
+  if (process.platform === 'win32') return 'yt-dlp.exe';
+  if (process.platform === 'darwin') return 'yt-dlp_macos';
+  return process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux';
+}
+
 function downloadStandaloneBinary(targetPath: string): Promise<boolean> {
-  const isWin = process.platform === 'win32';
-  const binName = isWin ? 'yt-dlp.exe' : 'yt-dlp';
+  const binName = standaloneBinName();
   const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binName}`;
 
   function fetchUrl(url: string, redirects = 0): Promise<boolean> {
@@ -56,6 +63,7 @@ function downloadStandaloneBinary(targetPath: string): Promise<boolean> {
             return resolve(fetchUrl(res.headers.location, redirects + 1));
           }
           if (res.statusCode !== 200) {
+            console.error('[yt-dlp] Binary download HTTP status:', res.statusCode, url);
             return resolve(false);
           }
 
@@ -75,7 +83,10 @@ function downloadStandaloneBinary(targetPath: string): Promise<boolean> {
             resolve(false);
           });
         })
-        .on('error', () => resolve(false));
+        .on('error', (e) => {
+          console.error('[yt-dlp] Binary download network error:', e.message);
+          resolve(false);
+        });
     });
   }
 
@@ -101,15 +112,18 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
     path.join(localAppData, 'Programs', 'yt-dlp', 'yt-dlp.exe'),
     '/usr/local/bin/yt-dlp',
     '/usr/bin/yt-dlp',
-    path.join(os.tmpdir(), process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
+    path.join(os.tmpdir(), standaloneBinName()),
   ];
 
   for (const candidate of directCandidates) {
     if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
     const ok = await testSpawn(candidate, ['--version']);
     if (ok) {
+      console.log('[yt-dlp] Found working candidate:', candidate);
       cachedDownloader = { cmd: candidate, prefixArgs: [] };
       return cachedDownloader;
+    } else {
+      console.log('[yt-dlp] Candidate not working:', candidate);
     }
   }
 
@@ -124,33 +138,44 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
 
   for (const py of pyCandidates) {
     if (py.includes(path.sep) && !fs.existsSync(py)) continue;
+    console.log('[yt-dlp] Trying python module candidate:', py);
     const ok = await testSpawn(py, ['-m', 'yt_dlp', '--version']);
     if (ok) {
+      console.log('[yt-dlp] Found python module:', py);
       cachedDownloader = { cmd: py, prefixArgs: ['-m', 'yt_dlp'] };
       return cachedDownloader;
+    } else {
+      console.log('[yt-dlp] Python module not working:', py);
     }
   }
 
   // 3. Fallback: On cloud serverless environments (like Vercel / AWS Lambda),
   // acquire the standalone binary into /tmp on-demand
-  const tmpBinaryPath = path.join(os.tmpdir(), process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  const tmpBinaryPath = path.join(os.tmpdir(), standaloneBinName());
+  console.log('[yt-dlp] Attempting standalone binary fallback at:', tmpBinaryPath);
   if (!fs.existsSync(tmpBinaryPath)) {
+    console.log('[yt-dlp] Binary not found in /tmp — downloading from GitHub...');
     const downloaded = await downloadStandaloneBinary(tmpBinaryPath);
+    console.log('[yt-dlp] Binary download result:', downloaded, '| Exists after:', fs.existsSync(tmpBinaryPath));
     if (downloaded && fs.existsSync(tmpBinaryPath)) {
       const ok = await testSpawn(tmpBinaryPath, ['--version']);
+      console.log('[yt-dlp] Standalone binary version test result:', ok);
       if (ok) {
         cachedDownloader = { cmd: tmpBinaryPath, prefixArgs: [] };
         return cachedDownloader;
       }
     }
   } else {
+    console.log('[yt-dlp] Found existing binary in /tmp, testing...');
     const ok = await testSpawn(tmpBinaryPath, ['--version']);
+    console.log('[yt-dlp] Existing /tmp binary version test result:', ok);
     if (ok) {
       cachedDownloader = { cmd: tmpBinaryPath, prefixArgs: [] };
       return cachedDownloader;
     }
   }
 
+  console.error('[yt-dlp] All candidates exhausted — no working yt-dlp found on this host.');
   return null;
 }
 
@@ -232,21 +257,45 @@ function cleanupTempFiles(baseFilePath: string) {
   } catch {}
 }
 
+let lastYtDlpError = '';
+
+// Optional: YouTube blocks most datacenter IPs (Vercel) with "Sign in to confirm you're not a bot".
+// Set env YTDLP_COOKIES to the contents of a Netscape cookies.txt exported from a logged-in browser.
+function getCookiesFile(): string | null {
+  const raw = process.env.YTDLP_COOKIES;
+  if (!raw) return null;
+  const p = path.join(os.tmpdir(), 'okekaraoke_yt_cookies.txt');
+  try {
+    if (!fs.existsSync(p)) fs.writeFileSync(p, raw.replace(/\\n/g, '\n'));
+    return p;
+  } catch {
+    return null;
+  }
+}
+
 async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
   const downloader = await getDownloader();
   if (!downloader) {
     console.warn('[yt-dlp] Neither yt-dlp nor python with yt_dlp module is available on host system.');
+    lastYtDlpError = 'yt-dlp not available';
     return false;
   }
+  const cookiesFile = getCookiesFile();
 
   const ffmpegLocation = await getDynamicFfmpegPath();
   const nodeExecutable = process.execPath || 'node';
+  console.log(`[yt-dlp] Using downloader: ${downloader.cmd} ${downloader.prefixArgs.join(' ')}`);
+  console.log(`[yt-dlp] ffmpeg location: ${ffmpegLocation || 'not found — using best[ext=mp4] fallback'}`);
+  console.log(`[yt-dlp] Target: ${target}`);
+  console.log(`[yt-dlp] Output: ${outputFile}`);
 
   return new Promise((resolve) => {
     try {
       const args = [
         ...downloader.prefixArgs,
         ...(ffmpegLocation ? ['--ffmpeg-location', ffmpegLocation] : []),
+        ...(cookiesFile ? ['--cookies', cookiesFile] : []),
+        '--no-cache-dir',
         '--js-runtimes',
         `node:${nodeExecutable}`,
         '-f',
@@ -284,13 +333,15 @@ async function runYtDlp(target: string, outputFile: string): Promise<boolean> {
             return;
           }
         }
-        console.warn(`[yt-dlp] download failed for "${target}" (code ${code}):`, stderr.slice(-300));
+        console.warn(`[yt-dlp] download failed for "${target}" (code ${code}). Full stderr:`, stderr);
+        lastYtDlpError = (stderr.split('\n').filter((l) => /ERROR|WARNING/i.test(l)).slice(-3).join(' | ') || stderr.slice(-400) || `exit code ${code}`).trim();
         cleanupTempFiles(outputFile);
         resolve(false);
       });
 
       child.on('error', (err) => {
         console.warn('[yt-dlp] process spawn error:', err.message);
+        lastYtDlpError = `spawn error: ${err.message}`;
         cleanupTempFiles(outputFile);
         resolve(false);
       });
@@ -319,8 +370,20 @@ export async function GET(request: NextRequest) {
 
     const downloader = await getDownloader();
     if (!downloader) {
+      const diagInfo = {
+        platform: process.platform,
+        arch: process.arch,
+        tmpdir: os.tmpdir(),
+        cwd: process.cwd(),
+        PATH: process.env.PATH || '(not set)',
+        nodeVersion: process.version,
+      };
+      console.error('[yt-dlp] Download engine unavailable. Environment info:', JSON.stringify(diagInfo));
       return NextResponse.json(
-        { error: 'YouTube downloader engine is initializing or not available on server.' },
+        {
+          error: 'YouTube downloader engine is not available on this server.',
+          details: `Platform: ${process.platform}/${process.arch}, tmpdir: ${os.tmpdir()}. yt-dlp binary could not be found or downloaded. Check server logs for details.`,
+        },
         { status: 503 }
       );
     }
@@ -417,6 +480,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to download authentic YouTube video. Please ensure the song is available and try again.',
+        details: `yt-dlp: ${lastYtDlpError || 'unknown error'} (host ${process.platform}/${process.arch}, cookies: ${process.env.YTDLP_COOKIES ? 'yes' : 'no'})`,
       },
       { status: 502 }
     );
