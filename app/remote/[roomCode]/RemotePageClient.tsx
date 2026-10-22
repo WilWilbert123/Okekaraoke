@@ -1090,11 +1090,13 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
               <span className="text-white">KARAOKE</span>
             </span>
 
-            {/* Room Code Badge */}
-            <div className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-black text-teal-400 flex items-center gap-1 shrink-0 font-mono">
-              <span className="text-zinc-500 font-semibold">ROOM</span>
-              <span className="text-white font-extrabold tracking-wider">{roomCode}</span>
-            </div>
+            {/* Room Code Badge — hidden in offline mode (status pill already shows Offline) */}
+            {roomCode.toUpperCase() !== 'OFFLINE' && (
+              <div className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] font-black text-teal-400 flex items-center gap-1 shrink-0 font-mono">
+                <span className="text-zinc-500 font-semibold">ROOM</span>
+                <span className="text-white font-extrabold tracking-wider">{roomCode}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
@@ -1303,12 +1305,13 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         </div>
       </div>
 
-      {/* Emoji reactions bar + floating particles — ONLY visible on Chat tab */}
+      {/* Emoji reactions floating particles — ONLY visible on Chat tab */}
       {tab === 'chat' && (
         <EmojiReactions
           roomCode={roomCode}
           sessionId={sessionId}
           guestName={guestName}
+          hideBottomBar={true}
         />
       )}
 

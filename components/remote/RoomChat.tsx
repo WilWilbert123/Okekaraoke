@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, MessageCircle, Users, Smile, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { REACTION_ITEMS, ReactionId } from './EmojiReactions';
 
 interface ChatMessage {
   id: string;
@@ -70,6 +71,27 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const [showUserModal, setShowUserModal] = useState(false);
   const [reactionModal, setReactionModal] = useState<{emoji: string, users: {name: string, session_id: string}[]} | null>(null);
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
+  const [showRoomReactions, setShowRoomReactions] = useState(false);
+  const reactionPopoverRef = useRef<HTMLDivElement>(null);
+
+  // Close reaction popover when clicking outside
+  useEffect(() => {
+    if (!showRoomReactions) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (reactionPopoverRef.current && !reactionPopoverRef.current.contains(e.target as Node)) {
+        setShowRoomReactions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showRoomReactions]);
+
+  const handleTriggerReaction = (reactionId: ReactionId) => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('okekaraoke:trigger_reaction', { detail: reactionId }));
+    }
+  };
+
   // Touch long-press handling for iOS & mobile browsers
   const touchTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef<boolean>(false);
@@ -385,20 +407,20 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
-      {/* Room Chat Header Bar */}
+      {/* Room Chat Header Bar — Compact */}
       <div
-        className="px-4 py-2.5 shrink-0 flex items-center gap-2"
+        className="px-3 py-1.5 shrink-0 flex items-center gap-1.5 bg-zinc-950/70"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        <MessageCircle size={14} className="text-teal-400" />
-        <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+        <MessageCircle size={13} className="text-teal-400" />
+        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
           Room Chat
         </span>
 
         {/* User Count Pill -> Tapping opens Online Members Modal */}
         <button
           onClick={() => setShowUserModal(true)}
-          className="ml-auto text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+          className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 transition-all hover:scale-105 active:scale-95"
           style={{
             background: 'rgba(45, 212, 191, 0.12)',
             color: '#2dd4bf',
@@ -406,24 +428,24 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
           }}
           title="Click to view online room members"
         >
-          <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse inline-block" />
-          <Users size={12} className="text-teal-400" />
+          <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse inline-block" />
+          <Users size={11} className="text-teal-400" />
           <span>{userCount} {userCount === 1 ? 'User' : 'Users'}</span>
         </button>
       </div>
 
-      {/* Message list */}
-      <div ref={messagesListRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      {/* Message list — Clean & Compact */}
+      <div ref={messagesListRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-3 py-16 text-center">
+          <div className="flex flex-col items-center justify-center h-full gap-2 py-6 text-center">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center bg-zinc-900 border border-zinc-800"
+              className="w-10 h-10 rounded-2xl flex items-center justify-center bg-zinc-900 border border-zinc-800"
             >
-              <MessageCircle size={28} className="text-teal-400" />
+              <MessageCircle size={20} className="text-teal-400" />
             </div>
-            <p className="text-sm font-bold text-zinc-300">No messages yet</p>
-            <p className="text-xs text-zinc-500 max-w-[200px]">
-              Say hello to everyone in Room {roomCode}! Only people in this room can see your messages.
+            <p className="text-xs font-bold text-zinc-300">No messages yet</p>
+            <p className="text-[10px] text-zinc-500 max-w-[210px] leading-tight">
+              Say hello to Room {roomCode}! Chat is synced with everyone in this room.
             </p>
           </div>
         )}
@@ -439,19 +461,19 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
               <div className={`flex items-center gap-1.5 ${isMe ? 'flex-row-reverse' : ''}`}>
                 {!isMe && (
                   <div
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 bg-zinc-800 border border-zinc-700 text-zinc-300"
+                    className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black shrink-0 bg-zinc-800 border border-zinc-700 text-zinc-300"
                   >
                     {(msg.sender_name || 'G').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <span className="text-[10px] text-zinc-400 font-medium">
+                <span className="text-[9.5px] text-zinc-400 font-medium">
                   {isMe ? 'You' : msg.sender_name}
                 </span>
-                <span className="text-[10px] text-zinc-600">{formatTime(msg.sent_at)}</span>
+                <span className="text-[9px] text-zinc-600">{formatTime(msg.sent_at)}</span>
               </div>
 
               {/* Bubble & Picker Container */}
-              <div className="relative max-w-[80%]">
+              <div className="relative max-w-[85%]">
                 <div
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -466,14 +488,14 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                     // Tap on bubble opens or closes reaction picker on mobile/desktop
                     setActiveReactionPicker((prev) => (prev === msg.id ? null : msg.id));
                   }}
-                  className="px-3 py-2 rounded-2xl text-sm leading-snug break-words select-none transition-transform active:scale-[0.98] cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl text-xs leading-relaxed break-words select-none transition-transform active:scale-[0.98] cursor-pointer"
                   style={
                     isMe
                       ? {
                           background: '#ffffff',
                           color: '#000000',
                           fontWeight: 600,
-                          borderBottomRightRadius: '6px',
+                          borderBottomRightRadius: '4px',
                           WebkitTouchCallout: 'none',
                           WebkitUserSelect: 'none',
                         }
@@ -481,7 +503,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                           background: '#18181b',
                           border: '1px solid #27272a',
                           color: '#f4f4f5',
-                          borderBottomLeftRadius: '6px',
+                          borderBottomLeftRadius: '4px',
                           WebkitTouchCallout: 'none',
                           WebkitUserSelect: 'none',
                         }
@@ -490,10 +512,10 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                   {msg.text}
                 </div>
 
-                {/* Reaction Picker Popover */}
+                {/* Message Reaction Picker Popover */}
                 {activeReactionPicker === msg.id && (
                   <div 
-                    className={`absolute z-20 ${isMe ? 'right-0' : 'left-0'} top-full mt-1 p-1.5 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl flex gap-1 animate-fadeIn`}
+                    className={`absolute z-20 ${isMe ? 'right-0' : 'left-0'} top-full mt-1 p-1 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl flex gap-1 animate-fadeIn`}
                     onClick={(e) => e.stopPropagation()}
                     onContextMenu={(e) => e.preventDefault()}
                   >
@@ -505,7 +527,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                           toggleReaction(msg.id, emoji);
                           setActiveReactionPicker(null);
                         }}
-                        className="w-8 h-8 flex items-center justify-center text-lg hover:bg-zinc-700 rounded-lg active:scale-90 transition-transform"
+                        className="w-7 h-7 flex items-center justify-center text-base hover:bg-zinc-700 rounded-lg active:scale-90 transition-transform"
                       >
                         {emoji}
                       </button>
@@ -533,13 +555,13 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                             e.preventDefault();
                             setReactionModal({ emoji, users: data.users });
                           }}
-                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-bold border transition-all active:scale-90 ${
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold border transition-all active:scale-90 ${
                             hasMyReact 
                               ? 'bg-teal-500/20 border-teal-500/40 text-teal-300' 
                               : 'bg-zinc-800/80 border-zinc-700/80 text-zinc-300'
                           }`}
                         >
-                          <span className="text-[12px]">{emoji}</span>
+                          <span className="text-[11px]">{emoji}</span>
                           <span className="opacity-90">{data.count}</span>
                         </button>
                       );
@@ -547,7 +569,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
                     {hiddenCount > 0 && (
                       <button
                         onClick={() => toggleExpandReactions(msg.id)}
-                        className="px-1.5 py-0.5 rounded-full text-[10px] font-bold border bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+                        className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-zinc-800/50 border-zinc-700/50 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
                       >
                         +{hiddenCount} more
                       </button>
@@ -561,11 +583,46 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar */}
+      {/* Input bar — Ultra-clean with Emoji Popover */}
       <div
-        className="px-4 py-3 shrink-0 bg-zinc-950 border-t border-zinc-800"
+        className="px-2.5 py-2 shrink-0 bg-zinc-950 border-t border-zinc-800 relative"
       >
-        <div className="flex items-center gap-2">
+        {/* Floating Emoji Reaction Popover Bubble */}
+        {showRoomReactions && (
+          <div
+            ref={reactionPopoverRef}
+            className="absolute bottom-full left-2.5 mb-2 p-1 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-2xl shadow-2xl flex items-center gap-1 z-50 animate-in fade-in zoom-in-95 duration-150"
+          >
+            {REACTION_ITEMS.map(({ id, icon: Icon, label, color }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleTriggerReaction(id)}
+                className="p-1.5 rounded-xl hover:bg-zinc-800 active:scale-125 transition-transform"
+                title={`React with ${label}`}
+              >
+                <Icon size={20} style={{ color, filter: `drop-shadow(0 0 4px ${color}80)` }} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          {/* Reaction Popover Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setShowRoomReactions((prev) => !prev)}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-all active:scale-95 ${
+              showRoomReactions
+                ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40 shadow'
+                : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700'
+            }`}
+            title="Send Room Reaction"
+          >
+            <Smile size={16} />
+          </button>
+
+          {/* Text Input */}
           <input
             type="text"
             value={input}
@@ -573,7 +630,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
             onKeyDown={handleKeyDown}
             placeholder={`Message room ${roomCode}...`}
             maxLength={200}
-            className="flex-1 px-4 py-2.5 rounded-2xl text-sm text-white outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800"
+            className="flex-1 px-3 py-1.5 h-8 rounded-xl text-xs text-white outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800 focus:border-teal-500"
             onFocus={(e) => {
               e.target.style.borderColor = 'rgba(45, 212, 191, 0.6)';
             }}
@@ -581,13 +638,15 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
               e.target.style.borderColor = '#27272a';
             }}
           />
+
+          {/* Send Button */}
           <button
             onClick={sendMessage}
             disabled={!input.trim() || sending}
-            className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 bg-teal-400 hover:bg-teal-300 text-black font-bold transition-all active:scale-95 disabled:opacity-30"
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-teal-400 hover:bg-teal-300 text-black font-bold transition-all active:scale-95 disabled:opacity-30"
             aria-label="Send message"
           >
-            <Send size={15} className="text-black" />
+            <Send size={13} className="text-black" />
           </button>
         </div>
       </div>
