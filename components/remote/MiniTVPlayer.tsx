@@ -30,6 +30,7 @@ interface MiniTVPlayerProps {
     togglePlay: () => void;
     stopSong?: (targetQueueItemId?: string) => void;
   } | null) => void;
+  onAdvanceQueue?: (completedQueueItemId?: string) => void;
 }
 
 function formatTime(seconds: number): string {
@@ -49,6 +50,7 @@ export function MiniTVPlayer({
   onOpenTransferModal,
   onProgressChange,
   onRegisterControls,
+  onAdvanceQueue,
 }: MiniTVPlayerProps) {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -118,6 +120,7 @@ export function MiniTVPlayer({
         if (mime.startsWith('video/') && downloaded.media_data.byteLength > 50000) {
           const url = createSongMediaUrl(downloaded);
           setOfflineMediaUrl(url);
+          setIsPlaying(true);
           return;
         }
       }
@@ -365,6 +368,13 @@ export function MiniTVPlayer({
     if (advancing) return;
     setAdvancing(true);
 
+    const isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    if (isOffline) {
+      onAdvanceQueue?.(completedId || currentSongRef.current?.queue_item_id || '');
+      setAdvancing(false);
+      return;
+    }
+
     try {
       // Touch/Upsert device as TV
       await fetch('/api/instances/join', {
@@ -391,13 +401,16 @@ export function MiniTVPlayer({
       const json = await res.json();
       if (json.success) {
         onRefreshState();
+      } else {
+        onAdvanceQueue?.(completedId || currentSongRef.current?.queue_item_id || '');
       }
     } catch (err) {
-      console.error('[MiniTV] Failed to advance queue:', err);
+      console.warn('[MiniTV] Network error advancing queue, falling back to local advance:', err);
+      onAdvanceQueue?.(completedId || currentSongRef.current?.queue_item_id || '');
     } finally {
       setAdvancing(false);
     }
-  }, [roomCode, sessionId, advancing, onRefreshState]);
+  }, [roomCode, sessionId, advancing, onRefreshState, onAdvanceQueue]);
 
   // If active with no current song but queue has items, auto start (guarded against stop transitions)
   useEffect(() => {
@@ -431,14 +444,25 @@ export function MiniTVPlayer({
     if (advancing) return;
     setAdvancing(true);
     justStoppedUntilRef.current = Date.now() + 3000;
-    if (currentSongRef.current?.queue_item_id) {
-      skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
+    const targetId = currentSongRef.current?.queue_item_id;
+    if (targetId) {
+      skippedItemsRef.current.add(targetId);
     }
     // Instant local pause in 0ms — no delay waiting for network
     try {
       playerRef.current?.pauseVideo();
+      if (offlineVideoRef.current) {
+        offlineVideoRef.current.pause();
+      }
       setIsPlaying(false);
     } catch { }
+
+    const isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    if (isOffline) {
+      onAdvanceQueue?.(targetId || '');
+      setAdvancing(false);
+      return;
+    }
 
     try {
       await fetch('/api/queue/skip', {
@@ -447,16 +471,17 @@ export function MiniTVPlayer({
         body: JSON.stringify({
           room_code: roomCode,
           session_id: sessionId,
-          queue_item_id: currentSong?.queue_item_id,
+          queue_item_id: targetId,
         }),
       });
       onRefreshState();
     } catch (err) {
-      console.error('[MiniTV] Skip error:', err);
+      console.warn('[MiniTV] Skip error, falling back to local advance:', err);
+      onAdvanceQueue?.(targetId || '');
     } finally {
       setAdvancing(false);
     }
-  }, [advancing, currentSong?.queue_item_id, onRefreshState, roomCode, sessionId]);
+  }, [advancing, onRefreshState, roomCode, sessionId, onAdvanceQueue]);
 
   // Toggle play/pause (instantaneous 0ms update with background sync)
   const togglePlay = useCallback(async () => {
@@ -703,10 +728,11 @@ export function MiniTVPlayer({
               });
             }}
             onEnded={() => {
-              const video = offlineVideoRef.current;
-              // Only advance queue if video actually reached near completion (not an initial buffer stall)
-              if (video && video.duration > 3 && video.currentTime >= video.duration - 2) {
-                handleEnded(queueItemId || '');
+              handleEnded(queueItemId || currentSongRef.current?.queue_item_id || '');
+            }}
+            onLoadedData={(e) => {
+              if (isPlaying) {
+                e.currentTarget.play().catch(() => {});
               }
             }}
             className="w-full h-full object-contain bg-black"
