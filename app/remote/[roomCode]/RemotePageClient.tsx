@@ -83,7 +83,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     seekTo: (sec: number) => void;
     restartSong: () => void;
     togglePlay: () => void;
-    stopSong?: () => void;
+    stopSong?: (targetQueueItemId?: string) => void;
   } | null>(null);
   const { isInstallable, installApp } = usePWAInstall();
 
@@ -324,6 +324,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         if (state.current_song) {
           const stopExpiry = stoppedSongIdsRef.current.get(state.current_song.queue_item_id);
           if (stopExpiry && stopExpiry > Date.now()) {
+            // Stale server response still contains the stopped song.
+            // If prevCurrent has already advanced to a different active song, keep prevCurrent!
+            if (prevCurrent && prevCurrent.queue_item_id !== state.current_song.queue_item_id) {
+              const prevStopExpiry = stoppedSongIdsRef.current.get(prevCurrent.queue_item_id);
+              if (!prevStopExpiry || prevStopExpiry <= Date.now()) {
+                return prevCurrent;
+              }
+            }
             return null;
           }
           return { ...state.current_song, status: 'playing' as const };
@@ -554,6 +562,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     queue_removed: fetchState,
     queue_updated: fetchState,
     song_started: (payload: any) => {
+      if (payload?.skipped_queue_item_id) {
+        stoppedSongIdsRef.current.set(payload.skipped_queue_item_id, Date.now() + 4000);
+      }
+      if (payload?.queue_item_id) {
+        stoppedSongIdsRef.current.delete(payload.queue_item_id);
+      }
       if (payload?.queue_item_id) {
         const stopExpiry = stoppedSongIdsRef.current.get(payload.queue_item_id);
         if (stopExpiry && stopExpiry > Date.now()) {
@@ -583,6 +597,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       }
       setIsPaused(false);
       setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: true });
+      if (isSoloTVMode) {
+        setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: true });
+      }
       fetchState();
     },
     song_finished: () => {
@@ -590,57 +607,78 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setCurrentSong(null);
       setIsPaused(false);
       setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      if (isSoloTVMode) {
+        setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      }
       fetchState();
     },
     song_skipped: (payload?: any) => {
       if (payload?.skipped_queue_item_id) {
         stoppedSongIdsRef.current.set(payload.skipped_queue_item_id, Date.now() + 4000);
       }
-      if (currentSongRef.current?.queue_item_id) {
-        stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
-      }
       if (payload?.skipped_queue_item_id && currentSongRef.current?.queue_item_id && payload.skipped_queue_item_id !== currentSongRef.current.queue_item_id) {
         fetchState();
         return;
       }
+      if (currentSongRef.current?.queue_item_id) {
+        stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
+      }
       setCurrentSong(null);
       setIsPaused(false);
       setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      if (isSoloTVMode) {
+        setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+      }
       fetchState();
     },
     playback_control: (payload: any) => {
+      if (payload?.queue_item_id) {
+        stoppedSongIdsRef.current.set(payload.queue_item_id, Date.now() + 4000);
+      }
+      if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
+        return;
+      }
       if (payload?.action === 'stop') {
-        if (payload?.queue_item_id) {
-          stoppedSongIdsRef.current.set(payload.queue_item_id, Date.now() + 4000);
-        }
         if (currentSongRef.current?.queue_item_id) {
           stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
         }
         setIsPaused(false);
         setCurrentSong(null);
         setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        }
         fetchState();
-        return;
-      }
-      if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
         return;
       }
       if (payload?.action === 'pause') {
         setIsPaused(true);
         setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: false }));
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress((prev) => ({ ...prev, isPlaying: false }));
+        }
       } else if (payload?.action === 'resume') {
         setIsPaused(false);
         setTvPlaybackProgress((prev) => ({ ...prev, isPlaying: true }));
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress((prev) => ({ ...prev, isPlaying: true }));
+        }
       } else if (payload?.action === 'restart') {
         seekLockUntilRef.current = Date.now() + 2500;
         targetSeekTimeRef.current = 0;
         setIsPaused(false);
         setTvPlaybackProgress((prev) => ({ ...prev, currentTime: 0, isPlaying: true }));
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress((prev) => ({ ...prev, currentTime: 0, isPlaying: true }));
+        }
       } else if (payload?.action === 'seek') {
         const sec = typeof payload?.seconds === 'number' ? payload.seconds : 0;
         seekLockUntilRef.current = Date.now() + 2500;
         targetSeekTimeRef.current = sec;
         setTvPlaybackProgress((prev) => ({ ...prev, currentTime: sec, isPlaying: true }));
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress((prev) => ({ ...prev, currentTime: sec, isPlaying: true }));
+        }
       }
     },
     playback_sync: (payload: any) => {
@@ -978,30 +1016,20 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
   const handleStopSong = useCallback(
     async (queueItemId: string) => {
-      // Tombstone stopped item IDs for 4 seconds so in-flight stale responses cannot resurrect them
+      // Tombstone stopped item ID for 4 seconds so in-flight stale responses cannot resurrect it
       stoppedSongIdsRef.current.set(queueItemId, Date.now() + 4000);
-      if (currentSongRef.current?.queue_item_id) {
+      if (currentSongRef.current?.queue_item_id === queueItemId) {
         stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
       }
 
-      // 1. Instant 0ms local stop in Solo 1-Device mode
+      // 1. Instant 0ms local stop of the stopped track in Solo 1-Device mode
       if (isSoloTVMode) {
-        soloPlaybackControlsRef.current?.stopSong?.();
-        setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        soloPlaybackControlsRef.current?.stopSong?.(queueItemId);
       }
 
-      // 2. Instant 0ms WebSocket broadcast directly to TV screen and room peers
-      broadcastRef.current?.('playback_control', {
-        type: 'playback_control',
-        action: 'stop',
-        queue_item_id: queueItemId,
-        guest_session_id: sessionId,
-        guest_name: guestName,
-        timestamp: new Date().toISOString(),
-      });
-
-      // 3. Instant 0ms optimistic advance to next song (or null if empty)
       setIsPaused(false);
+
+      // 2. Instant 0ms advance to next song (or null if empty)
       if (queue.length > 0) {
         const nextSong = queue[0];
         setCurrentSong({ ...nextSong, status: 'playing' });
@@ -1011,9 +1039,47 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           duration: nextSong.song?.duration_seconds || 0,
           isPlaying: true,
         });
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress({
+            currentTime: 0,
+            duration: nextSong.song?.duration_seconds || 0,
+            isPlaying: true,
+          });
+        }
+
+        // 3. Instant 0ms WebSocket broadcast directly to TV screen and room peers
+        // Broadcast that nextSong is starting (NOT that playback stopped!)
+        broadcastRef.current?.('song_started', {
+          type: 'song_started',
+          instance_id: instanceId,
+          room_code: roomCode,
+          skipped_queue_item_id: queueItemId,
+          queue_item_id: nextSong.queue_item_id,
+          song_id: nextSong.song?.id || nextSong.queue_item_id,
+          song_title: nextSong.song?.title || '',
+          song_artist: nextSong.song?.artist || '',
+          guest_name: nextSong.guest_name || 'Singer',
+          guest_session_id: nextSong.guest_session_id,
+          youtube_video_id: nextSong.song?.youtube_video_id || '',
+          thumbnail_url: nextSong.song?.thumbnail_url || '',
+          timestamp: new Date().toISOString(),
+        });
       } else {
         setCurrentSong(null);
         setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        if (isSoloTVMode) {
+          setSoloPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        }
+
+        // Queue is empty: broadcast stop to TV and peers
+        broadcastRef.current?.('playback_control', {
+          type: 'playback_control',
+          action: 'stop',
+          queue_item_id: queueItemId,
+          guest_session_id: sessionId,
+          guest_name: guestName,
+          timestamp: new Date().toISOString(),
+        });
       }
 
       // 4. Background non-blocking sync with database
@@ -1033,7 +1099,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         console.error('[Stop Song Error]:', err);
       }
     },
-    [isSoloTVMode, queue, roomCode, sessionId, guestName, fetchState]
+    [isSoloTVMode, queue, roomCode, sessionId, guestName, fetchState, instanceId]
   );
 
   const { icon: StatusIcon, color: statusColor, label: statusLabel } = statusConfig[connectionStatus];
@@ -1325,7 +1391,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             onReserved={handleSongReserved}
             onReserveFailed={handleReserveFailed}
             isSoloTVMode={isSoloTVMode}
-            onSoloStop={() => soloPlaybackControlsRef.current?.stopSong?.()}
+            onSoloStop={(targetId?: string) => soloPlaybackControlsRef.current?.stopSong?.(targetId)}
             onSoloTogglePlay={() => soloPlaybackControlsRef.current?.togglePlay?.()}
             isPaused={isPaused}
             onTogglePause={(paused) => setIsPaused(paused)}
