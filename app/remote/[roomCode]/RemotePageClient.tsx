@@ -221,6 +221,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     }
   }, [currentSong?.queue_item_id, currentSong?.guest_session_id, sessionId, roomCode]);
 
+  // ── Recently stopped/skipped songs tombstone (prevents resurrection from in-flight syncs) ──
+  const stoppedSongIdsRef = useRef<Map<string, number>>(new Map());
+
   // ── Name modal + inline editing ──────────────────────────
   const [showNameModal, setShowNameModal] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -319,6 +322,10 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       setCurrentSong((prevCurrent) => {
         if (state.current_song) {
+          const stopExpiry = stoppedSongIdsRef.current.get(state.current_song.queue_item_id);
+          if (stopExpiry && stopExpiry > Date.now()) {
+            return null;
+          }
           return { ...state.current_song, status: 'playing' as const };
         }
         // Keep local offline playing item or optimistic item alive — NEVER clear if offline!
@@ -327,16 +334,25 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           prevCurrent?.queue_item_id.startsWith('offline_') ||
           (prevCurrent && typeof navigator !== 'undefined' && !navigator.onLine)
         ) {
+          const stopExpiry = prevCurrent ? stoppedSongIdsRef.current.get(prevCurrent.queue_item_id) : 0;
+          if (stopExpiry && stopExpiry > Date.now()) {
+            return null;
+          }
           return prevCurrent;
         }
         return null;
       });
 
       setQueue((prevQueue) => {
-        const incomingQueue = (state.queue || []).map((item) => ({
-          ...item,
-          status: (item.status || 'queued') as any,
-        }));
+        const incomingQueue = (state.queue || [])
+          .filter((item) => {
+            const stopExpiry = stoppedSongIdsRef.current.get(item.queue_item_id);
+            return !stopExpiry || stopExpiry <= Date.now();
+          })
+          .map((item) => ({
+            ...item,
+            status: (item.status || 'queued') as any,
+          }));
 
         const incomingIds = new Set(incomingQueue.map((item) => item.queue_item_id));
         const incomingSongIds = new Set(
@@ -349,6 +365,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             (item.queue_item_id.startsWith('temp_') ||
               item.queue_item_id.startsWith('offline_') ||
               (typeof navigator !== 'undefined' && !navigator.onLine)) &&
+            (!stoppedSongIdsRef.current.has(item.queue_item_id) || (stoppedSongIdsRef.current.get(item.queue_item_id) ?? 0) <= Date.now()) &&
             !incomingIds.has(item.queue_item_id) &&
             !incomingSongIds.has(item.song?.id || item.song?.code || item.song?.youtube_video_id)
         );
@@ -537,6 +554,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     queue_removed: fetchState,
     queue_updated: fetchState,
     song_started: (payload: any) => {
+      if (payload?.queue_item_id) {
+        const stopExpiry = stoppedSongIdsRef.current.get(payload.queue_item_id);
+        if (stopExpiry && stopExpiry > Date.now()) {
+          return;
+        }
+      }
       if (payload?.youtube_video_id && payload?.queue_item_id) {
         setCurrentSong({
           queue_item_id: payload.queue_item_id,
@@ -570,6 +593,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       fetchState();
     },
     song_skipped: (payload?: any) => {
+      if (payload?.skipped_queue_item_id) {
+        stoppedSongIdsRef.current.set(payload.skipped_queue_item_id, Date.now() + 4000);
+      }
+      if (currentSongRef.current?.queue_item_id) {
+        stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
+      }
       if (payload?.skipped_queue_item_id && currentSongRef.current?.queue_item_id && payload.skipped_queue_item_id !== currentSongRef.current.queue_item_id) {
         fetchState();
         return;
@@ -580,6 +609,19 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       fetchState();
     },
     playback_control: (payload: any) => {
+      if (payload?.action === 'stop') {
+        if (payload?.queue_item_id) {
+          stoppedSongIdsRef.current.set(payload.queue_item_id, Date.now() + 4000);
+        }
+        if (currentSongRef.current?.queue_item_id) {
+          stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
+        }
+        setIsPaused(false);
+        setCurrentSong(null);
+        setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
+        fetchState();
+        return;
+      }
       if (payload?.queue_item_id && currentSongRef.current?.queue_item_id && payload.queue_item_id !== currentSongRef.current.queue_item_id) {
         return;
       }
@@ -599,11 +641,6 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         seekLockUntilRef.current = Date.now() + 2500;
         targetSeekTimeRef.current = sec;
         setTvPlaybackProgress((prev) => ({ ...prev, currentTime: sec, isPlaying: true }));
-      } else if (payload?.action === 'stop') {
-        setIsPaused(false);
-        setCurrentSong(null);
-        setTvPlaybackProgress({ currentTime: 0, duration: 0, isPlaying: false });
-        fetchState();
       }
     },
     playback_sync: (payload: any) => {
@@ -941,6 +978,12 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
   const handleStopSong = useCallback(
     async (queueItemId: string) => {
+      // Tombstone stopped item IDs for 4 seconds so in-flight stale responses cannot resurrect them
+      stoppedSongIdsRef.current.set(queueItemId, Date.now() + 4000);
+      if (currentSongRef.current?.queue_item_id) {
+        stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
+      }
+
       // 1. Instant 0ms local stop in Solo 1-Device mode
       if (isSoloTVMode) {
         soloPlaybackControlsRef.current?.stopSong?.();
