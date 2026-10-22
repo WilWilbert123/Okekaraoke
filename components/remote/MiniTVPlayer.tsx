@@ -527,7 +527,7 @@ export function MiniTVPlayer({
 
   // Immediate local stop in 0ms without duplicate network requests
   const stopLocal = useCallback(() => {
-    justStoppedUntilRef.current = Date.now() + 3000;
+    justStoppedUntilRef.current = Date.now() + 4000;
     if (currentSongRef.current?.queue_item_id) {
       skippedItemsRef.current.add(currentSongRef.current.queue_item_id);
     }
@@ -554,8 +554,17 @@ export function MiniTVPlayer({
     }
   }, [onRegisterControls, handleSeek, handleRestart, togglePlay, stopLocal]);
 
-  const videoId = currentSong?.song.youtube_video_id ?? null;
-  const queueItemId = currentSong?.queue_item_id ?? null;
+  const isCurrentSongStopped = Boolean(
+    currentSong &&
+    (
+      (currentSong.queue_item_id && skippedItemsRef.current.has(currentSong.queue_item_id)) ||
+      (Date.now() < justStoppedUntilRef.current && !currentSong.queue_item_id.startsWith('temp_'))
+    )
+  );
+  const effectiveCurrentSong = isCurrentSongStopped ? null : currentSong;
+  const effectiveOfflineUrl = isCurrentSongStopped ? null : offlineMediaUrl;
+  const videoId = effectiveCurrentSong?.song.youtube_video_id ?? null;
+  const queueItemId = effectiveCurrentSong?.queue_item_id ?? null;
 
   return (
     <div
@@ -578,10 +587,10 @@ export function MiniTVPlayer({
               <span>1 DEVICE FULLSCREEN</span>
             </div>
 
-            {currentSong && (
+            {effectiveCurrentSong && (
               <div className="truncate text-white font-bold text-xs">
-                <span>{currentSong.song.title}</span>
-                <span className="text-zinc-400 font-normal"> — {currentSong.song.artist}</span>
+                <span>{effectiveCurrentSong.song.title}</span>
+                <span className="text-zinc-400 font-normal"> — {effectiveCurrentSong.song.artist}</span>
               </div>
             )}
           </div>
@@ -611,13 +620,13 @@ export function MiniTVPlayer({
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/40 text-teal-300 font-extrabold text-[10px] tracking-wider uppercase shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping" />
               <Smartphone size={11} className="text-teal-400" />
-              <span>{!isDeviceOnline ? 'OFFLINE' : (offlineMediaUrl ? 'OFFLINE PLAY' : 'SOLO MODE')}</span>
+              <span>{!isDeviceOnline ? 'OFFLINE' : (effectiveOfflineUrl ? 'OFFLINE PLAY' : 'SOLO MODE')}</span>
             </div>
 
-            {currentSong && (
+            {effectiveCurrentSong && (
               <div className="truncate text-zinc-300 font-medium text-[11px]">
-                <span className="text-teal-400 font-bold">{currentSong.song.title}</span>
-                <span className="text-zinc-400"> — {currentSong.song.artist}</span>
+                <span className="text-teal-400 font-bold">{effectiveCurrentSong.song.title}</span>
+                <span className="text-zinc-400"> — {effectiveCurrentSong.song.artist}</span>
               </div>
             )}
           </div>
@@ -662,11 +671,11 @@ export function MiniTVPlayer({
             }`
         }
       >
-        {offlineMediaUrl ? (
+        {effectiveOfflineUrl ? (
           <video
             ref={offlineVideoRef}
-            src={offlineMediaUrl}
-            poster={currentSong?.song?.thumbnail_url || undefined}
+            src={effectiveOfflineUrl}
+            poster={effectiveCurrentSong?.song?.thumbnail_url || undefined}
             playsInline
             autoPlay={isPlaying}
             controls={false}

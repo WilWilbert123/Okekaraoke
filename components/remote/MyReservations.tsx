@@ -657,6 +657,7 @@ export function MyReservations({
   const [favorites, setFavorites] = useState<Song[]>([]);
   const [history, setHistory] = useState<SongHistoryItem[]>([]);
   const [optimisticallyStoppedIds, setOptimisticallyStoppedIds] = useState<Set<string>>(new Set());
+  const stoppedTimestampsRef = useRef<Map<string, number>>(new Map());
   const [restartingId, setRestartingId] = useState<string | null>(null);
   const [controllingId, setControllingId] = useState<string | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
@@ -963,27 +964,17 @@ export function MyReservations({
   // Ensure unique reservations list by queue_item_id to prevent duplicate keys and duplicate entries
   const uniqueReservations = useMemo(() => {
     const seen = new Set<string>();
+    const now = Date.now();
     return reservations.filter(item => {
       const id = item.queue_item_id;
-      if (!id || seen.has(id) || optimisticallyStoppedIds.has(id)) return false;
+      if (!id || seen.has(id)) return false;
+      if (optimisticallyStoppedIds.has(id)) return false;
+      const expiry = stoppedTimestampsRef.current.get(id);
+      if (expiry && expiry > now) return false;
       seen.add(id);
       return true;
     });
   }, [reservations, optimisticallyStoppedIds]);
-
-  // Clean up any stale stopped IDs that are no longer in reservations
-  useEffect(() => {
-    if (optimisticallyStoppedIds.size > 0) {
-      const currentIds = new Set(reservations.map((r) => r.queue_item_id));
-      setOptimisticallyStoppedIds((prev) => {
-        const next = new Set<string>();
-        prev.forEach((id) => {
-          if (currentIds.has(id)) next.add(id);
-        });
-        return next.size === prev.size ? prev : next;
-      });
-    }
-  }, [reservations, optimisticallyStoppedIds.size]);
 
   // Sync favorites on mount & storage update
   useEffect(() => {
@@ -1079,7 +1070,16 @@ export function MyReservations({
     setControlError(null);
 
     // 1. Instant 0ms optimistic removal from active playing reservations (no loading delay!)
+    stoppedTimestampsRef.current.set(queueItemId, Date.now() + 4000);
     setOptimisticallyStoppedIds((prev) => new Set(prev).add(queueItemId));
+    setTimeout(() => {
+      setOptimisticallyStoppedIds((prev) => {
+        if (!prev.has(queueItemId)) return prev;
+        const next = new Set(prev);
+        next.delete(queueItemId);
+        return next;
+      });
+    }, 4000);
 
     // 2. Instant 0ms local stop in 1-Device mode
     if (isSoloTVMode && onSoloStop) {
