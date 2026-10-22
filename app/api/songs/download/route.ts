@@ -11,8 +11,6 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import https from 'https';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const ffmpegStatic = require('ffmpeg-static');
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -116,7 +114,7 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
   ];
 
   for (const candidate of directCandidates) {
-    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue;
+    if (candidate.includes(path.sep) && !fs.existsSync(/*turbopackIgnore: true*/ candidate)) continue;
     const ok = await testSpawn(candidate, ['--version']);
     if (ok) {
       console.log('[yt-dlp] Found working candidate:', candidate);
@@ -137,7 +135,7 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
   ];
 
   for (const py of pyCandidates) {
-    if (py.includes(path.sep) && !fs.existsSync(py)) continue;
+    if (py.includes(path.sep) && !fs.existsSync(/*turbopackIgnore: true*/ py)) continue;
     console.log('[yt-dlp] Trying python module candidate:', py);
     const ok = await testSpawn(py, ['-m', 'yt_dlp', '--version']);
     if (ok) {
@@ -181,17 +179,25 @@ async function getDownloader(): Promise<DownloaderConfig | null> {
 
 // Universal dynamic ffmpeg binary locator
 async function getDynamicFfmpegPath(): Promise<string | null> {
-  if (cachedFfmpegPath && fs.existsSync(cachedFfmpegPath)) {
+  if (cachedFfmpegPath && fs.existsSync(/*turbopackIgnore: true*/ cachedFfmpegPath)) {
     return cachedFfmpegPath;
   }
 
   // 1. ffmpeg-static npm package (universal: Windows, Linux/Vercel, macOS)
-  if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-    cachedFfmpegPath = ffmpegStatic;
-    return cachedFfmpegPath;
+  try {
+    // Dynamic require so Turbopack does not fail build if ffmpeg-static binary is absent
+    const req = eval('require');
+    const staticPkg = req('ffmpeg-static');
+    const staticPath = typeof staticPkg === 'string' ? staticPkg : staticPkg?.default;
+    if (staticPath && fs.existsSync(/*turbopackIgnore: true*/ staticPath)) {
+      cachedFfmpegPath = staticPath;
+      return cachedFfmpegPath;
+    }
+  } catch {
+    // ffmpeg-static not available or install script skipped
   }
 
-  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+  if (process.env.FFMPEG_PATH && fs.existsSync(/*turbopackIgnore: true*/ process.env.FFMPEG_PATH)) {
     cachedFfmpegPath = process.env.FFMPEG_PATH;
     return cachedFfmpegPath;
   }

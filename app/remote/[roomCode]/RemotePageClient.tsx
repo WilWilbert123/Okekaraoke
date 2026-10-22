@@ -1028,16 +1028,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   );
 
   const handleStopSong = useCallback(
-    async (queueItemId: string) => {
-      // Tombstone stopped item ID for 4 seconds so in-flight stale responses cannot resurrect it
-      stoppedSongIdsRef.current.set(queueItemId, Date.now() + 4000);
-      if (currentSongRef.current?.queue_item_id === queueItemId) {
+    async (queueItemId?: string) => {
+      const id = queueItemId || currentSongRef.current?.queue_item_id || '';
+      if (id) {
+        stoppedSongIdsRef.current.set(id, Date.now() + 4000);
+      }
+      if (currentSongRef.current?.queue_item_id) {
         stoppedSongIdsRef.current.set(currentSongRef.current.queue_item_id, Date.now() + 4000);
       }
 
       // 1. Instant 0ms local stop of the stopped track in Solo 1-Device mode
       if (isSoloTVMode) {
-        soloPlaybackControlsRef.current?.stopSong?.(queueItemId);
+        soloPlaybackControlsRef.current?.stopSong?.(id);
       }
 
       setIsPaused(false);
@@ -1067,7 +1069,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           type: 'song_started',
           instance_id: instanceId,
           room_code: roomCode,
-          skipped_queue_item_id: queueItemId,
+          skipped_queue_item_id: id,
           queue_item_id: nextSong.queue_item_id,
           song_id: nextSong.song?.id || nextSong.queue_item_id,
           song_title: nextSong.song?.title || '',
@@ -1089,7 +1091,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         broadcastRef.current?.('playback_control', {
           type: 'playback_control',
           action: 'stop',
-          queue_item_id: queueItemId,
+          queue_item_id: id,
           guest_session_id: sessionId,
           guest_name: guestName,
           timestamp: new Date().toISOString(),
@@ -1097,20 +1099,22 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       }
 
       // 4. Background non-blocking sync with database
-      try {
-        fetch('/api/queue/skip', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            room_code: roomCode,
-            session_id: sessionId,
-            queue_item_id: queueItemId,
-          }),
-        })
-          .then(() => fetchState())
-          .catch((err) => console.error('[Stop Song Error]:', err));
-      } catch (err) {
-        console.error('[Stop Song Error]:', err);
+      if (id) {
+        try {
+          fetch('/api/queue/skip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              room_code: roomCode,
+              session_id: sessionId,
+              queue_item_id: id,
+            }),
+          })
+            .then(() => fetchState())
+            .catch((err) => console.error('[Stop Song Error]:', err));
+        } catch (err) {
+          console.error('[Stop Song Error]:', err);
+        }
       }
     },
     [isSoloTVMode, queue, roomCode, sessionId, guestName, fetchState, instanceId]
