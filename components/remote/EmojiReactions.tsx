@@ -41,6 +41,7 @@ interface EmojiReactionsProps {
   roomCode: string;
   sessionId: string;
   guestName: string;
+  hideBottomBar?: boolean;
 }
 
 // Map legacy emoji string to reactionId if needed
@@ -106,7 +107,7 @@ function FloatingParticle({
 }
 
 // ── Main component ────────────────────────────────────────────
-export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReactionsProps) {
+export function EmojiReactions({ roomCode, sessionId, guestName, hideBottomBar = false }: EmojiReactionsProps) {
   const [particles, setParticles] = useState<FloatingParticleData[]>([]);
 
   const channelRef  = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
@@ -193,6 +194,16 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
     }
   }, [sessionId, guestName, enqueueParticle]);
 
+  // Listen for trigger events dispatched from RoomChat popover
+  useEffect(() => {
+    const handleTrigger = (e: Event) => {
+      const custom = e as CustomEvent<ReactionId>;
+      if (custom.detail) sendReaction(custom.detail);
+    };
+    window.addEventListener('okekaraoke:trigger_reaction', handleTrigger);
+    return () => window.removeEventListener('okekaraoke:trigger_reaction', handleTrigger);
+  }, [sendReaction]);
+
   return (
     <>
       {/* Floating particle layer */}
@@ -214,22 +225,24 @@ export function EmojiReactions({ roomCode, sessionId, guestName }: EmojiReaction
         ))}
       </div>
 
-      {/* Reaction icon bar — Pure Icon Only (No circle background, border, or glow on click) */}
-      <div
-        className="shrink-0 flex items-center justify-around gap-1 px-3 py-2.5 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 z-30"
-      >
-        {REACTION_ITEMS.map(({ id, icon: Icon, label, color }) => (
-          <button
-            key={id}
-            id={`reaction-btn-${id}`}
-            aria-label={`React with ${label}`}
-            onClick={() => sendReaction(id)}
-            className="flex-1 py-1 flex items-center justify-center transition-transform duration-150 active:scale-125 hover:scale-110 outline-none select-none bg-transparent"
-          >
-            <Icon size={24} style={{ color, filter: `drop-shadow(0 0 6px ${color}60)` }} />
-          </button>
-        ))}
-      </div>
+      {/* Reaction icon bar — optional if not hidden */}
+      {!hideBottomBar && (
+        <div
+          className="shrink-0 flex items-center justify-around gap-1 px-3 py-2.5 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 z-30"
+        >
+          {REACTION_ITEMS.map(({ id, icon: Icon, label, color }) => (
+            <button
+              key={id}
+              id={`reaction-btn-${id}`}
+              aria-label={`React with ${label}`}
+              onClick={() => sendReaction(id)}
+              className="flex-1 py-1 flex items-center justify-center transition-transform duration-150 active:scale-125 hover:scale-110 outline-none select-none bg-transparent"
+            >
+              <Icon size={24} style={{ color, filter: `drop-shadow(0 0 6px ${color}60)` }} />
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
 }
