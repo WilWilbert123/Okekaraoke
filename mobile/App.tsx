@@ -76,15 +76,25 @@ export default function App() {
     setTimeout(() => {
       webViewRef.current?.reload();
       setIsRetrying(false);
-    }, 1000);
+    }, 1200);
   };
 
-  const handleOpenOfflineMode = () => {
-    // Navigate directly to offline solo karaoke screen
-    const offlineUrl = `${currentUrl}remote/OFFLINE`;
+  // ── Proceed to Offline Solo Karaoke Mode ───────────────────────
+  const handleProceedToOfflineMode = () => {
+    const base = (currentUrl || PRIMARY_URL).replace(/\/remote\/.*$/, '').replace(/\/$/, '');
+    const offlineUrl = `${base}/remote/OFFLINE`;
+    console.log('[App] Proceeding to offline mode URL:', offlineUrl);
+    setCurrentUrl(offlineUrl);
+    setReloadKey((prev) => prev + 1);
+
+    // Also attempt client-side navigation in case the DOM is still active
     webViewRef.current?.injectJavaScript(`
       try {
-        window.location.href = '/remote/OFFLINE';
+        if (window.location.pathname !== '/remote/OFFLINE') {
+          window.location.href = '/remote/OFFLINE';
+        } else {
+          window.location.reload();
+        }
       } catch (e) {}
       true;
     `);
@@ -95,52 +105,59 @@ export default function App() {
       <View style={styles.errorContainer}>
         <View style={styles.card}>
           <LinearGradient
-            colors={['rgba(45, 212, 191, 0.18)', 'transparent']}
+            colors={['rgba(45, 212, 191, 0.22)', 'rgba(45, 212, 191, 0.03)', 'transparent']}
             style={styles.gradientHeader}
           />
 
           <View style={styles.iconContainer}>
-            <Ionicons name="wifi-outline" size={44} color="#2dd4bf" />
+            <Ionicons name="cloud-offline-outline" size={42} color="#2dd4bf" />
             <View style={styles.alertBadge}>
-              <Ionicons name="alert" size={14} color="#ef4444" />
+              <Ionicons name="musical-notes" size={13} color="#2dd4bf" />
             </View>
           </View>
 
-          <Text style={styles.errorTitle}>No Internet Connection</Text>
+          <Text style={styles.errorTitle}>You're Offline</Text>
           <Text style={styles.errorSubtitle}>
-            OkeKaraoke is currently offline. You can retry connecting, or play your saved songs offline from device storage.
+            No internet connection detected. You can proceed directly to Offline Mode to sing all your downloaded karaoke songs.
           </Text>
 
+          {/* Primary Action: Proceed to Offline Mode */}
           <TouchableOpacity
-            style={styles.retryButton}
+            style={styles.primaryOfflineButton}
+            onPress={handleProceedToOfflineMode}
+            activeOpacity={0.85}
+          >
+            <View style={styles.buttonContent}>
+              <Ionicons name="musical-notes" size={18} color="#000000" style={styles.buttonIcon} />
+              <Text style={styles.primaryOfflineButtonText}>Proceed to Offline Mode</Text>
+              <Ionicons name="arrow-forward" size={16} color="#000000" style={styles.buttonIconRight} />
+            </View>
+          </TouchableOpacity>
+
+          {/* Secondary Action: Retry Connection */}
+          <TouchableOpacity
+            style={styles.secondaryRetryButton}
             onPress={handleRetry}
             activeOpacity={0.8}
             disabled={isRetrying}
           >
             {isRetrying ? (
-              <ActivityIndicator color="#000000" size="small" />
+              <View style={styles.buttonContent}>
+                <ActivityIndicator color="#2dd4bf" size="small" style={styles.buttonIcon} />
+                <Text style={styles.secondaryRetryButtonText}>Reconnecting...</Text>
+              </View>
             ) : (
               <View style={styles.buttonContent}>
-                <Ionicons name="refresh-outline" size={18} color="#000000" style={styles.buttonIcon} />
-                <Text style={styles.retryButtonText}>Retry Connection</Text>
+                <Ionicons name="refresh-outline" size={16} color="#a1a1aa" style={styles.buttonIcon} />
+                <Text style={styles.secondaryRetryButtonText}>Retry Connection</Text>
               </View>
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.offlineButton}
-            onPress={handleOpenOfflineMode}
-            activeOpacity={0.8}
-          >
-            <View style={styles.buttonContent}>
-              <Ionicons name="musical-notes" size={16} color="#2dd4bf" style={styles.buttonIcon} />
-              <Text style={styles.offlineButtonText}>Play Saved Offline Songs</Text>
-            </View>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.footerText}>
-          OKEKARAOKE MOBILE {currentUrl === FALLBACK_URL ? '(BACKUP SERVER)' : ''}
+
+          OKEKARAOKE MOBILE {currentUrl === FALLBACK_URL ? '• BACKUP SERVER' : ''}
         </Text>
       </View>
     );
@@ -251,7 +268,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     backgroundColor: '#18181b',
     borderWidth: 1,
-    borderColor: '#ef4444',
+    borderColor: 'rgba(45, 212, 191, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -269,18 +286,29 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 20,
   },
-  retryButton: {
+  primaryOfflineButton: {
     width: '100%',
-    height: 46,
+    height: 48,
     backgroundColor: '#2dd4bf',
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
+    shadowColor: '#2dd4bf',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  offlineButton: {
+  primaryOfflineButtonText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  secondaryRetryButton: {
     width: '100%',
-    height: 44,
+    height: 42,
     backgroundColor: '#27272a',
     borderWidth: 1,
     borderColor: '#3f3f46',
@@ -288,23 +316,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  secondaryRetryButtonText: {
+    color: '#d4d4d8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonIcon: {
-    marginRight: 6,
+    marginRight: 8,
   },
-  retryButtonText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  offlineButtonText: {
-    color: '#2dd4bf',
-    fontSize: 13,
-    fontWeight: '700',
+  buttonIconRight: {
+    marginLeft: 6,
   },
   footerText: {
     marginTop: 24,

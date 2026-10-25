@@ -39,6 +39,7 @@ import {
   findDownloadedSong,
   DOWNLOADS_CHANGED_EVENT,
 } from '@/lib/utils/offlineStorage';
+import { addSongToHistory } from '@/lib/utils/songHistory';
 import { OfflineSongThumbnail } from '@/components/remote/OfflineSongThumbnail';
 
 interface SongSearchProps {
@@ -49,6 +50,7 @@ interface SongSearchProps {
   onReserveFailed?: (tempId: string) => void;
   reservedSongIds?: Set<string>;
   isSoloTVMode?: boolean;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 interface SongWithReserving extends Song {
@@ -477,6 +479,7 @@ export const SongSearch = memo(function SongSearch({
   onReserveFailed,
   reservedSongIds,
   isSoloTVMode = false,
+  onFocusChange,
 }: SongSearchProps) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -774,21 +777,73 @@ export const SongSearch = memo(function SongSearch({
     setFavTrigger((prev) => prev + 1);
   }, []);
 
-  const handleReserve = useCallback(async (song: Song) => {
-    if (!sessionId) return;
+  const handleReserve = useCallback(
+    async (song: Song) => {
+      // ── Check if device is currently offline ──
+      const isDeviceOffline = Boolean(
+        isOffline ||
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        roomCode.toUpperCase() === 'OFFLINE'
+      );
 
-    const isDownloadedSong = Boolean(
-      downloadedIds.has(song.id) ||
-      (song.code && downloadedIds.has(song.code)) ||
-      (song.youtube_video_id && downloadedIds.has(song.youtube_video_id))
-    );
+      // ── Check if song is downloaded in IndexedDB ──
+      const isDownloadedSong = Boolean(
+        (song.id && downloadedIds.has(song.id)) ||
+        (song.code && song.code !== 'YT' && downloadedIds.has(song.code)) ||
+        (song.youtube_video_id && downloadedIds.has(song.youtube_video_id)) ||
+        downloadedSongsList.some(
+          (d) =>
+            (song.id && d.id === song.id) ||
+            (song.youtube_video_id && d.youtube_video_id && d.youtube_video_id === song.youtube_video_id) ||
+            (song.code && d.code && d.code !== 'YT' && d.code === song.code)
+        )
+      );
 
-    // If offline (Airplane Mode / Wi-Fi off), play downloaded song locally without network call
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      if (isDownloadedSong) {
-        const offlineId = `offline_${song.id || Date.now()}`;
+      // If offline OR if the song is downloaded:
+      // Handle local offline playback identical to MyReservations.tsx
+      if (isDeviceOffline || isDownloadedSong) {
+        let isVerifiedDownloaded = isDownloadedSong;
+
+        // If not cached in downloadedIds/downloadedSongsList yet, do a quick IndexedDB lookup
+        if (!isVerifiedDownloaded) {
+          try {
+            const directMatch = await findDownloadedSong({
+              id: song.id,
+              youtube_video_id: song.youtube_video_id,
+              code: song.code,
+              title: song.title,
+            });
+            if (directMatch) {
+              isVerifiedDownloaded = true;
+            }
+          } catch {
+            // ignore lookup error
+          }
+        }
+
+        // If user is offline and the song is genuinely NOT downloaded:
+        if (isDeviceOffline && !isVerifiedDownloaded) {
+          setReserveStatus((prev) => ({
+            ...prev,
+            [song.id]: { status: 'error', message: 'Not downloaded. Download this song first.' },
+          }));
+          setTimeout(() => {
+            setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
+          }, 3000);
+          return;
+        }
+
+        // Exact same behavior as handleReserveDownloaded in MyReservations.tsx
+        addSongToHistory(song, roomCode);
+        const offlineId = song.id?.startsWith('offline_') ? song.id : `offline_${song.id || Date.now()}`;
+
+        // Instant optimistic visual feedback on the button in 0ms
         setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
+
+        // Immediately play the downloaded song on this device Mini TV
         onReserved(song, null, offlineId);
+
+        // Auto-clear success feedback after 1.5s so button reverts
         setTimeout(() => {
           setReserveStatus((prev) => {
             if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
@@ -797,110 +852,123 @@ export const SongSearch = memo(function SongSearch({
             return next;
           });
         }, 1500);
+
+        // If offline (Airplane Mode / Wi-Fi off), play locally immediately without network delays
+        if (isDeviceOffline) {
+          console.log('[Offline Mode] Playing downloaded song locally on Mini TV from Search tab.');
+          return;
+        }
+
+        // If online, optionally sync with room in background without ever killing local playback
+        if (sessionId) {
+          try {
+            const response = await fetch('/api/queue/reserve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                room_code: roomCode,
+                song_code: song.code,
+                youtube_video_id: song.youtube_video_id,
+                title: song.title,
+                artist: song.artist,
+                thumbnail_url: song.thumbnail_url,
+                guest_session_id: sessionId,
+                guest_name: guestName || null,
+              }),
+            });
+            const json = await response.json();
+            if (json.success) {
+              onReserved(song, json.data, offlineId);
+            }
+          } catch {
+            // Keep playing offline locally on this phone
+          }
+        }
         return;
       }
 
-      // downloadedIds may be stale — do a direct IndexedDB fallback lookup
-      console.log('[SongSearch] downloadedIds miss for offline reserve, trying direct IndexedDB lookup...');
-      const directMatch = await findDownloadedSong({
-        id: song.id,
-        youtube_video_id: song.youtube_video_id,
-        code: song.code,
-        title: song.title,
-      });
-      console.log('[SongSearch] Direct IndexedDB result:', directMatch
-        ? { id: directMatch.id, title: directMatch.title, byteLength: directMatch.media_data?.byteLength ?? 0 }
-        : 'NOT FOUND'
-      );
-
-      if (directMatch && directMatch.media_data && directMatch.media_data.byteLength > 50000) {
-        const offlineId = `offline_${song.id || Date.now()}`;
-        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
-        onReserved(song, null, offlineId);
-        setTimeout(() => {
-          setReserveStatus((prev) => {
-            if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
-            const next = { ...prev };
-            delete next[song.id];
-            return next;
-          });
-        }, 1500);
-        return;
-      } else {
-        const notDownloaded = !directMatch || !directMatch.media_data;
-        const msg = notDownloaded
-          ? 'Not downloaded. Download this song first.'
-          : 'Download incomplete. Please re-download.';
+      // ── Online regular song reservation (requires sessionId) ──
+      if (!sessionId) {
         setReserveStatus((prev) => ({
           ...prev,
-          [song.id]: { status: 'error', message: msg },
+          [song.id]: { status: 'error', message: 'Connecting to room...' },
         }));
         setTimeout(() => {
           setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
-        }, 3000);
+        }, 2000);
         return;
       }
-    }
 
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Instant optimistic visual feedback on the button in 0ms
-    setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
+      // Instant optimistic visual feedback on the button in 0ms
+      setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'success' } }));
 
-    // Instant 0ms optimistic addition to queue & Mine tab
-    onReserved(song, null, tempId);
+      // Instant 0ms optimistic addition to queue & Mine tab
+      onReserved(song, null, tempId);
 
-    // Auto-clear success feedback after 1.5s so button automatically reverts to RESERVE
-    setTimeout(() => {
-      setReserveStatus((prev) => {
-        if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
-        const next = { ...prev };
-        delete next[song.id];
-        return next;
-      });
-    }, 1500);
+      // Auto-clear success feedback after 1.5s so button automatically reverts to RESERVE
+      setTimeout(() => {
+        setReserveStatus((prev) => {
+          if (!prev[song.id] || prev[song.id].status !== 'success') return prev;
+          const next = { ...prev };
+          delete next[song.id];
+          return next;
+        });
+      }, 1500);
 
-    try {
-      const response = await fetch('/api/queue/reserve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          room_code: roomCode,
-          song_code: song.code,
-          youtube_video_id: song.youtube_video_id,
-          title: song.title,
-          artist: song.artist,
-          thumbnail_url: song.thumbnail_url,
-          guest_session_id: sessionId,
-          guest_name: guestName || null,
-        }),
-      });
+      try {
+        const response = await fetch('/api/queue/reserve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            room_code: roomCode,
+            song_code: song.code,
+            youtube_video_id: song.youtube_video_id,
+            title: song.title,
+            artist: song.artist,
+            thumbnail_url: song.thumbnail_url,
+            guest_session_id: sessionId,
+            guest_name: guestName || null,
+          }),
+        });
 
-      const json = await response.json();
+        const json = await response.json();
 
-      if (json.success) {
-        onReserved(song, json.data, tempId);
-      } else {
+        if (json.success) {
+          onReserved(song, json.data, tempId);
+        } else {
+          onReserveFailed?.(tempId);
+          setReserveStatus((prev) => ({
+            ...prev,
+            [song.id]: { status: 'error', message: json.error?.message ?? 'Failed to reserve' },
+          }));
+          setTimeout(() => {
+            setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
+          }, 3000);
+        }
+      } catch {
         onReserveFailed?.(tempId);
         setReserveStatus((prev) => ({
           ...prev,
-          [song.id]: { status: 'error', message: json.error?.message ?? 'Failed to reserve' },
+          [song.id]: { status: 'error', message: 'Network error. Try again.' },
         }));
         setTimeout(() => {
           setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
         }, 3000);
       }
-    } catch {
-      onReserveFailed?.(tempId);
-      setReserveStatus((prev) => ({
-        ...prev,
-        [song.id]: { status: 'error', message: 'Network error. Try again.' },
-      }));
-      setTimeout(() => {
-        setReserveStatus((prev) => ({ ...prev, [song.id]: { status: 'idle' } }));
-      }, 3000);
-    }
-  }, [sessionId, roomCode, guestName, onReserved, onReserveFailed]);
+    },
+    [
+      isOffline,
+      roomCode,
+      downloadedIds,
+      downloadedSongsList,
+      sessionId,
+      guestName,
+      onReserved,
+      onReserveFailed,
+    ]
+  );
 
   const [isListening, setIsListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
@@ -1033,11 +1101,14 @@ export const SongSearch = memo(function SongSearch({
   }, [searched, searchResults, catalog, activeFilter, isOffline, downloadedSongsList, query]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex-1 min-h-0 flex flex-col h-full overflow-hidden">
       {/* Search Input & Category Filter Bar */}
-      <div className={`sticky top-0 transition-all ${isSoloTVMode ? 'p-2 space-y-2' : 'p-4 space-y-3'}`} style={{ background: 'var(--color-bg)', zIndex: 10 }}>
+      <div
+        className="sticky top-0 shrink-0 z-20 px-3 pt-2.5 pb-2 space-y-2 border-b border-zinc-800/80 shadow-md"
+        style={{ background: 'var(--color-bg)' }}
+      >
         <div className="relative flex items-center">
-          <Search size={isSoloTVMode ? 15 : 18} className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${isListening ? 'text-teal-400' : 'text-slate-500'}`} />
+          <Search size={18} className={`absolute left-3.5 top-1/2 -translate-y-1/2 transition-colors ${isListening ? 'text-teal-400' : 'text-teal-400'}`} />
           <input
             id="song-search-input"
             type="search"
@@ -1054,21 +1125,21 @@ export const SongSearch = memo(function SongSearch({
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
-            className={`w-full pl-9 pr-16 rounded-xl text-white placeholder-slate-500 transition-all ${isSoloTVMode ? 'py-2 text-xs' : 'py-3 text-sm'
-              } ${isListening ? 'ring-2 ring-teal-400/80 bg-teal-950/20' : ''}`}
+            className={`w-full h-11 pl-10 pr-20 rounded-xl text-sm font-medium text-white placeholder-zinc-400 transition-all bg-zinc-900/95 border focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 ${
+              isListening ? 'ring-2 ring-teal-400/80 bg-teal-950/30 border-teal-400' : 'border-teal-500/30 hover:border-teal-400/50'
+            }`}
             style={{
-              background: isListening ? 'rgba(20, 184, 166, 0.08)' : 'var(--color-surface-2)',
-              border: isListening ? '1px solid rgba(45, 212, 191, 0.5)' : '1px solid var(--color-border)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
             }}
-            onFocus={(e) => {
-              if (!isListening) e.target.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+            onFocus={() => {
+              onFocusChange?.(true);
             }}
-            onBlur={(e) => {
-              if (!isListening) e.target.style.borderColor = 'var(--color-border)';
+            onBlur={() => {
+              onFocusChange?.(false);
             }}
           />
 
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
             {query && (
               <button
                 onClick={() => {
@@ -1076,10 +1147,10 @@ export const SongSearch = memo(function SongSearch({
                   setSearchResults([]);
                   setSearched(false);
                 }}
-                className="p-1 text-slate-500 hover:text-slate-300 transition-colors"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                 aria-label="Clear search"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             )}
 
@@ -1094,7 +1165,7 @@ export const SongSearch = memo(function SongSearch({
               aria-label={isListening ? 'Stop voice search' : 'Voice search with microphone'}
               title={isListening ? 'Stop voice search' : 'Voice search with microphone'}
             >
-              <Mic size={14} className={isListening ? 'animate-bounce text-white' : ''} />
+              <Mic size={15} className={isListening ? 'animate-bounce text-white' : ''} />
             </button>
           </div>
         </div>
@@ -1116,13 +1187,12 @@ export const SongSearch = memo(function SongSearch({
               <button
                 key={filter.id}
                 onClick={() => setActiveFilter(filter.id)}
-                className={`rounded-full font-bold shrink-0 flex items-center gap-1 transition-all ${isSoloTVMode ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'
-                  } ${isActive
-                    ? 'bg-white text-black font-extrabold shadow'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 border border-zinc-700/60'
-                  }`}
+                className={`rounded-full font-bold shrink-0 flex items-center gap-1 px-3 py-1.5 text-xs transition-all ${isActive
+                  ? 'bg-teal-400 text-black font-extrabold shadow-sm shadow-teal-500/20'
+                  : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 border border-zinc-800'
+                }`}
               >
-                <IconComponent size={isSoloTVMode ? 11 : 13} className={isActive ? 'text-black' : 'text-zinc-400'} />
+                <IconComponent size={12} className={isActive ? 'text-black' : 'text-zinc-400'} />
                 <span>{filter.label}</span>
               </button>
             );
@@ -1132,7 +1202,7 @@ export const SongSearch = memo(function SongSearch({
 
       {/* Catalog & Results Section */}
       <div
-        className={`flex-1 overflow-y-auto pb-4 ${isSoloTVMode ? 'px-2.5' : 'px-4'}`}
+        className="flex-1 min-h-0 overflow-y-auto pb-4 px-3"
         style={{
           WebkitOverflowScrolling: 'touch',
           overscrollBehaviorY: 'contain',

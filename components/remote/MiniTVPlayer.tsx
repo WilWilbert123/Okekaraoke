@@ -31,6 +31,8 @@ interface MiniTVPlayerProps {
     stopSong?: (targetQueueItemId?: string) => void;
   } | null) => void;
   onAdvanceQueue?: (completedQueueItemId?: string) => void;
+  activeTab?: string;
+  isInputFocused?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -51,9 +53,25 @@ export function MiniTVPlayer({
   onProgressChange,
   onRegisterControls,
   onAdvanceQueue,
+  activeTab,
+  isInputFocused = false,
 }: MiniTVPlayerProps) {
   const router = useRouter();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Mini TV is open and visible by default so users can sing and search simultaneously
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+
+  // Auto-expand when a new song starts playing
+  const prevSongIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = currentSong?.queue_item_id || currentSong?.song?.id || null;
+    if (currentId && currentId !== prevSongIdRef.current) {
+      setIsCollapsed(false);
+    }
+    prevSongIdRef.current = currentId;
+  }, [currentSong]);
+
+  // Mini TV stays visible even when searching so users can sing and search simultaneously
+  const effectiveCollapsed = isCollapsed;
   const [isFullVideo, setIsFullVideo] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [advancing, setAdvancing] = useState(false);
@@ -677,22 +695,26 @@ export function MiniTVPlayer({
               <span>{!isDeviceOnline ? 'OFFLINE' : (effectiveOfflineUrl ? 'OFFLINE PLAY' : 'SOLO MODE')}</span>
             </div>
 
-            {effectiveCurrentSong && (
+            {effectiveCurrentSong ? (
               <div className="truncate text-zinc-300 font-medium text-[11px]">
                 <span className="text-teal-400 font-bold">{effectiveCurrentSong.song.title}</span>
                 <span className="text-zinc-400"> — {effectiveCurrentSong.song.artist}</span>
               </div>
+            ) : (
+              <span className="text-zinc-400 text-[11px] font-medium truncate">
+                Ready to Sing · Search songs below
+              </span>
             )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
             {/* Collapse/Expand button */}
             <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
+              onClick={() => setIsCollapsed(!effectiveCollapsed)}
               className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all active:scale-95"
-              title={isCollapsed ? 'Expand Video' : 'Collapse Video'}
+              title={effectiveCollapsed ? 'Expand Video' : 'Collapse Video'}
             >
-              {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              {effectiveCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
 
             {/* In-App Fullscreen Video toggle button */}
@@ -721,7 +743,7 @@ export function MiniTVPlayer({
         className={
           isFullVideo
             ? 'flex-1 relative w-full h-full bg-black overflow-hidden'
-            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${isCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
+            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
             }`
         }
       >
@@ -917,7 +939,7 @@ export function MiniTVPlayer({
             </div>
           </div>
         </div>
-      ) : (
+      ) : (effectiveCurrentSong || !effectiveCollapsed) ? (
         <div className="px-3 py-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/60">
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -967,7 +989,7 @@ export function MiniTVPlayer({
             )}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
