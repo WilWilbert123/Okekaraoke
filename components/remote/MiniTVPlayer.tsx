@@ -31,6 +31,8 @@ interface MiniTVPlayerProps {
     stopSong?: (targetQueueItemId?: string) => void;
   } | null) => void;
   onAdvanceQueue?: (completedQueueItemId?: string) => void;
+  activeTab?: string;
+  isInputFocused?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -51,9 +53,25 @@ export function MiniTVPlayer({
   onProgressChange,
   onRegisterControls,
   onAdvanceQueue,
+  activeTab,
+  isInputFocused = false,
 }: MiniTVPlayerProps) {
   const router = useRouter();
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  // Mini TV is open and visible by default so users can sing and search simultaneously
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+
+  // Auto-expand when a new song starts playing
+  const prevSongIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const currentId = currentSong?.queue_item_id || currentSong?.song?.id || null;
+    if (currentId && currentId !== prevSongIdRef.current) {
+      setIsCollapsed(false);
+    }
+    prevSongIdRef.current = currentId;
+  }, [currentSong]);
+
+  // Mini TV stays visible even when searching so users can sing and search simultaneously
+  const effectiveCollapsed = isCollapsed;
   const [isFullVideo, setIsFullVideo] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [advancing, setAdvancing] = useState(false);
@@ -96,15 +114,29 @@ export function MiniTVPlayer({
     }
 
     const isOffline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+    // offline_ prefix can be on song.id OR queue_item_id (both paths are used)
     const isExplicitOfflineSong =
-      currentSong.song.id?.startsWith('offline_') || currentSong.queue_item_id?.startsWith('offline_');
+      currentSong.song.id?.startsWith('offline_') ||
+      currentSong.queue_item_id?.startsWith('offline_');
 
-    // If online AND this is a standard YouTube video, play via online player so it stays synced
+    // If online AND not an explicitly-tagged offline song AND has a YouTube ID → use online player
+    // But if device is offline, ALWAYS try IndexedDB regardless of prefix
     if (!isOffline && !isExplicitOfflineSong && currentSong.song.youtube_video_id) {
       if (offlineMediaUrl) URL.revokeObjectURL(offlineMediaUrl);
       setOfflineMediaUrl(null);
       return;
     }
+
+    // Look up song in IndexedDB by any available identifier
+    console.log('[MiniTV] Looking up downloaded song for offline play:', {
+      id: currentSong.song.id,
+      youtube_video_id: currentSong.song.youtube_video_id,
+      code: currentSong.song.code,
+      title: currentSong.song.title,
+      isOffline,
+      isExplicitOfflineSong,
+      queue_item_id: currentSong.queue_item_id,
+    });
 
     let cancelled = false;
     findDownloadedSong({
@@ -114,6 +146,10 @@ export function MiniTVPlayer({
       title: currentSong.song.title,
     }).then((downloaded) => {
       if (cancelled) return;
+      console.log('[MiniTV] IndexedDB lookup result:', downloaded
+        ? { id: downloaded.id, title: downloaded.title, byteLength: downloaded.media_data?.byteLength ?? 0, mime: downloaded.mime_type }
+        : 'NOT FOUND'
+      );
       if (downloaded && downloaded.media_data) {
         const mime = detectBufferMimeType(downloaded.media_data) || downloaded.mime_type || '';
         // Only use offline media if it's a real video stream (>50KB and video MIME)
@@ -122,7 +158,13 @@ export function MiniTVPlayer({
           setOfflineMediaUrl(url);
           setIsPlaying(true);
           return;
+        } else {
+          console.warn('[MiniTV] Downloaded song rejected — MIME:', mime, 'Size:', downloaded.media_data.byteLength, 'bytes. Song needs to be re-downloaded.');
         }
+      } else if (downloaded && !downloaded.media_data) {
+        console.warn('[MiniTV] Downloaded song found but has NO media_data — it was likely downloaded during a server error. Please re-download.');
+      } else {
+        console.warn('[MiniTV] Song not found in IndexedDB — not downloaded yet, or downloaded with a different ID.');
       }
       setOfflineMediaUrl(null);
     });
@@ -653,22 +695,26 @@ export function MiniTVPlayer({
               <span>{!isDeviceOnline ? 'OFFLINE' : (effectiveOfflineUrl ? 'OFFLINE PLAY' : 'SOLO MODE')}</span>
             </div>
 
-            {effectiveCurrentSong && (
+            {effectiveCurrentSong ? (
               <div className="truncate text-zinc-300 font-medium text-[11px]">
                 <span className="text-teal-400 font-bold">{effectiveCurrentSong.song.title}</span>
                 <span className="text-zinc-400"> — {effectiveCurrentSong.song.artist}</span>
               </div>
+            ) : (
+              <span className="text-zinc-400 text-[11px] font-medium truncate">
+                Ready to Sing · Search songs below
+              </span>
             )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
             {/* Collapse/Expand button */}
             <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
+              onClick={() => setIsCollapsed(!effectiveCollapsed)}
               className="p-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all active:scale-95"
-              title={isCollapsed ? 'Expand Video' : 'Collapse Video'}
+              title={effectiveCollapsed ? 'Expand Video' : 'Collapse Video'}
             >
-              {isCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+              {effectiveCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             </button>
 
             {/* In-App Fullscreen Video toggle button */}
@@ -697,7 +743,7 @@ export function MiniTVPlayer({
         className={
           isFullVideo
             ? 'flex-1 relative w-full h-full bg-black overflow-hidden'
-            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${isCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
+            : `relative w-full bg-black overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'h-0 opacity-0 pointer-events-none' : 'aspect-video opacity-100'
             }`
         }
       >
@@ -893,7 +939,7 @@ export function MiniTVPlayer({
             </div>
           </div>
         </div>
-      ) : (
+      ) : (effectiveCurrentSong || !effectiveCollapsed) ? (
         <div className="px-3 py-1.5 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/60">
           <div className="flex items-center gap-2 min-w-0">
             <button
@@ -943,7 +989,7 @@ export function MiniTVPlayer({
             )}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

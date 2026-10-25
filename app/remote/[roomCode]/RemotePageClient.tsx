@@ -86,8 +86,38 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
     stopSong?: (targetQueueItemId?: string) => void;
   } | null>(null);
   const { isInstallable, installApp } = usePWAInstall();
-
   const activePlaybackProgress = isSoloTVMode ? soloPlaybackProgress : tvPlaybackProgress;
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Track input focus so components are aware of keyboard state
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        setIsInputFocused(true);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (!active || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) {
+          setIsInputFocused(false);
+        }
+      }, 150);
+    };
+
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
 
   // Reset paused and progress state when a new song starts playing
   const prevSongIdRef = useRef<string | null>(null);
@@ -280,6 +310,18 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setConnectionStatus('offline');
       setLoading(false);
       setError(null);
+      // Clear stale server currentSong/queue — keep only offline_ and temp_ items
+      setCurrentSong((prev) => {
+        if (!prev) return null;
+        // Keep offline/temp songs (already playing offline), drop server songs
+        if (prev.queue_item_id.startsWith('offline_') || prev.queue_item_id.startsWith('temp_')) return prev;
+        return null;
+      });
+      setQueue((prev) =>
+        prev.filter(
+          (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+        )
+      );
       return;
     }
 
@@ -395,6 +437,17 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       setConnectionStatus('offline');
       setLoading(false);
       setError(null);
+      // Clear stale server currentSong/queue — keep only offline_ and temp_ items
+      setCurrentSong((prev) => {
+        if (!prev) return null;
+        if (prev.queue_item_id.startsWith('offline_') || prev.queue_item_id.startsWith('temp_')) return prev;
+        return null;
+      });
+      setQueue((prev) =>
+        prev.filter(
+          (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+        )
+      );
     }
   }, [roomCode, createOfflineRoomState]);
 
@@ -781,6 +834,14 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       // Automatically record to song history in localStorage
       addSongToHistory(song, roomCode);
 
+      // If an offline song is reserved, ensure Solo TV Mode is enabled so MiniTVPlayer is active
+      if (tempIdToReplace?.startsWith('offline_')) {
+        setIsSoloTVMode(true);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('okekaraoke_solo_tv', 'true');
+        }
+      }
+
       const songThumb =
         song.thumbnail_url ||
         (song.youtube_video_id ? `https://img.youtube.com/vi/${song.youtube_video_id}/mqdefault.jpg` : '');
@@ -814,6 +875,39 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         if (tempIdToReplace) {
           setQueue((prev) => prev.filter((q) => q.queue_item_id !== tempIdToReplace));
         }
+      } else if (!resultData && tempIdToReplace?.startsWith('offline_')) {
+        // ── OFFLINE RESERVATION: always play immediately ───────────────────────────────────
+        // When offline, there is no server to decide playback order. The song
+        // must always become currentSong immediately so MiniTVPlayer loads it.
+        // Stale server currentSong is replaced — offline songs play on tap.
+        console.log('[Offline] Forcing immediate play for offline reservation:', tempIdToReplace);
+        const playingItem: EnrichedQueueItem = {
+          queue_item_id: tempIdToReplace,
+          instance_id: instanceId || '',
+          guest_name: guestName || 'You',
+          guest_session_id: sessionId,
+          position: 1,
+          status: 'playing',
+          started_at: new Date().toISOString(),
+          reserved_at: new Date().toISOString(),
+          song: {
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            code: song.code || '',
+            youtube_video_id: song.youtube_video_id,
+            thumbnail_url: songThumb,
+            duration_seconds: 240,
+            category: 'YouTube',
+          },
+        };
+        setCurrentSong(playingItem);
+        // Clear any stale server queue — offline queue only keeps offline_ items
+        setQueue((prev) =>
+          prev.filter(
+            (q) => q.queue_item_id.startsWith('offline_') || q.queue_item_id.startsWith('temp_')
+          )
+        );
       } else {
         const queuedItem: EnrichedQueueItem = {
           queue_item_id: resultData?.queue_item_id || tempIdToReplace || `temp_${Date.now()}`,
@@ -1172,6 +1266,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       className="flex flex-col relative"
       style={{
         height: '100dvh',
+        maxHeight: '100dvh',
         background: 'var(--color-bg)',
         maxWidth: '480px',
         margin: '0 auto',
@@ -1357,6 +1452,8 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
           sessionId={sessionId}
           currentSong={currentSong}
           queue={queue}
+          activeTab={tab}
+          isInputFocused={isInputFocused || isSearchFocused}
           onClose={() => {
             setIsSoloTVMode(false);
             if (typeof window !== 'undefined') {
@@ -1375,7 +1472,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       )}
 
       {/* Tab content — relative so emoji overlay stacks correctly */}
-      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden pb-[56px]">
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'search' ? 'flex' : 'none' }}>
           <SongSearch
             roomCode={roomCode}
@@ -1385,6 +1482,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             onReserveFailed={handleReserveFailed}
             reservedSongIds={reservedSongIds}
             isSoloTVMode={isSoloTVMode}
+            onFocusChange={setIsSearchFocused}
           />
         </div>
         <div className="flex-1 min-h-0 h-full flex-col overflow-hidden" style={{ display: tab === 'chat' ? 'flex' : 'none' }}>
@@ -1470,7 +1568,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Bottom Navigation Bar */}
       <nav
-        className="shrink-0 flex items-center justify-around py-1.5 px-2 z-30 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80"
+        className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto flex items-center justify-around py-1.5 px-2 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 shadow-lg"
         role="tablist"
       >
         {[
