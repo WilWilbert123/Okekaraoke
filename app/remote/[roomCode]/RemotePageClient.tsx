@@ -19,6 +19,7 @@ import { SettingsModal } from '@/components/remote/SettingsModal';
 import { ShoutoutModal } from '@/components/remote/ShoutoutModal';
 import { TransferRoomModal } from '@/components/remote/TransferRoomModal';
 import { MiniTVPlayer } from '@/components/remote/MiniTVPlayer';
+import { AppUpdateBanner } from '@/components/AppUpdateBanner';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
@@ -88,6 +89,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
   const { isInstallable, installApp } = usePWAInstall();
   const activePlaybackProgress = isSoloTVMode ? soloPlaybackProgress : tvPlaybackProgress;
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isChatFocused, setIsChatFocused] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
 
   // Track input focus so components are aware of keyboard state
@@ -1273,6 +1275,9 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
         overflow: 'hidden',
       }}
     >
+      {/* App Update Notification Banner (Mobile App only) */}
+      <AppUpdateBanner />
+
       {/* Name entry modal */}
       <NameModal open={showNameModal} onConfirm={handleNameConfirm} />
 
@@ -1472,7 +1477,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       )}
 
       {/* Tab content — relative so emoji overlay stacks correctly */}
-      <div className="flex-1 min-h-0 flex flex-col relative overflow-hidden pb-[56px]">
+      <div
+        className={`flex-1 min-h-0 flex flex-col relative overflow-hidden transition-[padding] duration-200 ${
+          tab === 'chat' && isChatFocused ? 'pb-0' : 'pb-[56px]'
+        }`}
+      >
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'search' ? 'flex' : 'none' }}>
           <SongSearch
             roomCode={roomCode}
@@ -1494,6 +1503,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
             onNewMessage={() => {
               setUnreadChatCount(prev => prev + 1);
             }}
+            onFocusChange={setIsChatFocused}
           />
         </div>
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'my-songs' ? 'flex' : 'none' }}>
@@ -1568,7 +1578,11 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
 
       {/* Bottom Navigation Bar */}
       <nav
-        className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto flex items-center justify-around py-1.5 px-2 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 shadow-lg"
+        className={`fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto flex items-center justify-around py-1.5 px-2 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 shadow-lg transition-all duration-200 ${
+          tab === 'chat' && isChatFocused
+            ? 'translate-y-full opacity-0 pointer-events-none'
+            : 'translate-y-0 opacity-100'
+        }`}
         role="tablist"
       >
         {[

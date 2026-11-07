@@ -33,6 +33,7 @@ interface RoomChatProps {
   guestName: string;
   onlineUsers?: OnlineUser[];
   onNewMessage?: () => void;
+  onFocusChange?: (focused: boolean) => void;
 }
 
 function formatTime(ms: number): string {
@@ -64,15 +65,90 @@ function deduplicateMessages(msgs: ChatMessage[]): ChatMessage[] {
   return result.sort((a, b) => a.sent_at - b.sent_at);
 }
 
-export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOnlineUsers, onNewMessage }: RoomChatProps) {
+export function RoomChat({
+  roomCode,
+  sessionId,
+  guestName,
+  onlineUsers: parentOnlineUsers,
+  onNewMessage,
+  onFocusChange,
+}: RoomChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const initialHeightRef = useRef<number>(0);
   const [showUserModal, setShowUserModal] = useState(false);
   const [reactionModal, setReactionModal] = useState<{emoji: string, users: {name: string, session_id: string}[]} | null>(null);
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
   const [showRoomReactions, setShowRoomReactions] = useState(false);
   const reactionPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && initialHeightRef.current === 0) {
+      initialHeightRef.current = window.innerHeight;
+    }
+  }, []);
+
+  // Dynamic visual viewport detection to lift chat input smoothly above mobile soft keyboards
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const updateKeyboard = () => {
+      // Check if Android OS / WebView already natively resized window.innerHeight (adjustResize)
+      const isWindowNativelyResized =
+        initialHeightRef.current > 0 && window.innerHeight < initialHeightRef.current - 120;
+
+      if (isWindowNativelyResized) {
+        // Native window was already resized by Android to fit above keyboard
+        setKeyboardHeight(0);
+        return;
+      }
+
+      const vv = window.visualViewport;
+      if (!vv) {
+        setKeyboardHeight(isInputFocused ? 290 : 0);
+        return;
+      }
+
+      // Calculate keyboard occlusion height from the bottom of the layout viewport
+      const offset = Math.max(0, Math.round(window.innerHeight - (vv.height + (vv.offsetTop || 0))));
+      if (offset > 60) {
+        setKeyboardHeight(offset);
+      } else if (isInputFocused) {
+        // Fallback for mobile devices if visualViewport doesn't report height but input is focused
+        const isMobile =
+          /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+          (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        if (isMobile) {
+          setKeyboardHeight(offset > 0 ? offset : 290);
+        } else {
+          setKeyboardHeight(0);
+        }
+      } else {
+        setKeyboardHeight(0);
+      }
+    };
+
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', updateKeyboard);
+      vv.addEventListener('scroll', updateKeyboard);
+    }
+    window.addEventListener('resize', updateKeyboard);
+
+    updateKeyboard();
+
+    return () => {
+      if (vv) {
+        vv.removeEventListener('resize', updateKeyboard);
+        vv.removeEventListener('scroll', updateKeyboard);
+      }
+      window.removeEventListener('resize', updateKeyboard);
+    };
+  }, [isInputFocused]);
 
   // Close reaction popover when clicking outside
   useEffect(() => {
@@ -406,7 +482,13 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
   const userCount = Math.max(1, activeOnlineUsers.length);
 
   return (
-    <div className="flex flex-col h-full" style={{ background: 'var(--color-bg)' }}>
+    <div
+      className="flex flex-col h-full transition-[padding] duration-200 ease-out"
+      style={{
+        background: 'var(--color-bg)',
+        paddingBottom: keyboardHeight > 0 ? `${keyboardHeight}px` : 0,
+      }}
+    >
       {/* Room Chat Header Bar — Compact */}
       <div
         className="px-3 py-1.5 shrink-0 flex items-center gap-1.5 bg-zinc-950/70"
@@ -435,7 +517,20 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
       </div>
 
       {/* Message list — Clean & Compact */}
-      <div ref={messagesListRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+      <div
+        ref={messagesListRef}
+        className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5"
+        onTouchStart={() => {
+          if (isInputFocused) {
+            inputRef.current?.blur();
+          }
+        }}
+        onClick={() => {
+          if (isInputFocused) {
+            inputRef.current?.blur();
+          }
+        }}
+      >
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-2 py-6 text-center">
             <div
@@ -624,6 +719,7 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
 
           {/* Text Input */}
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -632,9 +728,17 @@ export function RoomChat({ roomCode, sessionId, guestName, onlineUsers: parentOn
             maxLength={200}
             className="flex-1 px-3 py-1.5 h-8 rounded-xl text-xs text-white outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800 focus:border-teal-500"
             onFocus={(e) => {
+              setIsInputFocused(true);
+              onFocusChange?.(true);
               e.target.style.borderColor = 'rgba(45, 212, 191, 0.6)';
+              setTimeout(() => {
+                bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, 180);
             }}
             onBlur={(e) => {
+              setIsInputFocused(false);
+              onFocusChange?.(false);
               e.target.style.borderColor = '#27272a';
             }}
           />

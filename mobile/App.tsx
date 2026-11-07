@@ -19,6 +19,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 const PRIMARY_URL = 'https://www.okekaraoke.sbs/';
 const FALLBACK_URL = 'https://okekaraoke.vercel.app/';
 
+const APP_VERSION = '1.1.4';
+
 export default function App() {
   const webViewRef = useRef<WebView>(null);
   const [currentUrl, setCurrentUrl] = useState<string>(PRIMARY_URL);
@@ -190,7 +192,7 @@ export default function App() {
         cacheEnabled={true}
         thirdPartyCookiesEnabled={true}
         sharedCookiesEnabled={true}
-        userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 OkeKaraokeMobile/1.0"
+        userAgent={`Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36 OkeKaraokeMobile/${APP_VERSION}`}
         javaScriptCanOpenWindowsAutomatically={true}
         setSupportMultipleWindows={false}
         androidLayerType="hardware"
