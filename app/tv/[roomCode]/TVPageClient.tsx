@@ -18,6 +18,8 @@ import { SongCountdownModal } from '@/components/tv/SongCountdownModal';
 import { TVShoutoutOverlay, type ShoutoutItem } from '@/components/tv/TVShoutoutOverlay';
 import { TVFloatingReactions } from '@/components/tv/TVFloatingReactions';
 import { AudioVisualizer } from '@/components/tv/AudioVisualizer';
+import { TVRemoteHUD, TV_REMOTE_BUTTONS } from '@/components/tv/TVRemoteHUD';
+import { FullQueueModal } from '@/components/tv/FullQueueModal';
 import { useRealtime } from '@/hooks/useRealtime';
 import { useHeartbeat } from '@/hooks/useHeartbeat';
 import { getOrCreateGuestSession, setGuestSessionForInstance } from '@/lib/auth/guestSession';
@@ -680,16 +682,144 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
     setIsFullscreen(true);
   }, []);
 
-  // TV Remote & Keyboard Controls (Press 'F' for Fullscreen, D-Pad support)
+  // ── TV Remote Control & D-Pad State ─────────────────────────────
+  const [remoteHudVisible, setRemoteHudVisible] = useState(false);
+  const [remoteFocusedIndex, setRemoteFocusedIndex] = useState(1); // default on Play/Pause
+  const [remoteToast, setRemoteToast] = useState<{ title: string; subtitle?: string } | null>(null);
+  const [showRemoteQueueModal, setShowRemoteQueueModal] = useState(false);
+  const remoteHudTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const remoteToastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showRemoteFeedback = useCallback((title: string, subtitle?: string) => {
+    setRemoteToast({ title, subtitle });
+    if (remoteToastTimeoutRef.current) clearTimeout(remoteToastTimeoutRef.current);
+    remoteToastTimeoutRef.current = setTimeout(() => {
+      setRemoteToast(null);
+    }, 1800);
+  }, []);
+
+  const triggerHudActivity = useCallback(() => {
+    setRemoteHudVisible(true);
+    if (remoteHudTimeoutRef.current) clearTimeout(remoteHudTimeoutRef.current);
+    remoteHudTimeoutRef.current = setTimeout(() => {
+      setRemoteHudVisible(false);
+    }, 4500); // 4.5s auto-fade
+  }, []);
+
+  // Remote action executor
+  const executeRemoteAction = useCallback((index: number) => {
+    triggerHudActivity();
+    const action = TV_REMOTE_BUTTONS[index]?.id;
+
+    if (action === 'play_pause') {
+      if (playerState.status === 'playing') {
+        playerRef.current?.pauseVideo();
+        showRemoteFeedback('Playback Paused', 'Press OK or Space to resume');
+      } else {
+        playerRef.current?.playVideo();
+        showRemoteFeedback('Now Playing', currentSong?.song.title);
+      }
+    } else if (action === 'restart') {
+      playerRef.current?.seekTo(0);
+      showRemoteFeedback('Restarted Song', 'Playing from 0:00');
+    } else if (action === 'skip') {
+      if (advancingRef.current) return;
+      advancingRef.current = true;
+      const sessionId = sessionRef.current || getOrCreateGuestSession().session_id;
+      fetch('/api/queue/skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room_code: roomCode, session_id: sessionId }),
+      })
+        .then(() => {
+          showRemoteFeedback('Skipped Song', queue[0]?.song.title ? `Up next: ${queue[0].song.title}` : undefined);
+          fetchStateRef.current();
+        })
+        .catch((err) => console.error('Skip failed:', err))
+        .finally(() => {
+          advancingRef.current = false;
+        });
+    } else if (action === 'queue') {
+      setShowRemoteQueueModal((prev) => !prev);
+    } else if (action === 'fullscreen') {
+      handleFullscreen();
+      showRemoteFeedback(isFullscreen ? 'Exited Fullscreen' : 'Fullscreen Mode');
+    }
+  }, [playerState.status, currentSong, queue, roomCode, isFullscreen, handleFullscreen, showRemoteFeedback, triggerHudActivity]);
+
+  // TV Remote & Keyboard Controls (D-Pad, Arrow keys, Media keys, Fullscreen)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'f' || e.key === 'F') {
+      const key = e.key;
+
+      // Direct media keys (work anywhere regardless of HUD state)
+      if (key === 'MediaPlayPause' || (key === ' ' && !remoteHudVisible)) {
+        e.preventDefault();
+        executeRemoteAction(1); // play/pause
+        return;
+      }
+      if (key === 'MediaTrackNext') {
+        e.preventDefault();
+        executeRemoteAction(2); // skip
+        return;
+      }
+      if (key === 'MediaTrackPrevious') {
+        e.preventDefault();
+        executeRemoteAction(0); // restart
+        return;
+      }
+      if (key === 'f' || key === 'F') {
+        e.preventDefault();
         handleFullscreen();
+        return;
+      }
+      if (key === 'q' || key === 'Q') {
+        e.preventDefault();
+        setShowRemoteQueueModal((prev) => !prev);
+        return;
+      }
+      if (key === 'Escape' || key === 'Backspace' || key === 'BrowserBack' || key === 'GoBack') {
+        if (showRemoteQueueModal) {
+          setShowRemoteQueueModal(false);
+          return;
+        }
+        if (remoteHudVisible) {
+          setRemoteHudVisible(false);
+          return;
+        }
+      }
+
+      // D-Pad Arrow Navigation
+      if (key === 'ArrowRight') {
+        e.preventDefault();
+        triggerHudActivity();
+        setRemoteFocusedIndex((prev) => (prev + 1) % TV_REMOTE_BUTTONS.length);
+        return;
+      }
+
+      if (key === 'ArrowLeft') {
+        e.preventDefault();
+        triggerHudActivity();
+        setRemoteFocusedIndex((prev) => (prev - 1 + TV_REMOTE_BUTTONS.length) % TV_REMOTE_BUTTONS.length);
+        return;
+      }
+
+      if (key === 'ArrowUp' || key === 'ArrowDown') {
+        e.preventDefault();
+        triggerHudActivity();
+        return;
+      }
+
+      if (key === 'Enter' || key === 'Select') {
+        e.preventDefault();
+        executeRemoteAction(remoteFocusedIndex);
+        return;
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleFullscreen]);
+  }, [remoteHudVisible, remoteFocusedIndex, showRemoteQueueModal, executeRemoteAction, handleFullscreen, triggerHudActivity]);
 
   useEffect(() => {
     const handleChange = () => {
@@ -913,6 +1043,46 @@ export function TVPageClient({ roomCode }: TVPageClientProps) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* LAYER 5: TV Remote Feedback Toast (OSD) */}
+      {remoteToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-zinc-950/95 backdrop-blur-xl border border-teal-500/40 shadow-[0_10px_35px_rgba(0,0,0,0.8)] text-white">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-ping" />
+            <div className="flex flex-col">
+              <span className="text-sm font-black tracking-tight">{remoteToast.title}</span>
+              {remoteToast.subtitle && (
+                <span className="text-[11px] text-zinc-400 truncate max-w-xs">{remoteToast.subtitle}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LAYER 5.5: TV Remote D-Pad Navigation HUD */}
+      <TVRemoteHUD
+        visible={remoteHudVisible}
+        focusedIndex={remoteFocusedIndex}
+        isPlaying={playerState.status === 'playing'}
+        hasSong={!!currentSong}
+        queueCount={queue.length}
+        isFullscreen={isFullscreen}
+        onSelectIndex={(idx) => {
+          triggerHudActivity();
+          setRemoteFocusedIndex(idx);
+        }}
+        onExecuteIndex={(idx) => {
+          executeRemoteAction(idx);
+        }}
+      />
+
+      {/* Full Queue Modal triggered from TV Remote */}
+      {showRemoteQueueModal && (
+        <FullQueueModal
+          queue={queue}
+          onClose={() => setShowRemoteQueueModal(false)}
+        />
       )}
     </div>
   );
