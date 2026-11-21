@@ -4,8 +4,8 @@ export async function GET() {
   return NextResponse.json(
     {
       success: true,
-      latestVersion: '1.1.5',
-      versionCode: 8,
+      latestVersion: '1.1.6',
+      versionCode: 9,
       playStoreUrl: 'https://play.google.com/store/apps/details?id=com.okekaraoke.app&hl=en',
       marketUrl: 'market://details?id=com.okekaraoke.app',
       releaseNotes: 'Smooth chat keyboard experience, smart TV remote navigation & performance improvements',

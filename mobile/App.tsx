@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 const PRIMARY_URL = 'https://www.okekaraoke.sbs/';
 const FALLBACK_URL = 'https://okekaraoke.vercel.app/';
 
-const APP_VERSION = '1.1.5';
+const APP_VERSION = '1.1.6';
 
 export default function App() {
   const webViewRef = useRef<WebView>(null);
