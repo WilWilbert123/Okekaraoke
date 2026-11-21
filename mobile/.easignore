@@ -1,0 +1,11 @@
+node_modules/
+**/node_modules/
+dist/
+.expo/
+.eas/
+.git/
+*.jks
+*.pem
+*.log
+.DS_Store
+
