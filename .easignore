@@ -1,0 +1,32 @@
+# Ignore all dependencies & build outputs
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+out/
+build/
+dist/
+**/dist/
+.expo/
+**/.expo/
+.eas/
+**/.eas/
+.git/
+
+# Ignore web app & large media directories not needed by the mobile app build
+showreel/
+promo/
+public/
+app/
+components/
+lib/
+hooks/
+supabase/
+*.mp4
+*.wav
+*.mp3
+*-player-script.js
+.env*
+*.log
+.DS_Store
+
