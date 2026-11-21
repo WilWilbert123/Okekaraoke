@@ -97,38 +97,28 @@ export function RoomChat({
     if (typeof window === 'undefined') return;
 
     const updateKeyboard = () => {
-      // Check if Android OS / WebView already natively resized window.innerHeight (adjustResize)
-      const isWindowNativelyResized =
-        initialHeightRef.current > 0 && window.innerHeight < initialHeightRef.current - 120;
-
-      if (isWindowNativelyResized) {
-        // Native window was already resized by Android to fit above keyboard
-        setKeyboardHeight(0);
-        return;
-      }
-
       const vv = window.visualViewport;
       if (!vv) {
-        setKeyboardHeight(isInputFocused ? 290 : 0);
+        setKeyboardHeight(isInputFocused ? 340 : 0);
         return;
       }
 
-      // Calculate keyboard occlusion height from the bottom of the layout viewport
-      const offset = Math.max(0, Math.round(window.innerHeight - (vv.height + (vv.offsetTop || 0))));
-      if (offset > 60) {
-        setKeyboardHeight(offset);
-      } else if (isInputFocused) {
-        // Fallback for mobile devices if visualViewport doesn't report height but input is focused
-        const isMobile =
-          /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-          (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-        if (isMobile) {
-          setKeyboardHeight(offset > 0 ? offset : 290);
-        } else {
-          setKeyboardHeight(0);
-        }
+      // Calculate actual keyboard occlusion height (layout height minus visible visual viewport height)
+      const rawOffset = Math.round(window.innerHeight - vv.height);
+
+      if (rawOffset >= 50) {
+        // Keyboard is visibly open on screen — add 6px comfort clearance above keyboard toolbar
+        setKeyboardHeight(rawOffset + 6);
       } else {
+        // Keyboard is closed
         setKeyboardHeight(0);
+        if (isInputFocused) {
+          // If the user closed the keyboard via down arrow / back button without tapping outside,
+          // reset focus state so the input smoothly drops down and navigation bar reappears
+          setIsInputFocused(false);
+          onFocusChange?.(false);
+          inputRef.current?.blur();
+        }
       }
     };
 
@@ -141,14 +131,21 @@ export function RoomChat({
 
     updateKeyboard();
 
+    // Check periodically while input is focused to catch keyboard dismissals that don't trigger events
+    let interval: NodeJS.Timeout | null = null;
+    if (isInputFocused) {
+      interval = setInterval(updateKeyboard, 200);
+    }
+
     return () => {
       if (vv) {
         vv.removeEventListener('resize', updateKeyboard);
         vv.removeEventListener('scroll', updateKeyboard);
       }
       window.removeEventListener('resize', updateKeyboard);
+      if (interval) clearInterval(interval);
     };
-  }, [isInputFocused]);
+  }, [isInputFocused, onFocusChange]);
 
   // Close reaction popover when clicking outside
   useEffect(() => {
@@ -678,9 +675,11 @@ export function RoomChat({
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar — Ultra-clean with Emoji Popover */}
+      {/* Input bar — Ultra-clean with Emoji Popover & safe margin-bottom */}
       <div
-        className="px-2.5 py-2 shrink-0 bg-zinc-950 border-t border-zinc-800 relative"
+        className={`px-3 py-2 shrink-0 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 relative transition-all duration-200 ${
+          keyboardHeight === 0 ? 'pb-3.5 mb-2' : 'pb-2 mb-0'
+        }`}
       >
         {/* Floating Emoji Reaction Popover Bubble */}
         {showRoomReactions && (
@@ -739,6 +738,7 @@ export function RoomChat({
             onBlur={(e) => {
               setIsInputFocused(false);
               onFocusChange?.(false);
+              setKeyboardHeight(0);
               e.target.style.borderColor = '#27272a';
             }}
           />

@@ -1479,7 +1479,7 @@ export function RemotePageClient({ roomCode }: RemotePageClientProps) {
       {/* Tab content — relative so emoji overlay stacks correctly */}
       <div
         className={`flex-1 min-h-0 flex flex-col relative overflow-hidden transition-[padding] duration-200 ${
-          tab === 'chat' && isChatFocused ? 'pb-0' : 'pb-[56px]'
+          tab === 'chat' && isChatFocused ? 'pb-0' : 'pb-[64px]'
         }`}
       >
         <div className="flex-1 min-h-0 h-full flex flex-col overflow-hidden" style={{ display: tab === 'search' ? 'flex' : 'none' }}>
