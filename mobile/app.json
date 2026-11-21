@@ -2,7 +2,7 @@
   "expo": {
     "name": "Okekaraoke",
     "slug": "okekaraoke",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.okekaraoke.app",
-      "versionCode": 7,
+      "versionCode": 8,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
