@@ -25,6 +25,8 @@ supabase/
 *.mp4
 *.wav
 *.mp3
+*.aab
+*.apk
 *-player-script.js
 .env*
 *.log
