@@ -77,73 +77,61 @@ export function RoomChat({
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const initialHeightRef = useRef<number>(0);
+  const isKeyboardOpenRef = useRef(false);
+  const baselineHeightRef = useRef(0);
   const [showUserModal, setShowUserModal] = useState(false);
   const [reactionModal, setReactionModal] = useState<{emoji: string, users: {name: string, session_id: string}[]} | null>(null);
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
   const [showRoomReactions, setShowRoomReactions] = useState(false);
   const reactionPopoverRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && initialHeightRef.current === 0) {
-      initialHeightRef.current = window.innerHeight;
-    }
-  }, []);
-
-  // Dynamic visual viewport detection to lift chat input smoothly above mobile soft keyboards
+  // Dynamic viewport detection to cleanly reset focus when the soft keyboard is dismissed via back button
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const updateKeyboard = () => {
-      const vv = window.visualViewport;
-      if (!vv) {
-        setKeyboardHeight(isInputFocused ? 340 : 0);
-        return;
+    const getVisibleHeight = () => {
+      return window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    };
+
+    // Capture resting viewport height when input is unfocused
+    if (!isInputFocused) {
+      const current = getVisibleHeight();
+      if (current > baselineHeightRef.current) {
+        baselineHeightRef.current = current;
       }
+      isKeyboardOpenRef.current = false;
+      return;
+    }
 
-      // Calculate actual keyboard occlusion height (layout height minus visible visual viewport height)
-      const rawOffset = Math.round(window.innerHeight - vv.height);
+    // While focused: watch for viewport changes (soft keyboard opening or closing)
+    const handleResize = () => {
+      const currentHeight = getVisibleHeight();
+      const baseline = baselineHeightRef.current || window.innerHeight;
 
-      if (rawOffset >= 50) {
-        // Keyboard is visibly open on screen — add 6px comfort clearance above keyboard toolbar
-        setKeyboardHeight(rawOffset + 6);
-      } else {
-        // Keyboard is closed
-        setKeyboardHeight(0);
-        if (isInputFocused) {
-          // If the user closed the keyboard via down arrow / back button without tapping outside,
-          // reset focus state so the input smoothly drops down and navigation bar reappears
-          setIsInputFocused(false);
-          onFocusChange?.(false);
-          inputRef.current?.blur();
-        }
+      if (baseline - currentHeight > 100) {
+        // Keyboard is visibly open on screen
+        isKeyboardOpenRef.current = true;
+      } else if (isKeyboardOpenRef.current && currentHeight >= baseline - 60) {
+        // Keyboard was open and has now been closed by the user (via back button or keyboard down arrow)
+        isKeyboardOpenRef.current = false;
+        setIsInputFocused(false);
+        onFocusChange?.(false);
+        inputRef.current?.blur();
       }
     };
 
     const vv = window.visualViewport;
     if (vv) {
-      vv.addEventListener('resize', updateKeyboard);
-      vv.addEventListener('scroll', updateKeyboard);
+      vv.addEventListener('resize', handleResize);
     }
-    window.addEventListener('resize', updateKeyboard);
-
-    updateKeyboard();
-
-    // Check periodically while input is focused to catch keyboard dismissals that don't trigger events
-    let interval: NodeJS.Timeout | null = null;
-    if (isInputFocused) {
-      interval = setInterval(updateKeyboard, 200);
-    }
+    window.addEventListener('resize', handleResize);
 
     return () => {
       if (vv) {
-        vv.removeEventListener('resize', updateKeyboard);
-        vv.removeEventListener('scroll', updateKeyboard);
+        vv.removeEventListener('resize', handleResize);
       }
-      window.removeEventListener('resize', updateKeyboard);
-      if (interval) clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
     };
   }, [isInputFocused, onFocusChange]);
 
@@ -480,10 +468,9 @@ export function RoomChat({
 
   return (
     <div
-      className="flex flex-col h-full transition-[padding] duration-200 ease-out"
+      className="flex flex-col h-full select-none"
       style={{
         background: 'var(--color-bg)',
-        paddingBottom: keyboardHeight > 0 ? `${keyboardHeight}px` : 0,
       }}
     >
       {/* Room Chat Header Bar — Compact */}
@@ -678,7 +665,7 @@ export function RoomChat({
       {/* Input bar — Ultra-clean with Emoji Popover & safe margin-bottom */}
       <div
         className={`px-3 py-2 shrink-0 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 relative transition-all duration-200 ${
-          keyboardHeight === 0 ? 'pb-3.5 mb-2' : 'pb-2 mb-0'
+          !isInputFocused ? 'pb-3.5 mb-2' : 'pb-2 mb-0'
         }`}
       >
         {/* Floating Emoji Reaction Popover Bubble */}
@@ -706,14 +693,14 @@ export function RoomChat({
           <button
             type="button"
             onClick={() => setShowRoomReactions((prev) => !prev)}
-            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border transition-all active:scale-95 ${
+            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition-all active:scale-95 ${
               showRoomReactions
                 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40 shadow'
                 : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700'
             }`}
             title="Send Room Reaction"
           >
-            <Smile size={16} />
+            <Smile size={18} />
           </button>
 
           {/* Text Input */}
@@ -725,7 +712,10 @@ export function RoomChat({
             onKeyDown={handleKeyDown}
             placeholder={`Message room ${roomCode}...`}
             maxLength={200}
-            className="flex-1 px-3 py-1.5 h-8 rounded-xl text-xs text-white outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800 focus:border-teal-500"
+            autoComplete="off"
+            autoCorrect="on"
+            spellCheck={false}
+            className="flex-1 px-3 py-1.5 h-9 rounded-xl text-sm text-white select-text outline-none transition-all placeholder-zinc-500 bg-zinc-900 border border-zinc-800 focus:border-teal-500"
             onFocus={(e) => {
               setIsInputFocused(true);
               onFocusChange?.(true);
@@ -733,12 +723,12 @@ export function RoomChat({
               setTimeout(() => {
                 bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
                 inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-              }, 180);
+              }, 200);
             }}
             onBlur={(e) => {
               setIsInputFocused(false);
               onFocusChange?.(false);
-              setKeyboardHeight(0);
+              isKeyboardOpenRef.current = false;
               e.target.style.borderColor = '#27272a';
             }}
           />
@@ -747,10 +737,10 @@ export function RoomChat({
           <button
             onClick={sendMessage}
             disabled={!input.trim() || sending}
-            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 bg-teal-400 hover:bg-teal-300 text-black font-bold transition-all active:scale-95 disabled:opacity-30"
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-teal-400 hover:bg-teal-300 text-black font-bold transition-all active:scale-95 disabled:opacity-30"
             aria-label="Send message"
           >
-            <Send size={13} className="text-black" />
+            <Send size={15} className="text-black" />
           </button>
         </div>
       </div>
